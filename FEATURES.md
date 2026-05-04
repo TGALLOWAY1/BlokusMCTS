@@ -53,6 +53,7 @@
 - Seat-position bias analysis — `analytics/baseline/seat_bias.py`
 - Arena statistics and aggregation — `analytics/tournament/arena_stats.py`, `analytics/tournament/aggregate.py`
 - Self-improvement loop with metric tracking — `scripts/self_improve.py`
+- Champion self-improvement loop: persistent champion vs randomized challenger pool, snapshot-driven evaluator recalibration, TrueSkill tracking, and Markdown progress report — `scripts/champion_loop.py`, `data/champion_registry.json`, `data/champion_progress.md`
 - Champion arena: champion vs randomized pool with persistent TrueSkill, snapshot data collection, auto-promotion, and per-run markdown reports — `scripts/champion_arena.py`, `data/champion_state.json`, `data/champion_reports/`
 - Persistent cross-session TrueSkill seeding via `load_ratings()` — `analytics/tournament/trueskill_rating.py`
 - Throughput calibration — `scripts/calibrate_throughput.py`, `data/throughput_calibration.json`
