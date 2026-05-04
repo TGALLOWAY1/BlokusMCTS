@@ -56,7 +56,9 @@
 - Champion self-improvement loop: persistent champion vs 5-tier randomized challenger pool (14 agents), snapshot-driven evaluator recalibration with validation mini-tournament before weight promotion, versioned champion registry, TrueSkill tracking, and Markdown progress report — `scripts/champion_loop.py`, `data/champion_registry.json`, `data/champion_progress.md`
 - Champion arena: champion vs randomized pool with persistent TrueSkill, snapshot data collection, auto-promotion, and per-run markdown reports — `scripts/champion_arena.py`, `data/champion_state.json`, `data/champion_reports/`
 - Champion gauntlet reference run (v1): documented 40-game specification for champion vs Tier 3/4/5 challengers with snapshot collection and expected-outcome analysis — `arena_runs/champion_gauntlet_v1/`, `scripts/arena_config_champion_gauntlet.json`, `config/champion_arena_params.json`
+- Champion gauntlet v2: extended 60-game run spec building on v1 baseline, adds heuristic Tier 0 anchor and se_ state-evaluator feature collection for evaluator regression — `scripts/arena_config_champion_gauntlet_v2.json`, `arena_runs/champion_gauntlet_v2/`
 - Persistent cross-session TrueSkill seeding via `load_ratings()` — `analytics/tournament/trueskill_rating.py`
+- Arena snapshot rows enriched with state-evaluator (se_) features for direct evaluator regression without a separate data-collection pass — `analytics/tournament/arena_runner.py`
 - Throughput calibration — `scripts/calibrate_throughput.py`, `data/throughput_calibration.json`
 
 ## Analytics & Metrics

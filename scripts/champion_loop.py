@@ -1,313 +1,266 @@
 #!/usr/bin/env python
 """Champion Self-Improvement Loop.
 
-Runs the current champion agent against a randomized pool of challengers,
-captures snapshot data for evaluator refinement, and documents TrueSkill
-progression toward an agent that reliably beats a human player.
+Runs repeated arena generations where the champion competes against a
+randomized pool of challengers (previous champion checkpoints, heuristic/
+random baselines, and MCTS variants with different hyper-parameters).
 
-Each iteration:
-  1. Loads the current champion config from the persistent registry.
-  2. Samples 3 challengers at random from a 5-tier diverse pool (baselines
-     through near-peer agents), always including at least 1 strong MCTS.
-  3. Runs a 4-player arena experiment with fixed-ply snapshots enabled.
-  4. Logs TrueSkill, win rate, and avg score to the registry.
-  5. Every --eval-update-interval iterations, runs inline regression on
-     accumulated snapshot data and validates new weights in a mini-tournament
-     before promoting them — and bumping the champion version.
-  6. Writes a detailed Markdown progress report after every iteration.
+After each generation:
+  - TrueSkill ratings are updated for all agents and persisted across runs
+  - Snapshot data (including se_ state-evaluator features) is accumulated
+  - Every REFIT_INTERVAL generations the evaluator phase weights are
+    re-derived via per-phase linear regression on accumulated snapshots
+  - A detailed markdown progress report is written
+
+Goal: Drive the champion's TrueSkill conservative estimate (μ - 3σ)
+steadily upward until it reliably dominates human-level play.
 
 Usage:
-    # Run 10 improvement iterations with 20 games each
-    python scripts/champion_loop.py --iterations 10 --games-per-iter 20
+    # run N generations (default: 1 generation, 20 games each)
+    python scripts/champion_loop.py [--generations N] [--games-per-gen G]
 
-    # Alias: --num-games works too
-    python scripts/champion_loop.py --iterations 5 --num-games 40
-
-    # Stronger champion (1 second per move)
-    python scripts/champion_loop.py --champion-time 1000
-
-    # Re-calibrate evaluator every 5 iterations
-    python scripts/champion_loop.py --iterations 20 --eval-update-interval 5
-
-    # Force evaluator update after this run (regardless of interval)
-    python scripts/champion_loop.py --retrain
-
-    # Show progress report without running new games
+    # print history without running
     python scripts/champion_loop.py --show
 
-    # Smoke test
-    python scripts/champion_loop.py --iterations 2 --games-per-iter 4
+    # force a weight re-fit from accumulated snapshot data
+    python scripts/champion_loop.py --refit
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import random
 import subprocess
 import sys
-import tempfile
-import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "data"
-SCRIPTS_DIR = ROOT / "scripts"
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from analytics.tournament.trueskill_rating import TrueSkillTracker
+from mcts.state_evaluator import DEFAULT_WEIGHTS, FEATURE_NAMES, PHASE_EARLY_THRESHOLD, PHASE_LATE_THRESHOLD
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
-REGISTRY_PATH    = DATA_DIR / "champion_registry.json"
-PROGRESS_MD_PATH = DATA_DIR / "champion_progress.md"
-CALIBRATED_WEIGHTS_PATH = DATA_DIR / "layer6_calibrated_weights.json"
+DATA_DIR = Path("data")
+STATE_FILE = DATA_DIR / "champion_state.json"
+SNAPSHOT_CSV = DATA_DIR / "champion_snapshots.csv"
+PROGRESS_MD = DATA_DIR / "champion_progress.md"
+ARENA_RUN_ROOT = "arena_runs/champion_loop"
 
 # ---------------------------------------------------------------------------
-# Champion baseline parameters — all beneficial layers enabled
-#
-# Layer 3:  Progressive widening (c=2.0, α=0.5)
-# Layer 4:  Random rollout, cutoff depth=5, minimax backup α=0.25
-# Layer 5:  RAVE k=1000
-# Layer 6:  Calibrated single weights (phase weights injected at runtime)
-# Layer 7:  Opponent modeling — alliance + king-maker detection
-# Layer 9:  Adaptive exploration C, adaptive rollout depth, sufficiency
-#           threshold, loss avoidance
+# Constants
 # ---------------------------------------------------------------------------
 
-_DEFAULT_EVAL_WEIGHTS: Dict[str, float] = {
-    "squares_placed":             0.0295,
-    "remaining_piece_area":      -0.0295,
-    "accessible_corners":         0.243,
-    "reachable_empty_squares":    0.081,
-    "largest_remaining_piece_size": -0.231,
-    "opponent_avg_mobility":     -0.3,
-    "center_proximity":           0.0,
-    "territory_enclosure_area":   0.0,
+SE_FEATURE_COLS = [f"se_{f}" for f in FEATURE_NAMES]
+
+# How many generations between evaluator weight re-fits
+REFIT_INTERVAL = 3
+# Minimum snapshot rows required before attempting re-fit
+MIN_ROWS_FOR_REFIT = 200
+# Maximum weight magnitude after normalisation
+WEIGHT_SCALE = 0.30
+
+# Number of most-recent checkpoints to keep in the active pool
+MAX_CHECKPOINTS_IN_POOL = 3
+
+# Champion agent name (stable across all generations for TrueSkill tracking)
+CHAMPION_ID = "champion"
+
+# ---------------------------------------------------------------------------
+# Champion starting configuration (Challenge Champion profile as baseline)
+# ---------------------------------------------------------------------------
+
+BASE_CHAMPION_PARAMS: Dict[str, Any] = {
+    "type": "mcts",
+    "thinking_time_ms": 500,
+    "params": {
+        "deterministic_time_budget": True,
+        "iterations_per_ms": 10.0,
+        "exploration_constant": 1.414,
+        "rollout_policy": "random",
+        "rollout_cutoff_depth": 5,
+        "minimax_backup_alpha": 0.25,
+        "rave_enabled": True,
+        "rave_k": 1000,
+        "progressive_widening_enabled": True,
+        "pw_c": 2.0,
+        "pw_alpha": 0.5,
+        "adaptive_rollout_depth_enabled": True,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "state_eval_phase_weights": None,
+    },
 }
 
-CHAMPION_BASE_PARAMS: Dict[str, Any] = {
-    # Budget (0.5 iter/ms calibrated for rollout_cutoff_depth=5)
-    "deterministic_time_budget": True,
-    "iterations_per_ms": 0.5,
-    # Layer 1/2
-    "exploration_constant": 1.414,
-    "use_transposition_table": True,
-    # Layer 3
-    "progressive_widening_enabled": True,
-    "pw_c": 2.0,
-    "pw_alpha": 0.5,
-    # Layer 4
-    "rollout_policy": "random",
-    "rollout_cutoff_depth": 5,
-    "minimax_backup_alpha": 0.25,
-    # Layer 5
-    "rave_enabled": True,
-    "rave_k": 1000,
-    # Layer 6 (weights updated by evaluator improvement cycle)
-    "state_eval_weights": dict(_DEFAULT_EVAL_WEIGHTS),
-    # Layer 7
-    "opponent_modeling_enabled": True,
-    "alliance_detection_enabled": True,
-    "alliance_threshold": 2.0,
-    "kingmaker_detection_enabled": True,
-    "kingmaker_score_gap": 15,
-    # Layer 9
-    "adaptive_rollout_depth_enabled": True,
-    "adaptive_rollout_depth_base": 5,
-    "adaptive_rollout_depth_avg_bf": 80.0,
-    "adaptive_exploration_enabled": True,
-    "adaptive_exploration_base": 1.414,
-    "adaptive_exploration_avg_bf": 80.0,
-    "sufficiency_threshold_enabled": True,
-    "loss_avoidance_enabled": True,
-    "loss_avoidance_threshold": -50.0,
-}
-
-CHAMPION_THINKING_TIME_MS = 500
-
 # ---------------------------------------------------------------------------
-# Challenger pool — 5 tiers, 14 agents
-#
-# Tier 1  Baselines       — random, heuristic
-# Tier 2  Vanilla MCTS    — plain UCT at 25/50/100/200 ms (fast throughput)
-# Tier 3  L4+5 enhanced   — rollout cutoff, minimax, RAVE at 100 ms
-# Tier 4  L9 partial      — adaptive meta-opts at 200 ms, no opponent model
-# Tier 5  Near-peer       — same budget/layers as champion, no opponent model
+# Challenger pool: MCTS variants that test different hypotheses
 # ---------------------------------------------------------------------------
 
-_SHARED_L45 = {
-    "deterministic_time_budget": True,
-    "iterations_per_ms": 0.5,
-    "rollout_policy": "random",
-    "rollout_cutoff_depth": 5,
-    "minimax_backup_alpha": 0.25,
-    "rave_enabled": True,
-    "rave_k": 1000,
-    "state_eval_weights": dict(_DEFAULT_EVAL_WEIGHTS),
-}
-
-CHALLENGER_POOL: List[Dict[str, Any]] = [
-    # --- Tier 1: Baselines ---
-    {"name": "pool_random",    "type": "random"},
-    {"name": "pool_heuristic", "type": "heuristic"},
-    # --- Tier 2: Vanilla MCTS (fast, no cutoff) ---
-    {"name": "pool_mcts_25ms",  "type": "mcts", "thinking_time_ms": 25,
-     "params": {"deterministic_time_budget": True, "iterations_per_ms": 10.0}},
-    {"name": "pool_mcts_50ms",  "type": "mcts", "thinking_time_ms": 50,
-     "params": {"deterministic_time_budget": True, "iterations_per_ms": 10.0}},
-    {"name": "pool_mcts_100ms", "type": "mcts", "thinking_time_ms": 100,
-     "params": {"deterministic_time_budget": True, "iterations_per_ms": 10.0}},
-    {"name": "pool_mcts_200ms", "type": "mcts", "thinking_time_ms": 200,
-     "params": {"deterministic_time_budget": True, "iterations_per_ms": 10.0}},
-    # --- Tier 3: L4+5 enhanced ---
-    {"name": "pool_rave_100ms",   "type": "mcts", "thinking_time_ms": 100,
-     "params": {"deterministic_time_budget": True, "iterations_per_ms": 10.0,
-                "rave_enabled": True, "rave_k": 1000}},
-    {"name": "pool_l45_100ms",    "type": "mcts", "thinking_time_ms": 100,
-     "params": dict(_SHARED_L45)},
-    {"name": "pool_explorer_200ms", "type": "mcts", "thinking_time_ms": 200,
-     "params": {**_SHARED_L45, "exploration_constant": 2.0}},
-    {"name": "pool_full_rollout_200ms", "type": "mcts", "thinking_time_ms": 200,
-     "params": {k: v for k, v in _SHARED_L45.items() if k != "rollout_cutoff_depth"}},
-    # --- Tier 4: L9 partial (no opponent modeling) ---
-    {"name": "pool_l9_partial_200ms", "type": "mcts", "thinking_time_ms": 200,
-     "params": {**_SHARED_L45,
-                "adaptive_exploration_enabled": True,
-                "adaptive_exploration_base": 1.414,
-                "adaptive_exploration_avg_bf": 80.0,
-                "adaptive_rollout_depth_enabled": True,
-                "adaptive_rollout_depth_base": 5,
-                "sufficiency_threshold_enabled": True,
-                "loss_avoidance_enabled": True}},
-    # --- Tier 5: Near-peer (same layers, same budget, no opponent modeling) ---
-    {"name": "pool_peer_500ms", "type": "mcts", "thinking_time_ms": 500,
-     "params": {**_SHARED_L45,
-                "exploration_constant": 1.414,
-                "use_transposition_table": True,
-                "progressive_widening_enabled": True, "pw_c": 2.0, "pw_alpha": 0.5,
-                "adaptive_exploration_enabled": True,
-                "adaptive_exploration_base": 1.414,
-                "adaptive_exploration_avg_bf": 80.0,
-                "adaptive_rollout_depth_enabled": True,
-                "adaptive_rollout_depth_base": 5,
-                "adaptive_rollout_depth_avg_bf": 80.0,
-                "sufficiency_threshold_enabled": True,
-                "loss_avoidance_enabled": True}},
-    # Champion clone at half budget (tests compute efficiency)
-    {"name": "pool_champion_clone_250ms", "type": "mcts", "thinking_time_ms": 250,
-     "params": dict(CHAMPION_BASE_PARAMS)},
+MCTS_VARIANTS: List[Dict[str, Any]] = [
+    {"id": "mcts_high_c",          "params_override": {"exploration_constant": 2.5}},
+    {"id": "mcts_low_c",           "params_override": {"exploration_constant": 0.7}},
+    {"id": "mcts_heuristic_roll",  "params_override": {"rollout_policy": "heuristic"}},
+    {"id": "mcts_deep_cutoff",     "params_override": {"rollout_cutoff_depth": 15,
+                                                         "adaptive_rollout_depth_enabled": False}},
+    {"id": "mcts_no_cutoff",       "params_override": {"rollout_cutoff_depth": None,
+                                                         "adaptive_rollout_depth_enabled": False}},
+    {"id": "mcts_high_rave",       "params_override": {"rave_k": 5000}},
+    {"id": "mcts_no_rave",         "params_override": {"rave_enabled": False}},
+    {"id": "mcts_minimax",         "params_override": {"minimax_backup_alpha": 0.5}},
+    {"id": "mcts_loss_avoid",      "params_override": {"loss_avoidance_enabled": True,
+                                                         "loss_avoidance_threshold": -30.0}},
+    {"id": "mcts_sufficiency",     "params_override": {"sufficiency_threshold_enabled": True}},
+    {"id": "mcts_opp_model",       "params_override": {"opponent_modeling_enabled": True,
+                                                         "alliance_detection_enabled": True}},
+    {"id": "mcts_fast_iters",      "params_override": {"thinking_time_ms": 250}},
+    {"id": "mcts_slow_iters",      "params_override": {"thinking_time_ms": 1000}},
 ]
 
-_STRONG_POOL = [c["name"] for c in CHALLENGER_POOL if c.get("type") == "mcts"]
-_WEAK_POOL   = [c["name"] for c in CHALLENGER_POOL if c.get("type") != "mcts"]
-_POOL_BY_NAME = {c["name"]: c for c in CHALLENGER_POOL}
 
 # ---------------------------------------------------------------------------
-# Registry helpers
+# State management
 # ---------------------------------------------------------------------------
 
+def _default_state() -> Dict[str, Any]:
+    return {
+        "generation": 0,
+        "champion_params": copy.deepcopy(BASE_CHAMPION_PARAMS),
+        "trueskill_ratings": {},
+        "checkpoints": [],   # {"generation": N, "id": str, "mu": float, "params": dict}
+        "history": [],       # per-generation records
+        "total_snapshot_rows": 0,
+        "last_refit_generation": -1,
+    }
 
-def _load_registry() -> Dict[str, Any]:
-    if REGISTRY_PATH.exists():
-        with REGISTRY_PATH.open() as f:
+
+def load_state() -> Dict[str, Any]:
+    if STATE_FILE.exists():
+        with STATE_FILE.open() as f:
             return json.load(f)
-    return {
-        "current_version": "v1",
-        "versions": {},
-        "iterations": [],
-        "snapshot_csv_paths": [],
-        "total_games_played": 0,
-    }
+    return _default_state()
 
 
-def _save_registry(registry: Dict[str, Any]) -> None:
+def save_state(state: Dict[str, Any]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with REGISTRY_PATH.open("w") as f:
-        json.dump(registry, f, indent=2)
-
-
-def _get_champion_params(registry: Dict[str, Any]) -> Dict[str, Any]:
-    """Return current champion MCTS params, injecting calibrated phase weights."""
-    version = registry.get("current_version", "v1")
-    versions = registry.get("versions", {})
-    base = versions[version].get("params", CHAMPION_BASE_PARAMS) if version in versions else CHAMPION_BASE_PARAMS
-
-    # Always layer in the latest calibrated phase weights if available
-    if CALIBRATED_WEIGHTS_PATH.exists():
-        with CALIBRATED_WEIGHTS_PATH.open() as f:
-            cal = json.load(f)
-        if cal.get("phase_weights"):
-            base = dict(base)
-            base["state_eval_phase_weights"] = cal["phase_weights"]
-            base["state_eval_weights"] = cal.get("single_weights", base.get("state_eval_weights"))
-    return base
+    with STATE_FILE.open("w") as f:
+        json.dump(state, f, indent=2)
 
 
 # ---------------------------------------------------------------------------
-# Challenger sampling
+# TrueSkill helpers
 # ---------------------------------------------------------------------------
 
+def build_tracker(state: Dict[str, Any]) -> TrueSkillTracker:
+    tracker = TrueSkillTracker()
+    for agent_id, rating in state.get("trueskill_ratings", {}).items():
+        tracker._ratings[agent_id] = tracker._model.rating(
+            mu=float(rating["mu"]),
+            sigma=float(rating["sigma"]),
+        )
+        tracker._games_played[agent_id] = int(rating.get("games_played", 0))
+    return tracker
 
-def _sample_challengers(rng: random.Random) -> List[str]:
-    """Sample 3 challengers ensuring at least 1 strong MCTS competitor."""
-    strong = rng.choice(_STRONG_POOL)
-    rest = [n for n in (_STRONG_POOL + _WEAK_POOL) if n != strong]
-    others = rng.sample(rest, k=min(2, len(rest)))
-    return [strong] + others
+
+def persist_tracker(tracker: TrueSkillTracker, state: Dict[str, Any]) -> None:
+    state["trueskill_ratings"] = {}
+    for agent_id in tracker.agent_ids:
+        r = tracker.get_rating(agent_id)
+        state["trueskill_ratings"][agent_id] = r
 
 
 # ---------------------------------------------------------------------------
-# Arena config / execution
+# Agent config builders
 # ---------------------------------------------------------------------------
 
+def _build_champion_agent_config(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Produce an arena-runner agent dict for the champion."""
+    cfg = copy.deepcopy(params)
+    cfg["name"] = CHAMPION_ID
+    return cfg
 
-def _build_arena_config(
-    champion_params: Dict[str, Any],
-    challenger_names: List[str],
-    games: int,
-    seed: int,
-    iteration: int,
-    thinking_time_ms: int = CHAMPION_THINKING_TIME_MS,
+
+def _build_checkpoint_agent_config(checkpoint: Dict[str, Any]) -> Dict[str, Any]:
+    cfg = copy.deepcopy(checkpoint["params"])
+    cfg["name"] = checkpoint["id"]
+    return cfg
+
+
+def _build_variant_agent_config(
+    base_params: Dict[str, Any], variant: Dict[str, Any]
 ) -> Dict[str, Any]:
-    agents: List[Dict[str, Any]] = [
-        {
-            "name": "champion",
-            "type": "mcts",
-            "thinking_time_ms": thinking_time_ms,
-            "params": champion_params,
-        }
-    ]
-    for name in challenger_names:
-        cfg = _POOL_BY_NAME[name]
-        agents.append({
-            "name": cfg["name"],
-            "type": cfg["type"],
-            "thinking_time_ms": cfg.get("thinking_time_ms"),
-            "params": dict(cfg.get("params", {})),
-        })
-    return {
-        "agents": agents,
-        "num_games": games,
-        "seed": seed,
-        "seat_policy": "round_robin",
-        "output_root": "arena_runs",
-        "max_turns": 2500,
-        "snapshots": {
-            "enabled": True,
-            "strategy": "fixed_ply",
-            "checkpoints": [8, 16, 24, 32, 40, 48, 56, 64],
-        },
-        "notes": (
-            f"Champion loop iteration {iteration} — "
-            f"champion v{iteration} vs {', '.join(challenger_names)}"
-        ),
-    }
+    """Merge base champion params with a variant's override, return agent config."""
+    cfg = copy.deepcopy(base_params)
+    override = variant.get("params_override", {})
+    # Handle thinking_time_ms override at top level
+    if "thinking_time_ms" in override:
+        cfg["thinking_time_ms"] = override.pop("thinking_time_ms")
+    cfg["params"].update(override)
+    cfg["name"] = variant["id"]
+    return cfg
 
 
-def _find_latest_run(output_root: str = "arena_runs") -> Optional[str]:
+def _build_baseline_agent_config(agent_type: str) -> Dict[str, Any]:
+    return {"name": agent_type, "type": agent_type, "thinking_time_ms": None, "params": {}}
+
+
+# ---------------------------------------------------------------------------
+# Challenger pool selection
+# ---------------------------------------------------------------------------
+
+def select_challengers(
+    state: Dict[str, Any],
+    base_params: Dict[str, Any],
+    rng: random.Random,
+) -> List[Dict[str, Any]]:
+    """Choose 3 challengers for this generation.
+
+    Strategy:
+      - Slot 0: always heuristic (strong baseline)
+      - Slot 1: random checkpoint if available, else random MCTS variant
+      - Slot 2: random MCTS variant (different from slot 1 if possible)
+    """
+    challengers: List[Dict[str, Any]] = []
+
+    # Slot 0: heuristic baseline
+    challengers.append(_build_baseline_agent_config("heuristic"))
+
+    # Gather recent checkpoints
+    checkpoints = state.get("checkpoints", [])
+    recent_ckpts = checkpoints[-MAX_CHECKPOINTS_IN_POOL:]
+
+    # Slot 1: checkpoint (if any) or random agent as the simpler baseline
+    if recent_ckpts:
+        ckpt = rng.choice(recent_ckpts)
+        challengers.append(_build_checkpoint_agent_config(ckpt))
+    else:
+        challengers.append(_build_baseline_agent_config("random"))
+
+    # Slot 2: MCTS variant (sample one not already in challengers)
+    used_ids = {c["name"] for c in challengers}
+    available_variants = [v for v in MCTS_VARIANTS if v["id"] not in used_ids]
+    if available_variants:
+        variant = rng.choice(available_variants)
+        challengers.append(_build_variant_agent_config(base_params, variant))
+    else:
+        challengers.append(_build_baseline_agent_config("random"))
+
+    return challengers
+
+
+# ---------------------------------------------------------------------------
+# Arena execution
+# ---------------------------------------------------------------------------
+
+def _find_latest_run(output_root: str) -> Optional[str]:
     root = Path(output_root)
     if not root.exists():
         return None
@@ -318,629 +271,491 @@ def _find_latest_run(output_root: str = "arena_runs") -> Optional[str]:
     return None
 
 
-def _run_arena(config: Dict[str, Any]) -> str:
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", prefix="champion_iter_",
-        dir=str(SCRIPTS_DIR), delete=False,
-    ) as tmp:
-        json.dump(config, tmp, indent=2)
-        tmp_path = tmp.name
-    try:
-        cmd = [sys.executable, str(SCRIPTS_DIR / "arena.py"), "--config", tmp_path]
-        print(f"  [arena] {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=False, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"arena.py exited with code {result.returncode}")
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+def run_generation_arena(
+    generation: int,
+    champion_cfg: Dict[str, Any],
+    challengers: List[Dict[str, Any]],
+    num_games: int,
+    seed: int,
+) -> str:
+    """Write a temp arena config and run it. Returns the run directory path."""
+    agents = [champion_cfg] + challengers
+    arena_config = {
+        "agents": agents,
+        "num_games": num_games,
+        "seed": seed,
+        "seat_policy": "randomized",
+        "output_root": ARENA_RUN_ROOT,
+        "max_turns": 2500,
+        "notes": f"champion_loop gen={generation}",
+        "snapshots": {
+            "enabled": True,
+            "strategy": "fixed_ply",
+            "checkpoints": [8, 16, 24, 32, 40, 48, 56, 64],
+        },
+    }
 
-    run_dir = _find_latest_run()
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    config_path = DATA_DIR / f"champion_loop_arena_gen{generation:04d}.json"
+    with config_path.open("w") as f:
+        json.dump(arena_config, f, indent=2)
+
+    print(f"\n[champion_loop] Generation {generation}: running {num_games} games")
+    print(f"  Champion vs: {[c['name'] for c in challengers]}")
+
+    cmd = [sys.executable, "scripts/arena.py", "--config", str(config_path)]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Arena exited with code {result.returncode}")
+
+    run_dir = _find_latest_run(ARENA_RUN_ROOT)
     if run_dir is None:
-        raise RuntimeError("Could not locate arena output directory after run.")
+        raise RuntimeError("Could not locate arena output directory")
+    print(f"[champion_loop] Run saved to: {run_dir}")
     return run_dir
 
 
 # ---------------------------------------------------------------------------
-# Result parsing
+# Results parsing
 # ---------------------------------------------------------------------------
 
+def parse_summary(run_dir: str) -> Dict[str, Any]:
+    path = Path(run_dir) / "summary.json"
+    with path.open() as f:
+        return json.load(f)
 
-def _parse_summary(run_dir: str) -> Dict[str, Any]:
-    with open(Path(run_dir) / "summary.json") as f:
-        data = json.load(f)
 
-    agents_out: Dict[str, Any] = {}
-    for name, ad in data.get("agents", {}).items():
-        mu    = ad.get("trueskill_mu")
-        sigma = ad.get("trueskill_sigma")
-        agents_out[name] = {
-            "wins":                  ad.get("wins", 0),
-            "win_rate":              ad.get("win_rate", 0.0),
-            "avg_score":             ad.get("avg_score", 0.0),
-            "trueskill_mu":          mu,
-            "trueskill_sigma":       sigma,
-            "trueskill_conservative": (mu - 3.0 * sigma) if (mu and sigma) else None,
-        }
-
-    snapshot_csv: Optional[str] = None
-    sm = data.get("snapshots", {})
-    if isinstance(sm, dict) and sm.get("path_csv"):
-        snapshot_csv = sm["path_csv"]
-
-    return {
-        "num_games":       data.get("num_games", 0),
-        "completed_games": data.get("completed_games", data.get("num_games", 0)),
-        "agents":          agents_out,
-        "snapshot_csv":    snapshot_csv,
-    }
+def update_trueskill_from_run(tracker: TrueSkillTracker, run_dir: str) -> None:
+    """Replay every game in games.jsonl through the TrueSkill tracker."""
+    games_path = Path(run_dir) / "games.jsonl"
+    if not games_path.exists():
+        return
+    with games_path.open() as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            agent_scores = record.get("agent_scores", {})
+            if agent_scores:
+                tracker.update_game(agent_scores)
 
 
 # ---------------------------------------------------------------------------
-# Evaluator weight improvement
+# Snapshot accumulation
 # ---------------------------------------------------------------------------
 
+def accumulate_snapshots(run_dir: str) -> int:
+    """Append snapshot rows from this run to the master CSV. Returns total rows."""
+    try:
+        import pandas as pd
+    except ImportError:
+        print("[champion_loop] WARNING: pandas not available; skipping snapshot accumulation")
+        return 0
 
-def _try_improve_evaluator(snapshot_csv_paths: List[str]) -> Optional[Dict[str, float]]:
-    """Concatenate snapshots, run linear regression, return new weight dict or None."""
+    src = Path(run_dir) / "snapshots.csv"
+    if not src.exists():
+        return 0
+
+    new_df = pd.read_csv(src)
+    new_df = new_df.dropna(subset=["final_score"])
+
+    if SNAPSHOT_CSV.exists():
+        existing = pd.read_csv(SNAPSHOT_CSV)
+        combined = pd.concat([existing, new_df], ignore_index=True)
+    else:
+        combined = new_df
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    combined.to_csv(SNAPSHOT_CSV, index=False)
+    return int(len(combined))
+
+
+# ---------------------------------------------------------------------------
+# Evaluator weight re-fitting
+# ---------------------------------------------------------------------------
+
+def refit_evaluator_weights() -> Optional[Dict[str, Any]]:
+    """Run per-phase linear regression on accumulated snapshots.
+
+    Returns a dict with keys 'phase_weights', 'single_weights', 'r2_by_phase',
+    or None if there is insufficient data or sklearn is unavailable.
+    """
     try:
         import pandas as pd
         from sklearn.linear_model import LinearRegression
     except ImportError:
-        print("  [eval] pandas/sklearn not available — skipping evaluator update.")
+        print("[champion_loop] sklearn not available; skipping weight re-fit")
         return None
 
-    valid = [p for p in snapshot_csv_paths if p and Path(p).exists()]
-    if not valid:
-        print("  [eval] No valid snapshot CSVs — skipping.")
+    if not SNAPSHOT_CSV.exists():
+        print("[champion_loop] No snapshot CSV yet; skipping weight re-fit")
         return None
 
-    dfs = []
-    for p in valid:
-        try:
-            dfs.append(pd.read_csv(p))
-        except Exception as exc:
-            print(f"  [eval] Warning: could not read {p}: {exc}")
-    if not dfs:
+    df = pd.read_csv(SNAPSHOT_CSV)
+    df = df.dropna(subset=["final_score"])
+
+    missing = [c for c in SE_FEATURE_COLS if c not in df.columns]
+    if missing:
+        print(f"[champion_loop] Missing se_ columns {missing}; skipping weight re-fit")
         return None
 
-    df = pd.concat(dfs, ignore_index=True)
-    print(f"  [eval] Loaded {len(df)} snapshot rows from {len(dfs)} file(s).")
-
-    feature_names = list(_DEFAULT_EVAL_WEIGHTS)
-    se_cols = [f"se_{f}" for f in feature_names]
-    available = [c for c in se_cols if c in df.columns]
-
-    if len(available) < 4:
-        print(f"  [eval] Only {len(available)} SE feature columns present — skipping.")
+    if len(df) < MIN_ROWS_FOR_REFIT:
+        print(f"[champion_loop] Only {len(df)} snapshot rows (need {MIN_ROWS_FOR_REFIT}); skipping re-fit")
         return None
 
-    label_col = "label_is_winner"
-    if label_col not in df.columns:
-        # Fall back to final_score if available
-        if "final_score" in df.columns:
-            label_col = "final_score"
-        else:
-            print("  [eval] No usable label column — skipping.")
-            return None
+    print(f"\n[champion_loop] Refitting evaluator weights from {len(df)} snapshot rows ...")
 
-    X = df[available].fillna(0.0).values.astype(float)
-    y = df[label_col].fillna(0.0).values.astype(float)
+    def _fit_phase(phase_df: Any) -> Tuple[Dict[str, float], float]:
+        if len(phase_df) < 50:
+            return dict(DEFAULT_WEIGHTS), 0.0
+        X = phase_df[SE_FEATURE_COLS].values.astype(float)
+        y = phase_df["final_score"].values.astype(float)
+        lr = LinearRegression().fit(X, y)
+        coefs = lr.coef_
+        max_abs = float(np.max(np.abs(coefs))) if np.max(np.abs(coefs)) > 0 else 1.0
+        scale = WEIGHT_SCALE / max_abs
+        weights = {FEATURE_NAMES[i]: float(coefs[i] * scale) for i in range(len(FEATURE_NAMES))}
+        return weights, float(lr.score(X, y))
 
-    if len(X) < 100:
-        print(f"  [eval] Only {len(X)} rows — not enough data ({len(X)} < 100).")
-        return None
+    occ = df["phase_board_occupancy"] if "phase_board_occupancy" in df.columns else None
 
-    from sklearn.linear_model import LinearRegression
-    lr = LinearRegression().fit(X, y)
-    raw = dict(zip(available, lr.coef_))
-    coefs = {f: raw.get(f"se_{f}", 0.0) for f in feature_names}
-    max_abs = max(abs(v) for v in coefs.values()) or 1.0
-    scale = 0.3 / max_abs
-    new_weights = {f: round(v * scale, 6) for f, v in coefs.items()}
+    phase_weights: Dict[str, Dict[str, float]] = {}
+    r2_by_phase: Dict[str, float] = {}
 
-    print("  [eval] Derived new evaluator weights:")
-    for f, w in new_weights.items():
-        old = _DEFAULT_EVAL_WEIGHTS.get(f, 0.0)
-        print(f"    {f:>35s}:  {w:+.4f}  (was {old:+.4f})")
-    return new_weights
-
-
-def _validate_new_weights(
-    old_params: Dict[str, Any],
-    new_weights: Dict[str, float],
-    games: int,
-    seed: int,
-    thinking_time_ms: int,
-) -> bool:
-    """Mini-tournament: champion_new vs champion_old. Return True if new wins more."""
-    new_params = {**old_params, "state_eval_weights": new_weights}
-    config = {
-        "agents": [
-            {"name": "champion_new", "type": "mcts",
-             "thinking_time_ms": thinking_time_ms, "params": new_params},
-            {"name": "champion_old", "type": "mcts",
-             "thinking_time_ms": thinking_time_ms, "params": old_params},
-            {"name": "random_a", "type": "random"},
-            {"name": "random_b", "type": "random"},
-        ],
-        "num_games": games,
-        "seed": seed,
-        "seat_policy": "round_robin",
-        "output_root": "arena_runs",
-        "max_turns": 2500,
-        "snapshots": {"enabled": False, "checkpoints": []},
-        "notes": "Champion evaluator weight validation",
-    }
-    print("  [eval] Running weight validation arena …")
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", prefix="weight_val_",
-        dir=str(SCRIPTS_DIR), delete=False,
-    ) as tmp:
-        json.dump(config, tmp, indent=2)
-        tmp_path = tmp.name
-    try:
-        result = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "arena.py"), "--config", tmp_path],
-            capture_output=False, text=True,
-        )
-        if result.returncode != 0:
-            print("  [eval] Validation arena failed.")
-            return False
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-    run_dir = _find_latest_run()
-    if not run_dir:
-        return False
-    parsed = _parse_summary(run_dir)
-    new_wr = parsed["agents"].get("champion_new", {}).get("win_rate", 0.0)
-    old_wr = parsed["agents"].get("champion_old", {}).get("win_rate", 0.0)
-    print(f"  [eval] Validation: new_WR={new_wr:.1%}  old_WR={old_wr:.1%}")
-    return new_wr > old_wr
-
-
-# ---------------------------------------------------------------------------
-# Per-version running stats
-# ---------------------------------------------------------------------------
-
-
-def _update_version_stats(
-    registry: Dict[str, Any],
-    version: str,
-    entry: Dict[str, Any],
-    champion_params: Dict[str, Any],
-) -> None:
-    versions = registry.setdefault("versions", {})
-    if version not in versions:
-        versions[version] = {
-            "promoted_at": entry["timestamp"],
-            "params": champion_params,
-            "_wr_acc": 0.0, "_mu_acc": 0.0, "_sc_acc": 0.0, "_count": 0,
+    if occ is not None:
+        phase_masks = {
+            "early": occ < PHASE_EARLY_THRESHOLD,
+            "mid": (occ >= PHASE_EARLY_THRESHOLD) & (occ < PHASE_LATE_THRESHOLD),
+            "late": occ >= PHASE_LATE_THRESHOLD,
         }
-    v = versions[version]
-    cs = entry.get("champion_stats", {})
-    v["_count"] += 1
-    n = v["_count"]
-    v["_wr_acc"]  += cs.get("win_rate", 0.0)
-    v["_mu_acc"]  += cs.get("trueskill_mu", 0.0) or 0.0
-    v["_sc_acc"]  += cs.get("avg_score", 0.0)
-    v["avg_win_rate"]      = v["_wr_acc"] / n
-    v["avg_trueskill_mu"]  = v["_mu_acc"] / n
-    v["avg_score"]         = v["_sc_acc"] / n
+        for phase_name, mask in phase_masks.items():
+            w, r2 = _fit_phase(df[mask])
+            phase_weights[phase_name] = w
+            r2_by_phase[phase_name] = r2
+            print(f"  Phase '{phase_name}': R²={r2:.4f}, n={int(mask.sum())}")
+            for fname, wval in sorted(w.items(), key=lambda x: abs(x[1]), reverse=True):
+                if abs(wval) > 0.01:
+                    print(f"    {fname:>35s}: {wval:+.4f}")
+    else:
+        # No occupancy data: fit single global weights and use for all phases
+        w, r2 = _fit_phase(df)
+        phase_weights = {"early": w, "mid": w, "late": w}
+        r2_by_phase = {"early": r2, "mid": r2, "late": r2}
+        print(f"  Global fit: R²={r2:.4f}")
 
-
-# ---------------------------------------------------------------------------
-# Markdown report
-# ---------------------------------------------------------------------------
-
-
-def _render_markdown(registry: Dict[str, Any]) -> str:
-    iters     = registry.get("iterations", [])
-    total     = registry.get("total_games_played", 0)
-    version   = registry.get("current_version", "v1")
-    versions  = registry.get("versions", {})
-    now       = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
-    lines: List[str] = [
-        "# Champion Self-Improvement Progress",
-        "",
-        f"_Last updated: {now}_",
-        "",
-        f"**Goal:** Build an MCTS agent that reliably beats a human Blokus player.",
-        f"**Champion version:** {version}  |  "
-        f"**Iterations:** {len(iters)}  |  **Total games:** {total}",
-        "",
-    ]
-
-    # -- Champion version history --
-    if versions:
-        lines += ["## Champion Versions", "", "| Version | Promoted | Avg WR% | Avg μ | Avg Score |",
-                  "|---------|----------|---------|-------|-----------|"]
-        for ver, vd in versions.items():
-            promo = vd.get("promoted_at", "?")[:10]
-            awr   = vd.get("avg_win_rate", 0) * 100
-            amu   = vd.get("avg_trueskill_mu", 0)
-            asc   = vd.get("avg_score", 0)
-            tag   = " ← current" if ver == version else ""
-            lines.append(f"| {ver}{tag} | {promo} | {awr:.1f} | {amu:.1f} | {asc:.1f} |")
-        lines.append("")
-
-    # -- TrueSkill progression --
-    if iters:
-        lines += [
-            "## TrueSkill Progression",
-            "",
-            "| # | Date | Ver | Games | Challengers | WR% | Avg Score | μ | σ | Conservative |",
-            "|---|------|-----|-------|-------------|-----|-----------|---|---|--------------|",
-        ]
-        for i, e in enumerate(iters, 1):
-            ts    = e.get("timestamp", "?")[:10]
-            ver   = e.get("champion_version", "?")
-            ng    = e.get("num_games", "?")
-            chs   = [n.replace("pool_", "") for n in e.get("challengers", [])]
-            chs_s = ", ".join(chs) if chs else "—"
-            cs    = e.get("champion_stats", {})
-            wr    = cs.get("win_rate", 0.0) * 100
-            avg   = cs.get("avg_score", 0.0)
-            mu    = cs.get("trueskill_mu")
-            sig   = cs.get("trueskill_sigma")
-            cons  = cs.get("trueskill_conservative")
-            mu_s    = f"{mu:.1f}"   if mu   is not None else "—"
-            sig_s   = f"{sig:.2f}"  if sig  is not None else "—"
-            cons_s  = f"{cons:.1f}" if cons is not None else "—"
-            ev_tag  = " ✓" if e.get("eval_updated") else ""
-            lines.append(
-                f"| {i} | {ts} | {ver}{ev_tag} | {ng} | {chs_s} "
-                f"| {wr:.1f} | {avg:.1f} | {mu_s} | {sig_s} | {cons_s} |"
-            )
-        lines.append("")
-
-        # Trend
-        if len(iters) >= 2:
-            first_c = iters[0].get("champion_stats", {})
-            last_c  = iters[-1].get("champion_stats", {})
-            dwr  = (last_c.get("win_rate", 0) - first_c.get("win_rate", 0)) * 100
-            dsc  = last_c.get("avg_score", 0) - first_c.get("avg_score", 0)
-            lwr  = last_c.get("win_rate", 0) * 100
-            if lwr >= 55.0:
-                status = f"Champion wins {lwr:.0f}% vs mixed pool — **likely competitive with human players.**"
-            elif lwr >= 35.0:
-                status = f"Champion WR={lwr:.0f}% vs mixed pool — developing."
-            else:
-                status = f"Champion WR={lwr:.0f}% — early stage, continue iterating."
-            lines += [
-                "## Trend",
-                "",
-                f"- Win-rate shift (first → latest): **{'+' if dwr >= 0 else ''}{dwr:.1f} pp**",
-                f"- Avg-score shift: **{'+' if dsc >= 0 else ''}{dsc:.1f}**",
-                f"- {status}",
-                "",
-            ]
-
-    # -- Challenger breakdown --
-    opp_records: Dict[str, List[float]] = {}
-    for e in iters:
-        for name, s in e.get("challenger_stats", {}).items():
-            opp_records.setdefault(name, []).append(s.get("win_rate", 0.0))
-    if opp_records:
-        lines += [
-            "## Challenger Win Rates (lower = champion dominates)",
-            "",
-            "| Challenger | Apps | Avg WR% | Trend |",
-            "|------------|------|---------|-------|",
-        ]
-        for name in sorted(opp_records):
-            wrs    = opp_records[name]
-            avg_wr = sum(wrs) / len(wrs) * 100
-            if len(wrs) >= 3:
-                trend = ("▲ champion improving" if wrs[-1] < wrs[0] - 0.02
-                         else "▼ opponent catching up" if wrs[-1] > wrs[0] + 0.02
-                         else "→ stable")
-            else:
-                trend = "—"
-            lines.append(f"| {name} | {len(wrs)} | {avg_wr:.1f} | {trend} |")
-        lines.append("")
-
-    # -- Evaluator promotion events --
-    promo_events = [e for e in iters if e.get("eval_updated")]
-    if promo_events:
-        lines += [
-            "## Evaluator Promotion Events",
-            "",
-            "| # | Date | Iteration | New version |",
-            "|---|------|-----------|-------------|",
-        ]
-        for idx, e in enumerate(promo_events, 1):
-            ts  = e.get("timestamp", "?")[:10]
-            it  = e.get("iteration", "?")
-            ver = e.get("champion_version", "?")
-            lines.append(f"| {idx} | {ts} | {it} | {ver} |")
-        lines.append("")
-
-    # -- Challenger pool reference --
-    lines += [
-        "## Challenger Pool",
-        "",
-        "| Agent | Type | Budget | Tier |",
-        "|-------|------|--------|------|",
-    ]
-    tier_labels = {
-        "pool_random": "1 — Baseline",
-        "pool_heuristic": "1 — Baseline",
-        "pool_mcts_25ms": "2 — Vanilla MCTS",
-        "pool_mcts_50ms": "2 — Vanilla MCTS",
-        "pool_mcts_100ms": "2 — Vanilla MCTS",
-        "pool_mcts_200ms": "2 — Vanilla MCTS",
-        "pool_rave_100ms": "3 — L4+5 Enhanced",
-        "pool_l45_100ms": "3 — L4+5 Enhanced",
-        "pool_explorer_200ms": "3 — L4+5 Enhanced",
-        "pool_full_rollout_200ms": "3 — L4+5 Enhanced",
-        "pool_l9_partial_200ms": "4 — L9 Partial",
-        "pool_peer_500ms": "5 — Near-Peer",
-        "pool_champion_clone_250ms": "5 — Near-Peer",
+    # Single global weights
+    X_all = df[SE_FEATURE_COLS].values.astype(float)
+    y_all = df["final_score"].values.astype(float)
+    lr_all = LinearRegression().fit(X_all, y_all)
+    coefs_all = lr_all.coef_
+    max_abs_all = float(np.max(np.abs(coefs_all))) if np.max(np.abs(coefs_all)) > 0 else 1.0
+    single_weights = {
+        FEATURE_NAMES[i]: float(coefs_all[i] * WEIGHT_SCALE / max_abs_all)
+        for i in range(len(FEATURE_NAMES))
     }
-    for c in CHALLENGER_POOL:
-        tms    = c.get("thinking_time_ms")
-        budget = f"{tms} ms" if tms else "—"
-        tier   = tier_labels.get(c["name"], "?")
-        lines.append(f"| {c['name']} | {c['type']} | {budget} | {tier} |")
-    lines.append("")
+    r2_global = float(lr_all.score(X_all, y_all))
+    print(f"  Global R²={r2_global:.4f}")
 
-    return "\n".join(lines)
+    return {
+        "phase_weights": phase_weights,
+        "single_weights": single_weights,
+        "r2_by_phase": r2_by_phase,
+        "r2_global": r2_global,
+        "rows_used": int(len(df)),
+    }
 
 
-def _write_report(registry: Dict[str, Any]) -> None:
-    md = _render_markdown(registry)
-    PROGRESS_MD_PATH.parent.mkdir(parents=True, exist_ok=True)
-    PROGRESS_MD_PATH.write_text(md)
-    print(f"  [report] Written → {PROGRESS_MD_PATH}")
+def _save_calibrated_weights(refit: Dict[str, Any]) -> None:
+    """Overwrite data/layer6_calibrated_weights.json with new weights."""
+    payload = {
+        "single_weights": refit["single_weights"],
+        "phase_weights": refit["phase_weights"],
+        "default_weights": dict(DEFAULT_WEIGHTS),
+    }
+    weights_path = DATA_DIR / "layer6_calibrated_weights.json"
+    with weights_path.open("w") as f:
+        json.dump(payload, f, indent=2)
+    print(f"[champion_loop] Saved calibrated weights → {weights_path}")
 
 
 # ---------------------------------------------------------------------------
-# Console history display
+# Checkpoint management
 # ---------------------------------------------------------------------------
 
+def save_champion_checkpoint(state: Dict[str, Any], tracker: TrueSkillTracker) -> None:
+    generation = state["generation"]
+    ckpt_id = f"ckpt_v{generation}"
+    rating = tracker.get_rating(CHAMPION_ID)
+    checkpoint = {
+        "generation": generation,
+        "id": ckpt_id,
+        "mu": rating["mu"],
+        "sigma": rating["sigma"],
+        "params": copy.deepcopy(state["champion_params"]),
+    }
+    state["checkpoints"].append(checkpoint)
+    # Track this checkpoint in TrueSkill with the champion's current rating
+    tracker._ratings[ckpt_id] = tracker._model.rating(
+        mu=rating["mu"], sigma=rating["sigma"]
+    )
+    tracker._games_played[ckpt_id] = rating["games_played"]
+    print(f"[champion_loop] Checkpoint saved: {ckpt_id} (μ={rating['mu']:.2f})")
 
-def _show_history(registry: Dict[str, Any]) -> None:
-    iters   = registry.get("iterations", [])
-    total   = registry.get("total_games_played", 0)
-    version = registry.get("current_version", "v1")
 
-    print(f"\n{'=' * 72}")
-    print(f"  Champion Progress — {len(iters)} iteration(s), {total} total games")
-    print(f"  Current version: {version}")
-    print(f"{'=' * 72}")
+# ---------------------------------------------------------------------------
+# Progress reporting
+# ---------------------------------------------------------------------------
 
-    for e in iters:
-        ts   = e.get("timestamp", "?")[:19].replace("T", " ")
-        it   = e.get("iteration", "?")
-        ng   = e.get("num_games", "?")
-        chs  = ", ".join(e.get("challengers", []))
-        cs   = e.get("champion_stats", {})
-        wr   = cs.get("win_rate", 0) * 100
-        mu   = cs.get("trueskill_mu")
-        mu_s = f"  μ={mu:.1f}" if mu is not None else ""
-        ev   = "  [eval updated ✓]" if e.get("eval_updated") else ""
-        print(f"\n--- Iteration {it}  ({ts}, {ng} games) ---")
-        print(f"  Challengers: {chs}")
-        print(f"  Champion WR={wr:.1f}%  AvgScore={cs.get('avg_score', 0):.1f}{mu_s}{ev}")
+def print_leaderboard(tracker: TrueSkillTracker) -> None:
+    board = tracker.get_leaderboard()
+    print(f"\n{'─'*65}")
+    print(f"  {'#':>2}  {'Agent':<30}  {'μ':>6}  {'σ':>5}  {'μ-3σ':>7}  {'Games':>5}")
+    print(f"{'─'*65}")
+    for entry in board:
+        marker = " ★" if entry["agent_id"] == CHAMPION_ID else "  "
+        print(
+            f"  {entry['rank']:>2}  {entry['agent_id']:<30}  "
+            f"{entry['mu']:>6.2f}  {entry['sigma']:>5.2f}  "
+            f"{entry['conservative']:>7.2f}  {entry['games_played']:>5}{marker}"
+        )
+    print(f"{'─'*65}")
 
-    if len(iters) >= 2:
-        first = iters[0].get("champion_stats", {})
-        last  = iters[-1].get("champion_stats", {})
-        dwr   = (last.get("win_rate", 0) - first.get("win_rate", 0)) * 100
-        print(f"\n  Trend: WR {'+' if dwr >= 0 else ''}{dwr:.1f} pp  "
-              f"({first.get('win_rate', 0)*100:.1f}% → {last.get('win_rate', 0)*100:.1f}%)")
+
+def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) -> None:
+    lines: List[str] = []
+    lines.append("# Champion Self-Improvement Progress\n")
+    lines.append(f"_Updated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}_\n")
+    lines.append(f"\n**Generation:** {state['generation']}  ")
+    lines.append(f"**Snapshot rows accumulated:** {state.get('total_snapshot_rows', 0)}  ")
+    lines.append(f"**Last weight re-fit:** generation {state.get('last_refit_generation', 'never')}\n")
+
+    # Current leaderboard
+    lines.append("\n## TrueSkill Leaderboard\n")
+    lines.append("| Rank | Agent | μ | σ | μ-3σ | Games |\n")
+    lines.append("|------|-------|---|---|------|-------|\n")
+    for entry in tracker.get_leaderboard():
+        marker = " ★" if entry["agent_id"] == CHAMPION_ID else ""
+        lines.append(
+            f"| {entry['rank']} | {entry['agent_id']}{marker} | "
+            f"{entry['mu']:.2f} | {entry['sigma']:.2f} | "
+            f"{entry['conservative']:.2f} | {entry['games_played']} |\n"
+        )
+
+    # Champion trend
+    history = state.get("history", [])
+    if history:
+        lines.append("\n## Champion TrueSkill Trend\n")
+        lines.append("| Gen | μ | σ | μ-3σ | WR% | AvgScore | Challengers | Refitted |\n")
+        lines.append("|-----|---|---|------|-----|----------|-------------|----------|\n")
+        for rec in history:
+            lines.append(
+                f"| {rec['generation']} "
+                f"| {rec['champion_mu']:.2f} "
+                f"| {rec['champion_sigma']:.2f} "
+                f"| {rec['champion_conservative']:.2f} "
+                f"| {rec.get('champion_win_rate', 0)*100:.1f}% "
+                f"| {rec.get('champion_avg_score', 0):.1f} "
+                f"| {', '.join(rec.get('challengers', []))} "
+                f"| {'Yes' if rec.get('evaluator_refitted') else 'No'} |\n"
+            )
+
+    # Current champion params summary
+    lines.append("\n## Current Champion Parameters\n")
+    lines.append("```json\n")
+    lines.append(json.dumps(state["champion_params"]["params"], indent=2))
+    lines.append("\n```\n")
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    PROGRESS_MD.write_text("".join(lines), encoding="utf-8")
+
+
+def show_progress(state: Dict[str, Any]) -> None:
+    print(f"\n{'='*65}")
+    print(f"  Champion Self-Improvement Progress — Generation {state['generation']}")
+    print(f"{'='*65}")
+    if not state.get("history"):
+        print("  No generations run yet.")
+        return
+
+    tracker = build_tracker(state)
+    print_leaderboard(tracker)
+
+    history = state.get("history", [])
+    print(f"\n  Trend (last {min(5, len(history))} generations):")
+    for rec in history[-5:]:
+        refitted = " [REFITTED]" if rec.get("evaluator_refitted") else ""
+        print(
+            f"    Gen {rec['generation']:>3}: μ={rec['champion_mu']:.2f}  "
+            f"σ={rec['champion_sigma']:.2f}  "
+            f"μ-3σ={rec['champion_conservative']:.2f}  "
+            f"WR={rec.get('champion_win_rate', 0)*100:.1f}%{refitted}"
+        )
     print()
 
 
 # ---------------------------------------------------------------------------
-# Single iteration
+# Main loop
 # ---------------------------------------------------------------------------
 
+def run_loop(args: argparse.Namespace) -> None:
+    state = load_state()
 
-def _run_iteration(
-    iteration: int,
-    registry: Dict[str, Any],
-    games: int,
-    base_seed: int,
-    rng: random.Random,
-    thinking_time_ms: int,
-) -> Dict[str, Any]:
-    version         = registry.get("current_version", "v1")
-    champion_params = _get_champion_params(registry)
-    challengers     = _sample_challengers(rng)
-    seed            = base_seed + iteration
+    for gen_offset in range(args.generations):
+        generation = state["generation"] + gen_offset + 1
+        rng = random.Random(generation * 997 + 42)
+        seed = generation * 7919
 
-    print(f"\n{'=' * 70}")
-    print(f"  Iteration {iteration}  |  Champion: {version}  |  Pool: {', '.join(challengers)}")
-    print(f"{'=' * 70}")
+        champion_cfg = _build_champion_agent_config(state["champion_params"])
+        challengers = select_challengers(state, state["champion_params"], rng)
 
-    config  = _build_arena_config(champion_params, challengers, games, seed, iteration, thinking_time_ms)
-    run_dir = _run_arena(config)
-    parsed  = _parse_summary(run_dir)
+        # Save checkpoint of current champion before this generation
+        tracker = build_tracker(state)
+        if generation > 1 or state.get("checkpoints"):
+            save_champion_checkpoint(state, tracker)
 
-    cs = parsed["agents"].get("champion", {})
-    print(
-        f"  Champion WR={cs.get('win_rate', 0):.1%}  "
-        f"μ={cs.get('trueskill_mu', 0):.1f}  "
-        f"σ={cs.get('trueskill_sigma', 0):.2f}  "
-        f"avg_score={cs.get('avg_score', 0):.1f}"
-    )
-    for name in challengers:
-        s = parsed["agents"].get(name, {})
-        print(f"  {name:38s}  WR={s.get('win_rate', 0):.1%}  μ={s.get('trueskill_mu', 0):.1f}")
+        # Run arena
+        run_dir = run_generation_arena(
+            generation, champion_cfg, challengers, args.games_per_gen, seed
+        )
 
-    return {
-        "iteration":        iteration,
-        "timestamp":        datetime.now(timezone.utc).isoformat(),
-        "champion_version": version,
-        "challengers":      challengers,
-        "run_dir":          run_dir,
-        "num_games":        parsed["num_games"],
-        "completed_games":  parsed["completed_games"],
-        "champion_stats":   cs,
-        "challenger_stats": {n: parsed["agents"].get(n, {}) for n in challengers},
-        "snapshot_csv":     parsed.get("snapshot_csv"),
-        "eval_updated":     False,
-        "new_eval_weights": None,
-    }
+        # Update TrueSkill
+        update_trueskill_from_run(tracker, run_dir)
 
+        # Accumulate snapshots
+        total_rows = accumulate_snapshots(run_dir)
+        state["total_snapshot_rows"] = total_rows
 
-def _update_version_stats_wrapper(
-    registry: Dict[str, Any],
-    version: str,
-    entry: Dict[str, Any],
-    champion_params: Dict[str, Any],
-) -> None:
-    versions = registry.setdefault("versions", {})
-    if version not in versions:
-        versions[version] = {
-            "promoted_at": entry["timestamp"],
-            "params": champion_params,
-            "_wr_acc": 0.0, "_mu_acc": 0.0, "_sc_acc": 0.0, "_count": 0,
+        # Parse summary for win-rate / avg-score reporting
+        summary = parse_summary(run_dir)
+        champ_summary = summary.get("agents", {}).get(CHAMPION_ID, {})
+
+        # Maybe refit evaluator weights
+        refit_result = None
+        gens_since_refit = generation - state.get("last_refit_generation", -999)
+        if (
+            total_rows >= MIN_ROWS_FOR_REFIT
+            and gens_since_refit >= REFIT_INTERVAL
+        ):
+            refit_result = refit_evaluator_weights()
+            if refit_result:
+                state["champion_params"]["params"]["state_eval_phase_weights"] = (
+                    refit_result["phase_weights"]
+                )
+                _save_calibrated_weights(refit_result)
+                state["last_refit_generation"] = generation
+                # Increase sigma to signal the champion has changed
+                tracker.reset_agent(CHAMPION_ID, increase_sigma=True)
+                print("[champion_loop] Applied new evaluator weights to champion, reset σ")
+
+        # Record generation history
+        champion_rating = tracker.get_rating(CHAMPION_ID)
+        gen_record: Dict[str, Any] = {
+            "generation": generation,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "run_dir": run_dir,
+            "games": args.games_per_gen,
+            "challengers": [c["name"] for c in challengers],
+            "champion_mu": champion_rating["mu"],
+            "champion_sigma": champion_rating["sigma"],
+            "champion_conservative": champion_rating["conservative"],
+            "champion_games_played": champion_rating["games_played"],
+            "champion_win_rate": champ_summary.get("win_rate", 0.0),
+            "champion_avg_score": champ_summary.get("avg_score", 0.0),
+            "evaluator_refitted": refit_result is not None,
+            "refit_r2_global": refit_result["r2_global"] if refit_result else None,
+            "total_snapshot_rows": total_rows,
         }
-    v = versions[version]
-    cs = entry.get("champion_stats", {})
-    v["_count"] += 1
-    n = v["_count"]
-    v["_wr_acc"] += cs.get("win_rate", 0.0)
-    v["_mu_acc"] += cs.get("trueskill_mu", 0.0) or 0.0
-    v["_sc_acc"] += cs.get("avg_score", 0.0)
-    v["avg_win_rate"]     = v["_wr_acc"] / n
-    v["avg_trueskill_mu"] = v["_mu_acc"] / n
-    v["avg_score"]        = v["_sc_acc"] / n
+        state["history"].append(gen_record)
+        state["generation"] = generation
+
+        persist_tracker(tracker, state)
+        save_state(state)
+        write_progress_markdown(state, tracker)
+
+        # Console summary
+        print(f"\n[champion_loop] Generation {generation} complete")
+        print(
+            f"  Champion: μ={champion_rating['mu']:.2f}  "
+            f"σ={champion_rating['sigma']:.2f}  "
+            f"μ-3σ={champion_rating['conservative']:.2f}  "
+            f"WR={champ_summary.get('win_rate', 0)*100:.1f}%  "
+            f"AvgScore={champ_summary.get('avg_score', 0):.1f}"
+        )
+        print_leaderboard(tracker)
+
+        if refit_result:
+            print(
+                f"  Evaluator re-fitted: global R²={refit_result['r2_global']:.4f}, "
+                f"{refit_result['rows_used']} rows"
+            )
+
+    print(f"\n[champion_loop] All {args.generations} generation(s) complete.")
+    print(f"  Progress report: {PROGRESS_MD}")
+    print(f"  State: {STATE_FILE}")
+
+
+def force_refit(state: Dict[str, Any]) -> None:
+    tracker = build_tracker(state)
+    refit_result = refit_evaluator_weights()
+    if refit_result:
+        state["champion_params"]["params"]["state_eval_phase_weights"] = (
+            refit_result["phase_weights"]
+        )
+        _save_calibrated_weights(refit_result)
+        state["last_refit_generation"] = state["generation"]
+        tracker.reset_agent(CHAMPION_ID, increase_sigma=True)
+        persist_tracker(tracker, state)
+        save_state(state)
+        write_progress_markdown(state, tracker)
+        print("[champion_loop] Force re-fit complete.")
+    else:
+        print("[champion_loop] Re-fit skipped (insufficient data or missing libraries).")
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Champion Self-Improvement Loop — drive MCTS to beat human players"
+    )
+    parser.add_argument(
+        "--generations", type=int, default=1,
+        help="Number of generations to run (default: 1)"
+    )
+    parser.add_argument(
+        "--games-per-gen", type=int, default=20,
+        help="Arena games per generation (default: 20)"
+    )
+    parser.add_argument(
+        "--show", action="store_true",
+        help="Print progress without running any games"
+    )
+    parser.add_argument(
+        "--refit", action="store_true",
+        help="Force evaluator weight re-fit from accumulated snapshots and exit"
+    )
+    return parser.parse_args()
+
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Champion Self-Improvement Loop",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument("--iterations",  type=int, default=10,
-                        help="Number of arena iterations to run.")
-    parser.add_argument("--games-per-iter", "--num-games", type=int, default=20,
-                        dest="games_per_iter", help="Arena games per iteration.")
-    parser.add_argument("--champion-time", type=int, default=CHAMPION_THINKING_TIME_MS,
-                        help=f"Champion thinking time in ms (default: {CHAMPION_THINKING_TIME_MS}).")
-    parser.add_argument("--seed", type=int, default=20260429,
-                        help="Base RNG seed for the loop.")
-    parser.add_argument("--eval-update-interval", type=int, default=5,
-                        help="Re-calibrate evaluator weights every N iterations (0 = never).")
-    parser.add_argument("--eval-validation-games", type=int, default=16,
-                        help="Games used to validate new evaluator weights before adopting.")
-    parser.add_argument("--retrain", action="store_true",
-                        help="Force evaluator update after the final iteration.")
-    parser.add_argument("--show", action="store_true",
-                        help="Print progress report and exit without running.")
-    args = parser.parse_args()
-
-    registry = _load_registry()
+    args = parse_args()
+    state = load_state()
 
     if args.show:
-        _show_history(registry)
-        print(_render_markdown(registry))
+        show_progress(state)
         return
 
-    rng = random.Random(args.seed)
-    completed_so_far = len(registry.get("iterations", []))
+    if args.refit:
+        force_refit(state)
+        return
 
-    for i in range(1, args.iterations + 1):
-        global_iter     = completed_so_far + i
-        champion_params = _get_champion_params(registry)
-
-        entry = _run_iteration(
-            iteration=global_iter,
-            registry=registry,
-            games=args.games_per_iter,
-            base_seed=args.seed,
-            rng=rng,
-            thinking_time_ms=args.champion_time,
-        )
-
-        if entry.get("snapshot_csv"):
-            registry.setdefault("snapshot_csv_paths", []).append(entry["snapshot_csv"])
-
-        registry["total_games_played"] = (
-            registry.get("total_games_played", 0) + entry["completed_games"]
-        )
-
-        version = registry.get("current_version", "v1")
-        _update_version_stats_wrapper(registry, version, entry, champion_params)
-
-        # --- Evaluator improvement ---
-        force = args.retrain and (i == args.iterations)
-        on_interval = (
-            args.eval_update_interval > 0
-            and global_iter % args.eval_update_interval == 0
-        )
-        if force or on_interval:
-            print(f"\n  [eval] Attempting evaluator calibration (iteration {global_iter}) …")
-            snapshot_paths = registry.get("snapshot_csv_paths", [])
-            new_weights = _try_improve_evaluator(snapshot_paths)
-            if new_weights is not None:
-                old_params = _get_champion_params(registry)
-                accepted = _validate_new_weights(
-                    old_params, new_weights,
-                    games=args.eval_validation_games,
-                    seed=args.seed + global_iter * 1000,
-                    thinking_time_ms=args.champion_time,
-                )
-                if accepted:
-                    old_ver  = registry.get("current_version", "v1")
-                    ver_num  = int(old_ver.lstrip("v") or "1") + 1
-                    new_ver  = f"v{ver_num}"
-                    new_par  = {**old_params, "state_eval_weights": new_weights}
-                    registry["current_version"] = new_ver
-                    registry.setdefault("versions", {})[new_ver] = {
-                        "promoted_at":     datetime.now(timezone.utc).isoformat(),
-                        "params":          new_par,
-                        "promoted_from":   old_ver,
-                        "promotion_reason": f"Evaluator recalibration at iteration {global_iter}",
-                        "_wr_acc": 0.0, "_mu_acc": 0.0, "_sc_acc": 0.0, "_count": 0,
-                    }
-                    # Write updated weights to calibrated file
-                    cal: Dict[str, Any] = {}
-                    if CALIBRATED_WEIGHTS_PATH.exists():
-                        with CALIBRATED_WEIGHTS_PATH.open() as f:
-                            cal = json.load(f)
-                    cal["single_weights"] = new_weights
-                    with CALIBRATED_WEIGHTS_PATH.open("w") as f:
-                        json.dump(cal, f, indent=2)
-                    print(f"  [eval] Accepted → champion promoted to {new_ver}!")
-                    entry["eval_updated"]     = True
-                    entry["new_eval_weights"] = new_weights
-                    entry["champion_version"] = new_ver
-                else:
-                    print("  [eval] New weights did not improve — keeping current.")
-            else:
-                print("  [eval] Calibration skipped (insufficient data).")
-
-        registry.setdefault("iterations", []).append(entry)
-        _save_registry(registry)
-        _write_report(registry)
-
-        print(f"\n  Iteration {global_iter} complete. "
-              f"Champion WR this run: {entry['champion_stats'].get('win_rate', 0):.1%}")
-
-    print(f"\n{'=' * 70}")
-    print(f"  Champion loop complete — {args.iterations} iteration(s) run.")
-    print(f"  Current champion: {registry.get('current_version', '?')}")
-    print(f"  Total games played: {registry.get('total_games_played', 0)}")
-    print(f"  Progress report: {PROGRESS_MD_PATH}")
-    print(f"  Registry: {REGISTRY_PATH}")
-    print(f"{'=' * 70}\n")
+    run_loop(args)
 
 
 if __name__ == "__main__":
