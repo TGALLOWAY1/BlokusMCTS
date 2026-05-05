@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-CHAMPION_STATE_PATH = "data/champion_state.json"
+CHAMPION_STATE_PATH = "data/champion_arena_state.json"
 REPORTS_DIR = "data/champion_reports"
 TEMP_CONFIG_PATH = "data/_champion_arena_tmp.json"
 
