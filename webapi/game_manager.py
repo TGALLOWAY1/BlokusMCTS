@@ -2,10 +2,11 @@
 Game manager for handling multiple concurrent Blokus games.
 """
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Protocol, TypeAlias
 
 from agents.heuristic_agent import HeuristicAgent
 from agents.random_agent import RandomAgent
@@ -19,13 +20,35 @@ from schemas.move import Player as SchemaPlayer
 from schemas.state_update import BoardState, GameState, LegalMove, PlayerState, Position
 
 
+logger = logging.getLogger(__name__)
+
+BOARD_SIZE = 20
+MAX_PIECE_ID = 21
+ENGINE_PLAYERS = [EnginePlayer.RED, EnginePlayer.BLUE, EnginePlayer.GREEN, EnginePlayer.YELLOW]
+ENGINE_TO_SCHEMA_PLAYER = {
+    EnginePlayer.RED: SchemaPlayer.RED,
+    EnginePlayer.BLUE: SchemaPlayer.BLUE,
+    EnginePlayer.GREEN: SchemaPlayer.GREEN,
+    EnginePlayer.YELLOW: SchemaPlayer.YELLOW,
+}
+SCHEMA_TO_ENGINE_PLAYER = {schema: engine for engine, schema in ENGINE_TO_SCHEMA_PLAYER.items()}
+
+
+class AgentWithMoveChoice(Protocol):
+    def choose_move(self, game: BlokusGame, player: EnginePlayer):
+        ...
+
+
+GameplayAgent: TypeAlias = Optional[AgentWithMoveChoice]
+
+
 @dataclass
 class GameSession:
     """Represents an active game session."""
     game_id: str
     game: BlokusGame
     config: GameConfig
-    agents: Dict[SchemaPlayer, Any]  # Player -> Agent instance
+    agents: Dict[SchemaPlayer, GameplayAgent]  # Player -> Agent instance
     move_generator: LegalMoveGenerator
     created_at: float
     last_updated: float
@@ -74,16 +97,14 @@ class GameManager:
 
         return game_id
 
-    def _create_agents(self, player_configs: List[AgentConfig]) -> Dict[SchemaPlayer, Any]:
+    def _create_agents(self, player_configs: List[AgentConfig]) -> Dict[SchemaPlayer, GameplayAgent]:
         """Create agent instances from configuration."""
         agents = {}
-        engine_players = [EnginePlayer.RED, EnginePlayer.BLUE, EnginePlayer.GREEN, EnginePlayer.YELLOW]
-
         for i, player_config in enumerate(player_configs):
-            if i >= len(engine_players):
+            if i >= len(ENGINE_PLAYERS):
                 break
 
-            engine_player = engine_players[i]
+            engine_player = ENGINE_PLAYERS[i]
             schema_player = self._engine_to_schema_player(engine_player)
 
             if player_config.type == PlayerType.RANDOM:
@@ -204,11 +225,12 @@ class GameManager:
                 )
 
         except Exception as e:
+            logger.exception("Unexpected error while making move", extra={"game_id": game_id})
             session.status = "error"
             session.error_message = str(e)
             return MoveResponse(
                 success=False,
-                message=f"Error making move: {str(e)}",
+                message="Unexpected error while making move",
                 game_over=True
             )
 
@@ -250,9 +272,9 @@ class GameManager:
         """Create game state from session."""
         # Create board state
         board_cells = []
-        for row in range(20):
+        for row in range(BOARD_SIZE):
             board_row = []
-            for col in range(20):
+            for col in range(BOARD_SIZE):
                 cell_value = session.game.board.get_cell(session.game.board.Position(row, col))
                 if cell_value == 0:
                     board_row.append(None)
@@ -267,13 +289,11 @@ class GameManager:
 
         # Create player states
         players = []
-        engine_players = [EnginePlayer.RED, EnginePlayer.BLUE, EnginePlayer.GREEN, EnginePlayer.YELLOW]
-
-        for engine_player in engine_players:
+        for engine_player in ENGINE_PLAYERS:
             schema_player = self._engine_to_schema_player(engine_player)
             score = session.game.get_score(engine_player)
             pieces_used = list(session.game.board.player_pieces_used[engine_player])
-            pieces_remaining = [i for i in range(1, 22) if i not in pieces_used]
+            pieces_remaining = [i for i in range(1, MAX_PIECE_ID + 1) if i not in pieces_used]
 
             players.append(PlayerState(
                 player=schema_player,
@@ -289,11 +309,11 @@ class GameManager:
         legal_moves = self.get_legal_moves(session.game_id, current_schema_player)
 
         # Calculate heatmap: map legal_moves to 20x20 grid (1 = legal, 0 = illegal)
-        heatmap = [[0.0 for _ in range(20)] for _ in range(20)]
+        heatmap = [[0.0 for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
         for legal_move in legal_moves:
             # Mark all positions of this legal move as 1.0
             for position in legal_move.positions:
-                if 0 <= position.row < 20 and 0 <= position.col < 20:
+                if 0 <= position.row < BOARD_SIZE and 0 <= position.col < BOARD_SIZE:
                     heatmap[position.row][position.col] = 1.0
 
         # Check game over
@@ -318,33 +338,22 @@ class GameManager:
 
     def _engine_to_schema_player(self, engine_player: EnginePlayer) -> SchemaPlayer:
         """Convert engine player to schema player."""
-        mapping = {
-            EnginePlayer.RED: SchemaPlayer.RED,
-            EnginePlayer.BLUE: SchemaPlayer.BLUE,
-            EnginePlayer.GREEN: SchemaPlayer.GREEN,
-            EnginePlayer.YELLOW: SchemaPlayer.YELLOW
-        }
-        return mapping[engine_player]
+        return ENGINE_TO_SCHEMA_PLAYER[engine_player]
 
     def _schema_to_engine_player(self, schema_player: SchemaPlayer) -> EnginePlayer:
         """Convert schema player to engine player."""
-        mapping = {
-            SchemaPlayer.RED: EnginePlayer.RED,
-            SchemaPlayer.BLUE: EnginePlayer.BLUE,
-            SchemaPlayer.GREEN: EnginePlayer.GREEN,
-            SchemaPlayer.YELLOW: EnginePlayer.YELLOW
-        }
-        return mapping[schema_player]
+        return SCHEMA_TO_ENGINE_PLAYER[schema_player]
 
     def cleanup_old_games(self, max_age_hours: int = 24):
         """Clean up old games."""
         current_time = time.time()
         max_age_seconds = max_age_hours * 3600
 
-        games_to_remove = []
-        for game_id, session in self.games.items():
-            if current_time - session.last_updated > max_age_seconds:
-                games_to_remove.append(game_id)
+        games_to_remove = [
+            game_id
+            for game_id, session in self.games.items()
+            if current_time - session.last_updated > max_age_seconds
+        ]
 
         for game_id in games_to_remove:
             del self.games[game_id]
