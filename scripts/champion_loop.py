@@ -3,14 +3,17 @@
 
 Runs repeated arena generations where the champion competes against a
 randomized pool of challengers (previous champion checkpoints, heuristic/
-random baselines, and MCTS variants with different hyper-parameters).
+random baselines, and MCTS variants at three difficulty tiers).
 
 After each generation:
   - TrueSkill ratings are updated for all agents and persisted across runs
   - Snapshot data (including se_ state-evaluator features) is accumulated
   - Every REFIT_INTERVAL generations the evaluator phase weights are
     re-derived via per-phase linear regression on accumulated snapshots
-  - A detailed markdown progress report is written
+  - The champion is promoted when a challenger earns a higher conservative
+    TrueSkill estimate with sufficient game evidence
+  - A detailed markdown progress report is written, including the champion's
+    gap relative to the heuristic "human-proxy" baseline
 
 Goal: Drive the champion's TrueSkill conservative estimate (μ - 3σ)
 steadily upward until it reliably dominates human-level play.
@@ -54,6 +57,7 @@ DATA_DIR = Path("data")
 STATE_FILE = DATA_DIR / "champion_state.json"
 SNAPSHOT_CSV = DATA_DIR / "champion_snapshots.csv"
 PROGRESS_MD = DATA_DIR / "champion_progress.md"
+CALIBRATED_WEIGHTS_FILE = DATA_DIR / "layer6_calibrated_weights.json"
 ARENA_RUN_ROOT = "arena_runs/champion_loop"
 
 # ---------------------------------------------------------------------------
@@ -62,68 +66,141 @@ ARENA_RUN_ROOT = "arena_runs/champion_loop"
 
 SE_FEATURE_COLS = [f"se_{f}" for f in FEATURE_NAMES]
 
-# How many generations between evaluator weight re-fits
-REFIT_INTERVAL = 3
-# Minimum snapshot rows required before attempting re-fit
-MIN_ROWS_FOR_REFIT = 200
-# Maximum weight magnitude after normalisation
-WEIGHT_SCALE = 0.30
+REFIT_INTERVAL = 3          # generations between evaluator weight re-fits
+MIN_ROWS_FOR_REFIT = 200    # minimum snapshot rows before attempting re-fit
+WEIGHT_SCALE = 0.30         # maximum weight magnitude after normalisation
 
-# Number of most-recent checkpoints to keep in the active pool
 MAX_CHECKPOINTS_IN_POOL = 3
 
-# Champion agent name (stable across all generations for TrueSkill tracking)
 CHAMPION_ID = "champion"
+HUMAN_PROXY_ID = "heuristic"  # heuristic agent tracked as the "human-level proxy"
+
+# Conservative-rating gap (champion - heuristic) needed to declare the
+# champion "reliably better than human-proxy" for milestone reporting.
+HUMAN_PROXY_TARGET_GAP = 5.0
+
+# How many games a pool agent must have before it can displace the champion.
+MIN_GAMES_FOR_PROMOTION = 20
+
 
 # ---------------------------------------------------------------------------
-# Champion starting configuration (Challenge Champion profile as baseline)
+# Load calibrated phase weights
 # ---------------------------------------------------------------------------
 
-BASE_CHAMPION_PARAMS: Dict[str, Any] = {
-    "type": "mcts",
-    "thinking_time_ms": 500,
-    "params": {
-        "deterministic_time_budget": True,
-        "iterations_per_ms": 10.0,
-        "exploration_constant": 1.414,
-        "rollout_policy": "random",
-        "rollout_cutoff_depth": 5,
-        "minimax_backup_alpha": 0.25,
-        "rave_enabled": True,
-        "rave_k": 1000,
-        "progressive_widening_enabled": True,
-        "pw_c": 2.0,
-        "pw_alpha": 0.5,
+def _load_calibrated_phase_weights() -> Optional[Dict[str, Any]]:
+    """Return phase_weights from data/layer6_calibrated_weights.json, or None."""
+    if not CALIBRATED_WEIGHTS_FILE.exists():
+        return None
+    try:
+        with CALIBRATED_WEIGHTS_FILE.open() as f:
+            data = json.load(f)
+        return data.get("phase_weights")
+    except (json.JSONDecodeError, KeyError):
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Champion starting configuration (loaded with calibrated weights if available)
+# ---------------------------------------------------------------------------
+
+def _build_base_champion_params() -> Dict[str, Any]:
+    phase_weights = _load_calibrated_phase_weights()
+    return {
+        "type": "mcts",
+        "thinking_time_ms": 500,
+        "params": {
+            "deterministic_time_budget": True,
+            "iterations_per_ms": 10.0,
+            "exploration_constant": 1.414,
+            "rollout_policy": "random",
+            "rollout_cutoff_depth": 5,
+            "minimax_backup_alpha": 0.25,
+            "rave_enabled": True,
+            "rave_k": 1000,
+            "progressive_widening_enabled": True,
+            "pw_c": 2.0,
+            "pw_alpha": 0.5,
+            "adaptive_rollout_depth_enabled": True,
+            "adaptive_rollout_depth_base": 5,
+            "adaptive_rollout_depth_avg_bf": 80.0,
+            "state_eval_phase_weights": phase_weights,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tiered challenger pool
+#
+# TIER_WEAK   — baselines that anchor the lower end of the rating scale
+# TIER_MEDIUM — standard MCTS variants (comparable to or slightly below champion)
+# TIER_STRONG — full-stack variants that push the champion hard
+#
+# Each entry has:
+#   "id"     : stable agent name (used for TrueSkill continuity)
+#   "type"   : "random" | "heuristic" | "mcts"  (default "mcts")
+#   "thinking_time_ms" (optional, defaults to champion's time)
+#   "params_override"  (optional, merged over champion base params)
+# ---------------------------------------------------------------------------
+
+TIER_WEAK: List[Dict[str, Any]] = [
+    {"id": "pool_random",      "type": "random"},
+    {"id": "pool_mcts_50ms",   "type": "mcts",
+     "thinking_time_ms": 50,
+     "params_override": {"progressive_widening_enabled": False,
+                         "rave_enabled": False,
+                         "adaptive_rollout_depth_enabled": False}},
+    {"id": "pool_mcts_100ms",  "type": "mcts",
+     "thinking_time_ms": 100,
+     "params_override": {"progressive_widening_enabled": False,
+                         "rave_enabled": False,
+                         "adaptive_rollout_depth_enabled": False}},
+    {"id": "mcts_no_rave",     "params_override": {"rave_enabled": False}},
+]
+
+TIER_MEDIUM: List[Dict[str, Any]] = [
+    {"id": "mcts_high_c",         "params_override": {"exploration_constant": 2.5}},
+    {"id": "mcts_low_c",          "params_override": {"exploration_constant": 0.7}},
+    {"id": "mcts_heuristic_roll", "params_override": {"rollout_policy": "heuristic"}},
+    {"id": "mcts_deep_cutoff",    "params_override": {"rollout_cutoff_depth": 15,
+                                                       "adaptive_rollout_depth_enabled": False}},
+    {"id": "mcts_no_cutoff",      "params_override": {"rollout_cutoff_depth": None,
+                                                       "adaptive_rollout_depth_enabled": False}},
+    {"id": "mcts_high_rave",      "params_override": {"rave_k": 5000}},
+    {"id": "pool_rave_k500",      "params_override": {"rave_k": 500}},
+    {"id": "mcts_minimax",        "params_override": {"minimax_backup_alpha": 0.5}},
+    {"id": "pool_heuristic_roll", "params_override": {"rollout_policy": "heuristic"}},
+    {"id": "pool_full_rollout",   "params_override": {"rollout_cutoff_depth": None,
+                                                       "adaptive_rollout_depth_enabled": False}},
+    {"id": "pool_prog_widening",  "params_override": {"progressive_widening_enabled": True,
+                                                       "pw_c": 2.0, "pw_alpha": 0.5}},
+    {"id": "pool_nst",            "params_override": {"nst_enabled": True, "nst_weight": 0.5}},
+]
+
+TIER_STRONG: List[Dict[str, Any]] = [
+    {"id": "mcts_loss_avoid",     "params_override": {"loss_avoidance_enabled": True,
+                                                       "loss_avoidance_threshold": -30.0}},
+    {"id": "mcts_sufficiency",    "params_override": {"sufficiency_threshold_enabled": True}},
+    {"id": "mcts_opp_model",      "params_override": {"opponent_modeling_enabled": True,
+                                                       "alliance_detection_enabled": True}},
+    {"id": "mcts_slow_iters",     "thinking_time_ms": 1000, "params_override": {}},
+    {"id": "pool_deploy_hard",    "thinking_time_ms": 900,
+     "params_override": {"sufficiency_threshold_enabled": True,
+                          "loss_avoidance_enabled": True,
+                          "loss_avoidance_threshold": -50.0}},
+    {"id": "pool_l9_full",        "params_override": {
+        "adaptive_exploration_enabled": True,
+        "adaptive_exploration_base": 1.414,
+        "adaptive_exploration_avg_bf": 80.0,
         "adaptive_rollout_depth_enabled": True,
         "adaptive_rollout_depth_base": 5,
         "adaptive_rollout_depth_avg_bf": 80.0,
-        "state_eval_phase_weights": None,
-    },
-}
-
-# ---------------------------------------------------------------------------
-# Challenger pool: MCTS variants that test different hypotheses
-# ---------------------------------------------------------------------------
-
-MCTS_VARIANTS: List[Dict[str, Any]] = [
-    {"id": "mcts_high_c",          "params_override": {"exploration_constant": 2.5}},
-    {"id": "mcts_low_c",           "params_override": {"exploration_constant": 0.7}},
-    {"id": "mcts_heuristic_roll",  "params_override": {"rollout_policy": "heuristic"}},
-    {"id": "mcts_deep_cutoff",     "params_override": {"rollout_cutoff_depth": 15,
-                                                         "adaptive_rollout_depth_enabled": False}},
-    {"id": "mcts_no_cutoff",       "params_override": {"rollout_cutoff_depth": None,
-                                                         "adaptive_rollout_depth_enabled": False}},
-    {"id": "mcts_high_rave",       "params_override": {"rave_k": 5000}},
-    {"id": "mcts_no_rave",         "params_override": {"rave_enabled": False}},
-    {"id": "mcts_minimax",         "params_override": {"minimax_backup_alpha": 0.5}},
-    {"id": "mcts_loss_avoid",      "params_override": {"loss_avoidance_enabled": True,
-                                                         "loss_avoidance_threshold": -30.0}},
-    {"id": "mcts_sufficiency",     "params_override": {"sufficiency_threshold_enabled": True}},
-    {"id": "mcts_opp_model",       "params_override": {"opponent_modeling_enabled": True,
-                                                         "alliance_detection_enabled": True}},
-    {"id": "mcts_fast_iters",      "params_override": {"thinking_time_ms": 250}},
-    {"id": "mcts_slow_iters",      "params_override": {"thinking_time_ms": 1000}},
+        "sufficiency_threshold_enabled": True,
+        "loss_avoidance_enabled": True,
+        "loss_avoidance_threshold": -50.0,
+    }},
 ]
+
+ALL_POOL_AGENTS: List[Dict[str, Any]] = TIER_WEAK + TIER_MEDIUM + TIER_STRONG
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +210,7 @@ MCTS_VARIANTS: List[Dict[str, Any]] = [
 def _default_state() -> Dict[str, Any]:
     return {
         "generation": 0,
-        "champion_params": copy.deepcopy(BASE_CHAMPION_PARAMS),
+        "champion_params": _build_base_champion_params(),
         "trueskill_ratings": {},
         "checkpoints": [],   # {"generation": N, "id": str, "mu": float, "params": dict}
         "history": [],       # per-generation records
@@ -161,20 +238,12 @@ def save_state(state: Dict[str, Any]) -> None:
 
 def build_tracker(state: Dict[str, Any]) -> TrueSkillTracker:
     tracker = TrueSkillTracker()
-    for agent_id, rating in state.get("trueskill_ratings", {}).items():
-        tracker._ratings[agent_id] = tracker._model.rating(
-            mu=float(rating["mu"]),
-            sigma=float(rating["sigma"]),
-        )
-        tracker._games_played[agent_id] = int(rating.get("games_played", 0))
+    tracker.load_ratings(state.get("trueskill_ratings", {}))
     return tracker
 
 
 def persist_tracker(tracker: TrueSkillTracker, state: Dict[str, Any]) -> None:
-    state["trueskill_ratings"] = {}
-    for agent_id in tracker.agent_ids:
-        r = tracker.get_rating(agent_id)
-        state["trueskill_ratings"][agent_id] = r
+    state["trueskill_ratings"] = tracker.get_ratings()
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +251,6 @@ def persist_tracker(tracker: TrueSkillTracker, state: Dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 def _build_champion_agent_config(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Produce an arena-runner agent dict for the champion."""
     cfg = copy.deepcopy(params)
     cfg["name"] = CHAMPION_ID
     return cfg
@@ -194,26 +262,38 @@ def _build_checkpoint_agent_config(checkpoint: Dict[str, Any]) -> Dict[str, Any]
     return cfg
 
 
-def _build_variant_agent_config(
-    base_params: Dict[str, Any], variant: Dict[str, Any]
+def _build_pool_agent_config(
+    pool_entry: Dict[str, Any],
+    base_params: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Merge base champion params with a variant's override, return agent config."""
+    """Build an arena agent config from a pool entry merged over base champion params."""
+    agent_type = pool_entry.get("type", "mcts")
+
+    if agent_type != "mcts":
+        return {
+            "name": pool_entry["id"],
+            "type": agent_type,
+            "thinking_time_ms": None,
+            "params": {},
+        }
+
     cfg = copy.deepcopy(base_params)
-    override = variant.get("params_override", {})
-    # Handle thinking_time_ms override at top level
-    if "thinking_time_ms" in override:
-        cfg["thinking_time_ms"] = override.pop("thinking_time_ms")
+    cfg["name"] = pool_entry["id"]
+
+    if "thinking_time_ms" in pool_entry:
+        cfg["thinking_time_ms"] = pool_entry["thinking_time_ms"]
+
+    override = pool_entry.get("params_override", {})
     cfg["params"].update(override)
-    cfg["name"] = variant["id"]
     return cfg
 
 
-def _build_baseline_agent_config(agent_type: str) -> Dict[str, Any]:
-    return {"name": agent_type, "type": agent_type, "thinking_time_ms": None, "params": {}}
+def _build_heuristic_agent_config() -> Dict[str, Any]:
+    return {"name": HUMAN_PROXY_ID, "type": "heuristic", "thinking_time_ms": None, "params": {}}
 
 
 # ---------------------------------------------------------------------------
-# Challenger pool selection
+# Challenger pool selection — tiered: 1 weak, 1 medium/checkpoint, 1 strong
 # ---------------------------------------------------------------------------
 
 def select_challengers(
@@ -223,37 +303,97 @@ def select_challengers(
 ) -> List[Dict[str, Any]]:
     """Choose 3 challengers for this generation.
 
-    Strategy:
-      - Slot 0: always heuristic (strong baseline)
-      - Slot 1: random checkpoint if available, else random MCTS variant
-      - Slot 2: random MCTS variant (different from slot 1 if possible)
+    Slot 0 — always the heuristic "human proxy" (acts as a stable rating anchor)
+    Slot 1 — recent checkpoint if available, else a random TIER_WEAK/TIER_MEDIUM agent
+    Slot 2 — a random TIER_STRONG variant (pushes the champion at full strength)
     """
     challengers: List[Dict[str, Any]] = []
+    used_ids: set = {CHAMPION_ID}
 
-    # Slot 0: heuristic baseline
-    challengers.append(_build_baseline_agent_config("heuristic"))
+    # Slot 0: heuristic human proxy
+    challengers.append(_build_heuristic_agent_config())
+    used_ids.add(HUMAN_PROXY_ID)
 
-    # Gather recent checkpoints
+    # Slot 1: checkpoint (if any) or random weak/medium agent
     checkpoints = state.get("checkpoints", [])
     recent_ckpts = checkpoints[-MAX_CHECKPOINTS_IN_POOL:]
-
-    # Slot 1: checkpoint (if any) or random agent as the simpler baseline
     if recent_ckpts:
         ckpt = rng.choice(recent_ckpts)
         challengers.append(_build_checkpoint_agent_config(ckpt))
+        used_ids.add(ckpt["id"])
     else:
-        challengers.append(_build_baseline_agent_config("random"))
+        pool = [e for e in (TIER_WEAK + TIER_MEDIUM) if e["id"] not in used_ids]
+        if pool:
+            entry = rng.choice(pool)
+            challengers.append(_build_pool_agent_config(entry, base_params))
+            used_ids.add(entry["id"])
+        else:
+            challengers.append({"name": "pool_random", "type": "random",
+                                 "thinking_time_ms": None, "params": {}})
 
-    # Slot 2: MCTS variant (sample one not already in challengers)
-    used_ids = {c["name"] for c in challengers}
-    available_variants = [v for v in MCTS_VARIANTS if v["id"] not in used_ids]
-    if available_variants:
-        variant = rng.choice(available_variants)
-        challengers.append(_build_variant_agent_config(base_params, variant))
+    # Slot 2: strong variant
+    pool = [e for e in TIER_STRONG if e["id"] not in used_ids]
+    if not pool:
+        pool = [e for e in TIER_MEDIUM if e["id"] not in used_ids]
+    if pool:
+        entry = rng.choice(pool)
+        challengers.append(_build_pool_agent_config(entry, base_params))
     else:
-        challengers.append(_build_baseline_agent_config("random"))
+        challengers.append({"name": "pool_mcts_100ms", "type": "mcts",
+                             "thinking_time_ms": 100, "params": {}})
 
     return challengers
+
+
+# ---------------------------------------------------------------------------
+# Auto-promotion: promote a pool agent if it beats the champion
+# ---------------------------------------------------------------------------
+
+def check_and_promote(
+    tracker: TrueSkillTracker,
+    state: Dict[str, Any],
+    challengers: List[Dict[str, Any]],
+) -> Optional[str]:
+    """Promote a challenger if it beats the champion. Returns promoted agent ID or None."""
+    champ_rating = tracker.get_rating(CHAMPION_ID)
+    champ_cons = champ_rating["conservative"]
+
+    best_id: Optional[str] = None
+    best_cons = champ_cons
+
+    for cfg in challengers:
+        name = cfg.get("name", "")
+        if name in (CHAMPION_ID, HUMAN_PROXY_ID):
+            continue
+        r = tracker.get_rating(name)
+        if r["games_played"] < MIN_GAMES_FOR_PROMOTION:
+            continue
+        if r["conservative"] > best_cons:
+            best_cons = r["conservative"]
+            best_id = name
+
+    if best_id is None:
+        return None
+
+    print(f"\n[champion_loop] *** PROMOTION *** {best_id} → champion")
+    print(f"  {best_id}: cons={best_cons:.2f}  champion: cons={champ_cons:.2f}")
+
+    promoted_cfg: Optional[Dict[str, Any]] = None
+    for cfg in challengers:
+        if cfg.get("name") == best_id:
+            promoted_cfg = copy.deepcopy(cfg)
+            break
+
+    if promoted_cfg is None:
+        return None
+
+    promoted_cfg["name"] = CHAMPION_ID
+    state["champion_params"] = promoted_cfg
+
+    promoted_rating = tracker.get_rating(best_id)
+    tracker.load_ratings({"champion": promoted_rating})
+
+    return best_id
 
 
 # ---------------------------------------------------------------------------
@@ -441,13 +581,11 @@ def refit_evaluator_weights() -> Optional[Dict[str, Any]]:
                 if abs(wval) > 0.01:
                     print(f"    {fname:>35s}: {wval:+.4f}")
     else:
-        # No occupancy data: fit single global weights and use for all phases
         w, r2 = _fit_phase(df)
         phase_weights = {"early": w, "mid": w, "late": w}
         r2_by_phase = {"early": r2, "mid": r2, "late": r2}
         print(f"  Global fit: R²={r2:.4f}")
 
-    # Single global weights
     X_all = df[SE_FEATURE_COLS].values.astype(float)
     y_all = df["final_score"].values.astype(float)
     lr_all = LinearRegression().fit(X_all, y_all)
@@ -476,10 +614,9 @@ def _save_calibrated_weights(refit: Dict[str, Any]) -> None:
         "phase_weights": refit["phase_weights"],
         "default_weights": dict(DEFAULT_WEIGHTS),
     }
-    weights_path = DATA_DIR / "layer6_calibrated_weights.json"
-    with weights_path.open("w") as f:
+    with CALIBRATED_WEIGHTS_FILE.open("w") as f:
         json.dump(payload, f, indent=2)
-    print(f"[champion_loop] Saved calibrated weights → {weights_path}")
+    print(f"[champion_loop] Saved calibrated weights → {CALIBRATED_WEIGHTS_FILE}")
 
 
 # ---------------------------------------------------------------------------
@@ -498,11 +635,7 @@ def save_champion_checkpoint(state: Dict[str, Any], tracker: TrueSkillTracker) -
         "params": copy.deepcopy(state["champion_params"]),
     }
     state["checkpoints"].append(checkpoint)
-    # Track this checkpoint in TrueSkill with the champion's current rating
-    tracker._ratings[ckpt_id] = tracker._model.rating(
-        mu=rating["mu"], sigma=rating["sigma"]
-    )
-    tracker._games_played[ckpt_id] = rating["games_played"]
+    tracker.load_ratings({ckpt_id: rating})
     print(f"[champion_loop] Checkpoint saved: {ckpt_id} (μ={rating['mu']:.2f})")
 
 
@@ -510,19 +643,39 @@ def save_champion_checkpoint(state: Dict[str, Any], tracker: TrueSkillTracker) -
 # Progress reporting
 # ---------------------------------------------------------------------------
 
+def _human_proxy_gap(tracker: TrueSkillTracker) -> Optional[float]:
+    """Conservative rating of champion minus conservative rating of human proxy."""
+    all_agents = tracker.agent_ids
+    if HUMAN_PROXY_ID not in all_agents or CHAMPION_ID not in all_agents:
+        return None
+    champ = tracker.get_rating(CHAMPION_ID)
+    proxy = tracker.get_rating(HUMAN_PROXY_ID)
+    return champ["conservative"] - proxy["conservative"]
+
+
 def print_leaderboard(tracker: TrueSkillTracker) -> None:
     board = tracker.get_leaderboard()
-    print(f"\n{'─'*65}")
-    print(f"  {'#':>2}  {'Agent':<30}  {'μ':>6}  {'σ':>5}  {'μ-3σ':>7}  {'Games':>5}")
-    print(f"{'─'*65}")
+    print(f"\n{'─'*70}")
+    print(f"  {'#':>2}  {'Agent':<32}  {'μ':>6}  {'σ':>5}  {'μ-3σ':>7}  {'Games':>5}")
+    print(f"{'─'*70}")
     for entry in board:
-        marker = " ★" if entry["agent_id"] == CHAMPION_ID else "  "
+        if entry["agent_id"] == CHAMPION_ID:
+            marker = " ★"
+        elif entry["agent_id"] == HUMAN_PROXY_ID:
+            marker = " H"
+        else:
+            marker = "  "
         print(
-            f"  {entry['rank']:>2}  {entry['agent_id']:<30}  "
+            f"  {entry['rank']:>2}  {entry['agent_id']:<32}  "
             f"{entry['mu']:>6.2f}  {entry['sigma']:>5.2f}  "
             f"{entry['conservative']:>7.2f}  {entry['games_played']:>5}{marker}"
         )
-    print(f"{'─'*65}")
+    print(f"{'─'*70}")
+    gap = _human_proxy_gap(tracker)
+    if gap is not None:
+        status = "GOAL MET ✓" if gap >= HUMAN_PROXY_TARGET_GAP else f"need +{HUMAN_PROXY_TARGET_GAP - gap:.1f} more"
+        print(f"  Champion vs human proxy gap: {gap:+.2f}  ({status})")
+    print(f"{'─'*70}")
 
 
 def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) -> None:
@@ -533,25 +686,37 @@ def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) ->
     lines.append(f"**Snapshot rows accumulated:** {state.get('total_snapshot_rows', 0)}  ")
     lines.append(f"**Last weight re-fit:** generation {state.get('last_refit_generation', 'never')}\n")
 
-    # Current leaderboard
+    gap = _human_proxy_gap(tracker)
+    if gap is not None:
+        goal_status = "✅ GOAL MET" if gap >= HUMAN_PROXY_TARGET_GAP else f"⏳ gap = {gap:+.2f} (need ≥ {HUMAN_PROXY_TARGET_GAP})"
+        lines.append(f"\n**Human-proxy gap (champion − heuristic μ-3σ):** {goal_status}\n")
+
     lines.append("\n## TrueSkill Leaderboard\n")
-    lines.append("| Rank | Agent | μ | σ | μ-3σ | Games |\n")
-    lines.append("|------|-------|---|---|------|-------|\n")
+    lines.append("| Rank | Agent | μ | σ | μ-3σ | Games | Note |\n")
+    lines.append("|------|-------|---|---|------|-------|------|\n")
     for entry in tracker.get_leaderboard():
-        marker = " ★" if entry["agent_id"] == CHAMPION_ID else ""
+        if entry["agent_id"] == CHAMPION_ID:
+            note = "★ champion"
+        elif entry["agent_id"] == HUMAN_PROXY_ID:
+            note = "H human proxy"
+        elif entry["agent_id"].startswith("ckpt_"):
+            note = "checkpoint"
+        else:
+            note = ""
         lines.append(
-            f"| {entry['rank']} | {entry['agent_id']}{marker} | "
+            f"| {entry['rank']} | {entry['agent_id']} | "
             f"{entry['mu']:.2f} | {entry['sigma']:.2f} | "
-            f"{entry['conservative']:.2f} | {entry['games_played']} |\n"
+            f"{entry['conservative']:.2f} | {entry['games_played']} | {note} |\n"
         )
 
-    # Champion trend
     history = state.get("history", [])
     if history:
         lines.append("\n## Champion TrueSkill Trend\n")
-        lines.append("| Gen | μ | σ | μ-3σ | WR% | AvgScore | Challengers | Refitted |\n")
-        lines.append("|-----|---|---|------|-----|----------|-------------|----------|\n")
+        lines.append("| Gen | μ | σ | μ-3σ | WR% | AvgScore | Proxy Gap | Promoted | Refitted |\n")
+        lines.append("|-----|---|---|------|-----|----------|-----------|----------|----------|\n")
         for rec in history:
+            gap_str = f"{rec.get('human_proxy_gap', float('nan')):+.2f}" if rec.get("human_proxy_gap") is not None else "—"
+            promoted_str = rec.get("promoted_from") or ""
             lines.append(
                 f"| {rec['generation']} "
                 f"| {rec['champion_mu']:.2f} "
@@ -559,14 +724,14 @@ def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) ->
                 f"| {rec['champion_conservative']:.2f} "
                 f"| {rec.get('champion_win_rate', 0)*100:.1f}% "
                 f"| {rec.get('champion_avg_score', 0):.1f} "
-                f"| {', '.join(rec.get('challengers', []))} "
+                f"| {gap_str} "
+                f"| {promoted_str} "
                 f"| {'Yes' if rec.get('evaluator_refitted') else 'No'} |\n"
             )
 
-    # Current champion params summary
     lines.append("\n## Current Champion Parameters\n")
     lines.append("```json\n")
-    lines.append(json.dumps(state["champion_params"]["params"], indent=2))
+    lines.append(json.dumps(state["champion_params"].get("params", {}), indent=2))
     lines.append("\n```\n")
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -574,9 +739,9 @@ def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) ->
 
 
 def show_progress(state: Dict[str, Any]) -> None:
-    print(f"\n{'='*65}")
+    print(f"\n{'='*70}")
     print(f"  Champion Self-Improvement Progress — Generation {state['generation']}")
-    print(f"{'='*65}")
+    print(f"{'='*70}")
     if not state.get("history"):
         print("  No generations run yet.")
         return
@@ -588,11 +753,13 @@ def show_progress(state: Dict[str, Any]) -> None:
     print(f"\n  Trend (last {min(5, len(history))} generations):")
     for rec in history[-5:]:
         refitted = " [REFITTED]" if rec.get("evaluator_refitted") else ""
+        promoted = f" [PROMOTED from {rec['promoted_from']}]" if rec.get("promoted_from") else ""
+        gap_str = f"  proxy_gap={rec['human_proxy_gap']:+.2f}" if rec.get("human_proxy_gap") is not None else ""
         print(
             f"    Gen {rec['generation']:>3}: μ={rec['champion_mu']:.2f}  "
             f"σ={rec['champion_sigma']:.2f}  "
             f"μ-3σ={rec['champion_conservative']:.2f}  "
-            f"WR={rec.get('champion_win_rate', 0)*100:.1f}%{refitted}"
+            f"WR={rec.get('champion_win_rate', 0)*100:.1f}%{gap_str}{refitted}{promoted}"
         )
     print()
 
@@ -647,12 +814,15 @@ def run_loop(args: argparse.Namespace) -> None:
                 )
                 _save_calibrated_weights(refit_result)
                 state["last_refit_generation"] = generation
-                # Increase sigma to signal the champion has changed
                 tracker.reset_agent(CHAMPION_ID, increase_sigma=True)
                 print("[champion_loop] Applied new evaluator weights to champion, reset σ")
 
+        # Check for promotion
+        promoted_from = check_and_promote(tracker, state, challengers)
+
         # Record generation history
         champion_rating = tracker.get_rating(CHAMPION_ID)
+        proxy_gap = _human_proxy_gap(tracker)
         gen_record: Dict[str, Any] = {
             "generation": generation,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -665,6 +835,8 @@ def run_loop(args: argparse.Namespace) -> None:
             "champion_games_played": champion_rating["games_played"],
             "champion_win_rate": champ_summary.get("win_rate", 0.0),
             "champion_avg_score": champ_summary.get("avg_score", 0.0),
+            "human_proxy_gap": proxy_gap,
+            "promoted_from": promoted_from,
             "evaluator_refitted": refit_result is not None,
             "refit_r2_global": refit_result["r2_global"] if refit_result else None,
             "total_snapshot_rows": total_rows,
@@ -685,6 +857,9 @@ def run_loop(args: argparse.Namespace) -> None:
             f"WR={champ_summary.get('win_rate', 0)*100:.1f}%  "
             f"AvgScore={champ_summary.get('avg_score', 0):.1f}"
         )
+        if proxy_gap is not None:
+            goal = " ✓ GOAL MET" if proxy_gap >= HUMAN_PROXY_TARGET_GAP else ""
+            print(f"  Human-proxy gap: {proxy_gap:+.2f}{goal}")
         print_leaderboard(tracker)
 
         if refit_result:
@@ -692,6 +867,8 @@ def run_loop(args: argparse.Namespace) -> None:
                 f"  Evaluator re-fitted: global R²={refit_result['r2_global']:.4f}, "
                 f"{refit_result['rows_used']} rows"
             )
+        if promoted_from:
+            print(f"  Champion promoted (displaced {promoted_from})")
 
     print(f"\n[champion_loop] All {args.generations} generation(s) complete.")
     print(f"  Progress report: {PROGRESS_MD}")
