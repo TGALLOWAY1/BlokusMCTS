@@ -74,6 +74,11 @@ heatmap_output/
 heatmap_output_*/
 frontier_output/
 
+# Champion loop ephemeral outputs (state/snapshots tracked separately)
+data/champion_loop_arena_gen*.json
+data/champion_loop_snapshots.csv
+data/_champion_arena_tmp.json
+
 # Runtime logs
 *.log
 
