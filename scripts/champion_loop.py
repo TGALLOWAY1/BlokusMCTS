@@ -874,11 +874,15 @@ def run_loop(args: argparse.Namespace) -> None:
         total_rows = accumulate_snapshots(run_dir)
         state["total_snapshot_rows"] = total_rows
 
-        # Parse summary for per-agent win rates
+        # Parse summary for per-agent win rates and scores
         summary = parse_summary(run_dir)
-        agents_summary = summary.get("agents", {})
-        champ_summary = agents_summary.get(CHAMPION_ID, {})
-        heuristic_summary = agents_summary.get("pool_heuristic", {})
+        win_stats = summary.get("win_stats", {})
+        score_stats = summary.get("score_stats", {})
+        champ_summary = {
+            "win_rate": win_stats.get(CHAMPION_ID, {}).get("win_rate", 0.0),
+            "avg_score": score_stats.get(CHAMPION_ID, {}).get("mean", 0.0),
+        }
+        heuristic_win_rate = win_stats.get("pool_heuristic", {}).get("win_rate")
 
         # Maybe refit evaluator weights
         refit_result = None
@@ -903,7 +907,7 @@ def run_loop(args: argparse.Namespace) -> None:
 
         # Record generation history
         champion_rating = tracker.get_rating(CHAMPION_ID)
-        heuristic_wr = heuristic_summary.get("win_rate")
+        heuristic_wr = heuristic_win_rate
         gen_record: Dict[str, Any] = {
             "generation": generation,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -939,8 +943,8 @@ def run_loop(args: argparse.Namespace) -> None:
             f"WR={champ_summary.get('win_rate', 0)*100:.1f}%  "
             f"AvgScore={champ_summary.get('avg_score', 0):.1f}"
         )
-        if heuristic_wr is not None:
-            print(f"  Human proxy: heuristic WR={heuristic_wr*100:.1f}% → {human_status}")
+        if heuristic_win_rate is not None:
+            print(f"  Human proxy: heuristic WR={heuristic_win_rate*100:.1f}% → {human_status}")
         print_leaderboard(tracker)
 
         if refit_result:
