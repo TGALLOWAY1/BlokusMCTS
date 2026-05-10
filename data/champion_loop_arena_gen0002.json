@@ -1,0 +1,80 @@
+{
+  "agents": [
+    {
+      "type": "mcts",
+      "thinking_time_ms": 500,
+      "params": {
+        "deterministic_time_budget": true,
+        "iterations_per_ms": 0.5,
+        "exploration_constant": 1.414,
+        "rollout_policy": "random",
+        "rollout_cutoff_depth": 5,
+        "minimax_backup_alpha": 0.25,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "progressive_widening_enabled": true,
+        "pw_c": 2.0,
+        "pw_alpha": 0.5,
+        "adaptive_rollout_depth_enabled": true,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "state_eval_phase_weights": null
+      },
+      "name": "champion"
+    },
+    {
+      "name": "heuristic",
+      "type": "heuristic",
+      "thinking_time_ms": null,
+      "params": {}
+    },
+    {
+      "name": "random",
+      "type": "random",
+      "thinking_time_ms": null,
+      "params": {}
+    },
+    {
+      "type": "mcts",
+      "thinking_time_ms": 500,
+      "params": {
+        "deterministic_time_budget": true,
+        "iterations_per_ms": 0.5,
+        "exploration_constant": 2.5,
+        "rollout_policy": "random",
+        "rollout_cutoff_depth": 5,
+        "minimax_backup_alpha": 0.25,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "progressive_widening_enabled": true,
+        "pw_c": 2.0,
+        "pw_alpha": 0.5,
+        "adaptive_rollout_depth_enabled": true,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "state_eval_phase_weights": null
+      },
+      "name": "mcts_high_c"
+    }
+  ],
+  "num_games": 4,
+  "seed": 15838,
+  "seat_policy": "randomized",
+  "output_root": "arena_runs/champion_loop",
+  "max_turns": 2500,
+  "notes": "champion_loop gen=2",
+  "snapshots": {
+    "enabled": true,
+    "strategy": "fixed_ply",
+    "checkpoints": [
+      8,
+      16,
+      24,
+      32,
+      40,
+      48,
+      56,
+      64
+    ]
+  }
+}

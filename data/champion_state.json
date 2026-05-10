@@ -1,0 +1,166 @@
+{
+  "generation": 2,
+  "champion_params": {
+    "type": "mcts",
+    "thinking_time_ms": 500,
+    "params": {
+      "deterministic_time_budget": true,
+      "iterations_per_ms": 0.5,
+      "exploration_constant": 1.414,
+      "rollout_policy": "random",
+      "rollout_cutoff_depth": 5,
+      "minimax_backup_alpha": 0.25,
+      "rave_enabled": true,
+      "rave_k": 1000,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "adaptive_rollout_depth_enabled": true,
+      "adaptive_rollout_depth_base": 5,
+      "adaptive_rollout_depth_avg_bf": 80.0,
+      "state_eval_phase_weights": {
+        "early": {
+          "squares_placed": -0.02789619325112288,
+          "remaining_piece_area": 0.027896193251122862,
+          "accessible_corners": 0.2423071628237157,
+          "reachable_empty_squares": 0.0,
+          "largest_remaining_piece_size": 0.0,
+          "opponent_avg_mobility": -0.3,
+          "center_proximity": 0.0683186119736731,
+          "territory_enclosure_area": 0.0
+        },
+        "mid": {
+          "squares_placed": 0.04326693872809452,
+          "remaining_piece_area": -0.043266938728094596,
+          "accessible_corners": 0.009215671208488667,
+          "reachable_empty_squares": 0.01204463292296519,
+          "largest_remaining_piece_size": 0.0031529865683591705,
+          "opponent_avg_mobility": -0.1506317267237639,
+          "center_proximity": 0.3,
+          "territory_enclosure_area": 0.0
+        },
+        "late": {
+          "squares_placed": 0.0808811350364791,
+          "remaining_piece_area": -0.08088113503647902,
+          "accessible_corners": 0.0003862540198106459,
+          "reachable_empty_squares": 0.030152165309350415,
+          "largest_remaining_piece_size": -0.021144212914686218,
+          "opponent_avg_mobility": -0.06510652498788876,
+          "center_proximity": 0.3,
+          "territory_enclosure_area": 0.0
+        }
+      }
+    }
+  },
+  "trueskill_ratings": {
+    "champion": {
+      "mu": 30.28803979568528,
+      "sigma": 8.333333333333334,
+      "conservative": 5.288039795685279,
+      "games_played": 8
+    },
+    "heuristic": {
+      "mu": 24.48215608721066,
+      "sigma": 7.9634846427125305,
+      "conservative": 0.5917021590730691,
+      "games_played": 8
+    },
+    "mcts_opp_model": {
+      "mu": 30.033339406013813,
+      "sigma": 8.237864533635028,
+      "conservative": 5.319745805108727,
+      "games_played": 4
+    },
+    "random": {
+      "mu": 8.993110129580607,
+      "sigma": 7.965993318254304,
+      "conservative": -14.904869825182303,
+      "games_played": 8
+    },
+    "ckpt_v1": {
+      "mu": 29.049269840962136,
+      "sigma": 8.219483107638771,
+      "conservative": 4.390820518045825,
+      "games_played": 4
+    },
+    "mcts_high_c": {
+      "mu": 31.691548288951743,
+      "sigma": 8.276215813450822,
+      "conservative": 6.862900848599278,
+      "games_played": 4
+    }
+  },
+  "checkpoints": [
+    {
+      "generation": 1,
+      "id": "ckpt_v1",
+      "mu": 29.049269840962136,
+      "sigma": 8.219483107638771,
+      "params": {
+        "type": "mcts",
+        "thinking_time_ms": 500,
+        "params": {
+          "deterministic_time_budget": true,
+          "iterations_per_ms": 0.5,
+          "exploration_constant": 1.414,
+          "rollout_policy": "random",
+          "rollout_cutoff_depth": 5,
+          "minimax_backup_alpha": 0.25,
+          "rave_enabled": true,
+          "rave_k": 1000,
+          "progressive_widening_enabled": true,
+          "pw_c": 2.0,
+          "pw_alpha": 0.5,
+          "adaptive_rollout_depth_enabled": true,
+          "adaptive_rollout_depth_base": 5,
+          "adaptive_rollout_depth_avg_bf": 80.0,
+          "state_eval_phase_weights": null
+        }
+      }
+    }
+  ],
+  "history": [
+    {
+      "generation": 1,
+      "timestamp": "2026-05-10T03:20:40.390362+00:00",
+      "run_dir": "arena_runs/champion_loop/20260510_030911_15b642a2",
+      "games": 4,
+      "challengers": [
+        "heuristic",
+        "random",
+        "mcts_opp_model"
+      ],
+      "champion_mu": 29.049269840962136,
+      "champion_sigma": 8.219483107638771,
+      "champion_conservative": 4.390820518045825,
+      "champion_games_played": 4,
+      "champion_win_rate": 0.375,
+      "champion_avg_score": 98.5,
+      "evaluator_refitted": false,
+      "refit_r2_global": null,
+      "total_snapshot_rows": 128
+    },
+    {
+      "generation": 2,
+      "timestamp": "2026-05-10T03:31:50.851377+00:00",
+      "run_dir": "arena_runs/champion_loop/20260510_032058_968472ab",
+      "games": 4,
+      "challengers": [
+        "heuristic",
+        "random",
+        "mcts_high_c"
+      ],
+      "champion_mu": 30.28803979568528,
+      "champion_sigma": 8.333333333333334,
+      "champion_conservative": 5.288039795685279,
+      "champion_games_played": 8,
+      "champion_win_rate": 0.0,
+      "champion_avg_score": 96.75,
+      "evaluator_refitted": true,
+      "refit_r2_global": 0.6996706415315935,
+      "total_snapshot_rows": 256
+    }
+  ],
+  "total_snapshot_rows": 256,
+  "last_refit_generation": 2
+}
