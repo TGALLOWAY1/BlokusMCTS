@@ -683,8 +683,8 @@ def run_loop(args: argparse.Namespace) -> None:
             f"  Champion: μ={champion_rating['mu']:.2f}  "
             f"σ={champion_rating['sigma']:.2f}  "
             f"μ-3σ={champion_rating['conservative']:.2f}  "
-            f"WR={champ_summary.get('win_rate', 0)*100:.1f}%  "
-            f"AvgScore={champ_summary.get('avg_score', 0):.1f}"
+            f"WR={champ_win_stats.get('win_rate', 0)*100:.1f}%  "
+            f"AvgScore={float(champ_score_stats.get('mean') or 0):.1f}"
         )
         print_leaderboard(tracker)
 
