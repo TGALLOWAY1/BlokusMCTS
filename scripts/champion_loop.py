@@ -84,7 +84,7 @@ BASE_CHAMPION_PARAMS: Dict[str, Any] = {
     "thinking_time_ms": 500,
     "params": {
         "deterministic_time_budget": True,
-        "iterations_per_ms": 10.0,
+        "iterations_per_ms": 0.5,
         "exploration_constant": 1.414,
         "rollout_policy": "random",
         "rollout_cutoff_depth": 5,
@@ -631,7 +631,8 @@ def run_loop(args: argparse.Namespace) -> None:
 
         # Parse summary for win-rate / avg-score reporting
         summary = parse_summary(run_dir)
-        champ_summary = summary.get("agents", {}).get(CHAMPION_ID, {})
+        champ_win_stats = summary.get("win_stats", {}).get(CHAMPION_ID, {})
+        champ_score_stats = summary.get("score_stats", {}).get(CHAMPION_ID, {})
 
         # Maybe refit evaluator weights
         refit_result = None
@@ -663,8 +664,8 @@ def run_loop(args: argparse.Namespace) -> None:
             "champion_sigma": champion_rating["sigma"],
             "champion_conservative": champion_rating["conservative"],
             "champion_games_played": champion_rating["games_played"],
-            "champion_win_rate": champ_summary.get("win_rate", 0.0),
-            "champion_avg_score": champ_summary.get("avg_score", 0.0),
+            "champion_win_rate": champ_win_stats.get("win_rate", 0.0),
+            "champion_avg_score": float(champ_score_stats.get("mean") or 0.0),
             "evaluator_refitted": refit_result is not None,
             "refit_r2_global": refit_result["r2_global"] if refit_result else None,
             "total_snapshot_rows": total_rows,
