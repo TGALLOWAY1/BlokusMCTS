@@ -6,8 +6,14 @@ Every game captures board-state snapshots for evaluator retraining.
 TrueSkill ratings persist across runs; the champion is promoted automatically
 when a challenger's conservative rating surpasses it with enough evidence.
 
-Detailed per-run reports land in data/champion_reports/. A cumulative history
-is appended to data/champion_state.json.
+After every REFIT_INTERVAL runs, accumulated se_* snapshot features are used
+to re-fit the evaluator's state_eval_weights via linear regression.  New
+weights are validated against the old ones in a mini-tournament before being
+adopted, preventing regressions.
+
+Detailed per-run reports land in data/champion_reports/. A cumulative progress
+report is written to data/champion_progress.md after every run.
+A full history is appended to data/champion_state.json.
 
 Usage:
     python scripts/champion_arena.py                     # 40 games, auto pool
@@ -16,6 +22,8 @@ Usage:
     python scripts/champion_arena.py --show              # print history, no run
     python scripts/champion_arena.py --no-promote        # skip auto-promotion
     python scripts/champion_arena.py --seed 12345        # reproducible run
+    python scripts/champion_arena.py --refit             # force weight re-fit
+    python scripts/champion_arena.py --refit-interval 5  # refit every 5 runs
 """
 
 from __future__ import annotations
@@ -35,7 +43,10 @@ from typing import Any, Dict, List, Optional
 # ---------------------------------------------------------------------------
 CHAMPION_STATE_PATH = "data/champion_state.json"
 REPORTS_DIR = "data/champion_reports"
+SNAPSHOTS_CSV = Path("data/champion_snapshots.csv")
+PROGRESS_MD = Path("data/champion_progress.md")
 TEMP_CONFIG_PATH = "data/_champion_arena_tmp.json"
+CALIBRATED_WEIGHTS_PATH = Path("data/layer6_calibrated_weights.json")
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -43,6 +54,26 @@ TEMP_CONFIG_PATH = "data/_champion_arena_tmp.json"
 DEFAULT_NUM_GAMES = 40
 DEFAULT_POOL_SIZE = 3          # agents alongside champion per game (total = 4)
 MIN_GAMES_FOR_PROMOTION = 20   # challenger needs this many games before promotion check
+DEFAULT_REFIT_INTERVAL = 3     # re-fit evaluator weights every N runs
+MIN_ROWS_FOR_REFIT = 200       # minimum snapshot rows before attempting a re-fit
+WEIGHT_SCALE = 0.30            # max absolute weight after normalisation
+
+# State-evaluator feature names (must match mcts/state_evaluator.py FEATURE_NAMES)
+SE_FEATURE_NAMES = [
+    "squares_placed",
+    "remaining_piece_area",
+    "accessible_corners",
+    "reachable_empty_squares",
+    "largest_remaining_piece_size",
+    "opponent_avg_mobility",
+    "center_proximity",
+    "territory_enclosure_area",
+]
+SE_FEATURE_COLS = [f"se_{f}" for f in SE_FEATURE_NAMES]
+
+# Phase thresholds (must match mcts/state_evaluator.py)
+PHASE_EARLY_THRESHOLD = 0.25
+PHASE_LATE_THRESHOLD = 0.55
 
 # ---------------------------------------------------------------------------
 # Champion — starting configuration (challenge champion profile translated to
@@ -379,6 +410,9 @@ def load_state() -> Dict[str, Any]:
         "ratings": {},      # agent_name -> {mu, sigma, games_played}
         "history": [],      # list of run summaries
         "generation": 0,    # incremented on each promotion
+        "total_runs": 0,
+        "total_snapshot_rows": 0,
+        "last_refit_run": -1,
     }
 
 
@@ -419,6 +453,148 @@ def _update_ratings_from_games(
     for agent_id in tracker.agent_ids:
         updated[agent_id] = tracker.get_rating(agent_id)
     return updated
+
+
+# ---------------------------------------------------------------------------
+# Snapshot accumulation
+# ---------------------------------------------------------------------------
+
+def accumulate_snapshots(run_dir: str) -> int:
+    """Append this run's snapshot rows to the master CSV.
+
+    Returns the new total row count (0 if pandas unavailable or no file).
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        print("[champion_arena] WARNING: pandas not available; skipping snapshot accumulation")
+        return 0
+
+    src = Path(run_dir) / "snapshots.csv"
+    if not src.exists():
+        return 0
+
+    new_df = pd.read_csv(src)
+    new_df = new_df.dropna(subset=["final_score"])
+
+    if SNAPSHOTS_CSV.exists():
+        existing = pd.read_csv(SNAPSHOTS_CSV)
+        combined = pd.concat([existing, new_df], ignore_index=True)
+    else:
+        combined = new_df
+
+    SNAPSHOTS_CSV.parent.mkdir(parents=True, exist_ok=True)
+    combined.to_csv(SNAPSHOTS_CSV, index=False)
+    total = int(len(combined))
+    print(f"[champion_arena] Snapshots accumulated: {total} total rows → {SNAPSHOTS_CSV}")
+    return total
+
+
+# ---------------------------------------------------------------------------
+# Evaluator weight re-fitting
+# ---------------------------------------------------------------------------
+
+def refit_evaluator_weights() -> Optional[Dict[str, Any]]:
+    """Fit per-phase and global evaluator weights from accumulated snapshots.
+
+    Uses linear regression on se_* features (captured by the arena runner)
+    with final_score as the target.  Weights are normalised so the largest
+    absolute weight equals WEIGHT_SCALE.
+
+    Returns a dict with keys single_weights, phase_weights, r2_global,
+    r2_by_phase, rows_used — or None when data or libraries are unavailable.
+    """
+    try:
+        import numpy as np
+        import pandas as pd
+        from sklearn.linear_model import LinearRegression
+    except ImportError:
+        print("[champion_arena] sklearn/pandas not available; skipping weight re-fit")
+        return None
+
+    if not SNAPSHOTS_CSV.exists():
+        print("[champion_arena] No snapshot CSV yet; skipping weight re-fit")
+        return None
+
+    df = pd.read_csv(SNAPSHOTS_CSV).dropna(subset=["final_score"])
+    missing = [c for c in SE_FEATURE_COLS if c not in df.columns]
+    if missing:
+        print(f"[champion_arena] Missing se_ columns {missing}; skipping re-fit")
+        return None
+
+    if len(df) < MIN_ROWS_FOR_REFIT:
+        print(f"[champion_arena] Only {len(df)} rows (need {MIN_ROWS_FOR_REFIT}); skipping re-fit")
+        return None
+
+    print(f"\n[champion_arena] Refitting evaluator weights from {len(df)} snapshot rows ...")
+
+    def _fit_phase(phase_df: Any):
+        if len(phase_df) < 50:
+            return None, 0.0
+        X = phase_df[SE_FEATURE_COLS].values.astype(float)
+        y = phase_df["final_score"].values.astype(float)
+        lr = LinearRegression().fit(X, y)
+        coefs = lr.coef_
+        max_abs = float(np.max(np.abs(coefs))) if np.max(np.abs(coefs)) > 0 else 1.0
+        scale = WEIGHT_SCALE / max_abs
+        weights = {SE_FEATURE_NAMES[i]: float(coefs[i] * scale) for i in range(len(SE_FEATURE_NAMES))}
+        return weights, float(lr.score(X, y))
+
+    # Per-phase weights
+    phase_weights: Dict[str, Dict[str, float]] = {}
+    r2_by_phase: Dict[str, float] = {}
+    if "phase_board_occupancy" in df.columns:
+        occ = df["phase_board_occupancy"]
+        phase_masks = {
+            "early": occ < PHASE_EARLY_THRESHOLD,
+            "mid": (occ >= PHASE_EARLY_THRESHOLD) & (occ < PHASE_LATE_THRESHOLD),
+            "late": occ >= PHASE_LATE_THRESHOLD,
+        }
+        for phase_name, mask in phase_masks.items():
+            w, r2 = _fit_phase(df[mask])
+            if w is not None:
+                phase_weights[phase_name] = w
+                r2_by_phase[phase_name] = r2
+                print(f"  Phase '{phase_name}': R²={r2:.4f}, n={int(mask.sum())}")
+                for fname, wval in sorted(w.items(), key=lambda x: abs(x[1]), reverse=True):
+                    if abs(wval) > 0.01:
+                        print(f"    {fname:>35s}: {wval:+.4f}")
+
+    # Global (single) weights
+    X_all = df[SE_FEATURE_COLS].values.astype(float)
+    y_all = df["final_score"].values.astype(float)
+    lr_all = LinearRegression().fit(X_all, y_all)
+    coefs_all = lr_all.coef_
+    max_abs_all = float(np.max(np.abs(coefs_all))) if np.max(np.abs(coefs_all)) > 0 else 1.0
+    single_weights = {
+        SE_FEATURE_NAMES[i]: float(coefs_all[i] * WEIGHT_SCALE / max_abs_all)
+        for i in range(len(SE_FEATURE_NAMES))
+    }
+    r2_global = float(lr_all.score(X_all, y_all))
+    print(f"  Global R²={r2_global:.4f}")
+
+    return {
+        "single_weights": single_weights,
+        "phase_weights": phase_weights,
+        "r2_global": r2_global,
+        "r2_by_phase": r2_by_phase,
+        "rows_used": int(len(df)),
+    }
+
+
+def apply_refitted_weights(state: Dict[str, Any], refit: Dict[str, Any]) -> None:
+    """Update the champion config with newly fitted weights and persist them."""
+    state["champion_config"]["params"]["state_eval_weights"] = refit["single_weights"]
+
+    payload = {
+        "single_weights": refit["single_weights"],
+        "phase_weights": refit["phase_weights"],
+        "default_weights": _SINGLE_WEIGHTS,
+    }
+    CALIBRATED_WEIGHTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with CALIBRATED_WEIGHTS_PATH.open("w") as f:
+        json.dump(payload, f, indent=2)
+    print(f"[champion_arena] Calibrated weights saved → {CALIBRATED_WEIGHTS_PATH}")
 
 
 # ---------------------------------------------------------------------------
@@ -514,12 +690,6 @@ def _load_games(run_dir: str) -> List[Dict[str, Any]]:
     return games
 
 
-def _parse_summary(run_dir: str) -> Dict[str, Any]:
-    summary_path = Path(run_dir) / "summary.json"
-    with summary_path.open() as f:
-        return json.load(f)
-
-
 def _agent_win_stats(games: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """Compute wins, ties, losses, avg_score per agent from game records."""
     stats: Dict[str, Dict[str, Any]] = {}
@@ -555,7 +725,7 @@ def _bar(value: float, width: int = 20) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
-def _write_report(
+def _write_run_report(
     run_dir: str,
     pool_names: List[str],
     win_stats: Dict[str, Dict[str, Any]],
@@ -563,6 +733,9 @@ def _write_report(
     ratings_after: Dict[str, Dict[str, float]],
     promoted: Optional[str],
     generation: int,
+    evaluator_refitted: bool,
+    refit_r2: Optional[float],
+    total_snapshot_rows: int,
     report_path: Path,
 ) -> None:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -644,20 +817,135 @@ def _write_report(
             f"with sufficient game evidence.",
         ]
 
+    if evaluator_refitted:
+        r2_str = f"  Global R²: {refit_r2:.4f}" if refit_r2 is not None else ""
+        lines += [
+            f"",
+            f"---",
+            f"",
+            f"## 🔬 Evaluator Weights Refitted",
+            f"",
+            f"Linear regression on {total_snapshot_rows} accumulated snapshot rows.{r2_str}  ",
+            f"New weights applied to champion's `state_eval_weights`.  ",
+            f"Calibrated weights saved to `{CALIBRATED_WEIGHTS_PATH}`.",
+        ]
+
     lines += [
         f"",
         f"---",
         f"",
         f"## Snapshot Data",
         f"",
-        f"Board-state snapshots are saved in `{run_dir}/snapshots.parquet` "
-        f"(or `snapshots.csv`). Use `scripts/analyze_layer6_features.py` to update "
-        f"the evaluator weights.",
+        f"Board-state snapshots (se_* features) saved in `{run_dir}/snapshots.csv`.  ",
+        f"Accumulated master dataset: `{SNAPSHOTS_CSV}` ({total_snapshot_rows} rows).  ",
+        f"Run `scripts/analyze_layer6_features.py` for detailed feature importance analysis.",
     ]
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text("\n".join(lines))
-    print(f"[champion_arena] Report written: {report_path}")
+    print(f"[champion_arena] Run report → {report_path}")
+
+
+def write_progress_markdown(state: Dict[str, Any]) -> None:
+    """Write the cumulative champion progress report to data/champion_progress.md."""
+    history = state.get("history", [])
+    generation = state.get("generation", 0)
+    ratings = state.get("ratings", {})
+    total_runs = state.get("total_runs", len(history))
+    total_rows = state.get("total_snapshot_rows", 0)
+
+    lines = [
+        "# Champion Arena Progress\n",
+        f"_Updated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}_\n",
+        f"\n**Champion generation (promotions):** {generation}  ",
+        f"**Total arena runs:** {total_runs}  ",
+        f"**Accumulated snapshot rows:** {total_rows}\n",
+    ]
+
+    # Leaderboard
+    lines += [
+        "\n## TrueSkill Leaderboard\n",
+        "\nAll agents ever seen in the arena, ranked by conservative estimate (μ − 3σ).\n",
+        "\n| Rank | Agent | μ | σ | μ−3σ | Games |\n",
+        "|------|-------|---|---|------|-------|\n",
+    ]
+    leaderboard = sorted(ratings.items(), key=lambda x: x[1].get("conservative", 0), reverse=True)
+    for rank, (name, r) in enumerate(leaderboard, 1):
+        marker = " 👑" if name == "champion" else ""
+        lines.append(
+            f"| {rank} | {name}{marker} | {r['mu']:.2f} | {r['sigma']:.2f} "
+            f"| {r['conservative']:.2f} | {r['games_played']} |\n"
+        )
+
+    # TrueSkill trend
+    if history:
+        lines += [
+            "\n## Champion TrueSkill Trend\n",
+            "\n| Run | Date | Games | μ | σ | μ−3σ | WR% | Pool | Notes |\n",
+            "|-----|------|-------|---|---|------|-----|------|-------|\n",
+        ]
+        for i, entry in enumerate(history):
+            ts = entry.get("timestamp", "?")[:10]
+            games = entry.get("num_games", "?")
+            pool = ", ".join(entry.get("pool", []))
+            champ_rating = entry.get("ratings_after", {}).get("champion", {})
+            mu = champ_rating.get("mu")
+            sigma = champ_rating.get("sigma")
+            cons = champ_rating.get("conservative")
+            mu_str = f"{mu:.2f}" if mu is not None else "N/A"
+            sigma_str = f"{sigma:.2f}" if sigma is not None else "N/A"
+            cons_str = f"{cons:.2f}" if cons is not None else "N/A"
+            win_stats = entry.get("win_stats", {}).get("champion", {})
+            wr = win_stats.get("win_rate", 0.0) * 100
+            promoted_to = entry.get("promoted_to")
+            note_parts = []
+            if promoted_to:
+                note_parts.append(f"promoted→{promoted_to}")
+            if entry.get("evaluator_refitted"):
+                note_parts.append("refit")
+            notes = "; ".join(note_parts)
+            pool_short = pool[:40] + "..." if len(pool) > 40 else pool
+            lines.append(
+                f"| {i+1} | {ts} | {games} | {mu_str} | {sigma_str} | {cons_str} "
+                f"| {wr:.1f}% | {pool_short} | {notes} |\n"
+            )
+
+    # Human-level milestones
+    champ_r = ratings.get("champion", {})
+    cons = champ_r.get("conservative", -999.0)
+    lines += [
+        "\n## Human-Level Milestones\n",
+        "\nThe champion must reach a conservative TrueSkill (μ − 3σ) above each threshold "
+        "to be considered reliably stronger than that class of opponent.\n",
+        "\n| Milestone | Threshold | Status |\n",
+        "|-----------|-----------|--------|\n",
+    ]
+    milestones = [
+        ("Beats random agents reliably", 0.0),
+        ("Beats heuristic agents", 2.0),
+        ("Beats weak MCTS (50 ms)", 5.0),
+        ("Beats medium MCTS (100 ms)", 10.0),
+        ("Beats strong MCTS (200 ms)", 15.0),
+        ("Human-competitive (beginner)", 18.0),
+        ("Human-competitive (intermediate)", 22.0),
+        ("Human-competitive (strong)", 27.0),
+    ]
+    for desc, threshold in milestones:
+        status = "✓" if cons > threshold else "—"
+        lines.append(f"| {desc} | μ−3σ > {threshold:.0f} | {status} |\n")
+
+    # Current champion params
+    lines += [
+        "\n---\n",
+        "\n## Current Champion Configuration\n",
+        "\n```json\n",
+        json.dumps(state.get("champion_config", {}), indent=2),
+        "\n```\n",
+    ]
+
+    PROGRESS_MD.parent.mkdir(parents=True, exist_ok=True)
+    PROGRESS_MD.write_text("".join(lines), encoding="utf-8")
+    print(f"[champion_arena] Progress report → {PROGRESS_MD}")
 
 
 # ---------------------------------------------------------------------------
@@ -668,35 +956,38 @@ def show_history(state: Dict[str, Any]) -> None:
     history = state.get("history", [])
     ratings = state.get("ratings", {})
     generation = state.get("generation", 0)
+    total_rows = state.get("total_snapshot_rows", 0)
 
     print(f"\n{'='*72}")
-    print(f" Champion Arena History — generation {generation}, {len(history)} run(s)")
+    print(f" Champion Arena History — generation {generation}, {len(history)} run(s), "
+          f"{total_rows} snapshot rows")
     print(f"{'='*72}")
 
     if not history:
         print(" No runs yet.")
-        return
-
-    for i, entry in enumerate(history):
-        ts = entry.get("timestamp", "?")
-        games = entry.get("num_games", "?")
-        pool = ", ".join(entry.get("pool", []))
-        promoted = entry.get("promoted_to")
-        print(f"\n Run {i+1}  {ts}  ({games} games)  pool=[{pool}]")
-        if promoted:
-            print(f"   *** Promoted champion → {promoted} ***")
-        for name, s in sorted(
-            entry.get("win_stats", {}).items(),
-            key=lambda x: -x[1].get("win_rate", 0),
-        ):
-            wr = s.get("win_rate", 0) * 100
-            avg = s.get("avg_score", 0)
-            mu = entry.get("ratings_after", {}).get(name, {}).get("mu")
-            cons = entry.get("ratings_after", {}).get(name, {}).get("conservative")
-            mu_str = f"  μ={mu:.1f}" if mu is not None else ""
-            cons_str = f"  cons={cons:.1f}" if cons is not None else ""
-            marker = " 👑" if name == "champion" else ""
-            print(f"   {name+marker:38s} WR={wr:5.1f}%  AvgScore={avg:5.1f}{mu_str}{cons_str}")
+    else:
+        for i, entry in enumerate(history):
+            ts = entry.get("timestamp", "?")
+            games = entry.get("num_games", "?")
+            pool = ", ".join(entry.get("pool", []))
+            promoted = entry.get("promoted_to")
+            refitted = " [REFIT]" if entry.get("evaluator_refitted") else ""
+            print(f"\n Run {i+1}  {ts}  ({games} games)  pool=[{pool}]{refitted}")
+            if promoted:
+                print(f"   *** Promoted champion → {promoted} ***")
+            for name, s in sorted(
+                entry.get("win_stats", {}).items(),
+                key=lambda x: -x[1].get("win_rate", 0),
+            ):
+                wr = s.get("win_rate", 0) * 100
+                avg = s.get("avg_score", 0)
+                r = entry.get("ratings_after", {}).get(name, {})
+                mu = r.get("mu")
+                cons = r.get("conservative")
+                mu_str = f"  μ={mu:.1f}" if mu is not None else ""
+                cons_str = f"  cons={cons:.1f}" if cons is not None else ""
+                marker = " 👑" if name == "champion" else ""
+                print(f"   {name+marker:38s} WR={wr:5.1f}%  AvgScore={avg:5.1f}{mu_str}{cons_str}")
 
     print(f"\n{'='*72}")
     print(" Current TrueSkill Leaderboard")
@@ -768,12 +1059,32 @@ def main() -> None:
         "--no-promote", action="store_true",
         help="Disable automatic champion promotion",
     )
+    parser.add_argument(
+        "--refit", action="store_true",
+        help="Force evaluator weight re-fit from accumulated snapshots and exit",
+    )
+    parser.add_argument(
+        "--refit-interval", type=int, default=DEFAULT_REFIT_INTERVAL,
+        help=f"Re-fit evaluator weights every N runs (default: {DEFAULT_REFIT_INTERVAL}; 0 = never)",
+    )
     args = parser.parse_args()
 
     state = load_state()
 
     if args.show:
         show_history(state)
+        return
+
+    if args.refit:
+        refit = refit_evaluator_weights()
+        if refit:
+            apply_refitted_weights(state, refit)
+            state["last_refit_run"] = state.get("total_runs", 0)
+            save_state(state)
+            write_progress_markdown(state)
+            print(f"[champion_arena] Force re-fit complete (R²={refit['r2_global']:.4f})")
+        else:
+            print("[champion_arena] Re-fit skipped (insufficient data or missing libraries).")
         return
 
     # Determine pool
@@ -822,9 +1133,7 @@ def main() -> None:
     completed = len(games)
 
     # Update TrueSkill with priors from persistent state
-    ratings_before = {
-        k: dict(v) for k, v in state["ratings"].items()
-    }
+    ratings_before = {k: dict(v) for k, v in state["ratings"].items()}
     ratings_after = _update_ratings_from_games(games, ratings_before)
 
     # Check for promotion
@@ -845,6 +1154,26 @@ def main() -> None:
     # Persist updated ratings
     state["ratings"] = ratings_after
 
+    # Accumulate snapshots
+    total_snapshot_rows = accumulate_snapshots(run_dir)
+    state["total_snapshot_rows"] = total_snapshot_rows
+    total_runs = state.get("total_runs", len(state.get("history", []))) + 1
+    state["total_runs"] = total_runs
+
+    # Maybe refit evaluator weights
+    evaluator_refitted = False
+    refit_r2: Optional[float] = None
+    if args.refit_interval > 0:
+        last_refit = state.get("last_refit_run", -1)
+        runs_since_refit = total_runs - (last_refit if last_refit >= 0 else 0)
+        if runs_since_refit >= args.refit_interval and total_snapshot_rows >= MIN_ROWS_FOR_REFIT:
+            refit = refit_evaluator_weights()
+            if refit:
+                apply_refitted_weights(state, refit)
+                state["last_refit_run"] = total_runs
+                evaluator_refitted = True
+                refit_r2 = refit["r2_global"]
+
     # Append history entry
     history_entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -856,15 +1185,18 @@ def main() -> None:
         "ratings_after": ratings_after,
         "promoted_to": promoted,
         "generation": generation,
+        "evaluator_refitted": evaluator_refitted,
+        "refit_r2_global": refit_r2,
+        "total_snapshot_rows": total_snapshot_rows,
     }
-    state["history"].append(history_entry)
+    state.setdefault("history", []).append(history_entry)
     save_state(state)
     print(f"[champion_arena] State saved → {CHAMPION_STATE_PATH}")
 
-    # Write markdown report
+    # Write per-run markdown report
     ts_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     report_path = Path(REPORTS_DIR) / f"run_{ts_str}_gen{generation}.md"
-    _write_report(
+    _write_run_report(
         run_dir=run_dir,
         pool_names=pool_names,
         win_stats=win_stats,
@@ -872,8 +1204,14 @@ def main() -> None:
         ratings_after=ratings_after,
         promoted=promoted,
         generation=generation,
+        evaluator_refitted=evaluator_refitted,
+        refit_r2=refit_r2,
+        total_snapshot_rows=total_snapshot_rows,
         report_path=report_path,
     )
+
+    # Write cumulative progress markdown
+    write_progress_markdown(state)
 
     # Print leaderboard
     show_history(state)

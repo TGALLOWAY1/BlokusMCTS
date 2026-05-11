@@ -51,9 +51,9 @@ from mcts.state_evaluator import DEFAULT_WEIGHTS, FEATURE_NAMES, PHASE_EARLY_THR
 # ---------------------------------------------------------------------------
 
 DATA_DIR = Path("data")
-STATE_FILE = DATA_DIR / "champion_state.json"
+STATE_FILE = DATA_DIR / "champion_loop_state.json"
 SNAPSHOT_CSV = DATA_DIR / "champion_snapshots.csv"
-PROGRESS_MD = DATA_DIR / "champion_progress.md"
+PROGRESS_MD = DATA_DIR / "champion_loop_progress.md"
 ARENA_RUN_ROOT = "arena_runs/champion_loop"
 
 # ---------------------------------------------------------------------------
