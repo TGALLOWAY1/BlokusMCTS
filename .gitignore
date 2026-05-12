@@ -74,6 +74,10 @@ heatmap_output/
 heatmap_output_*/
 frontier_output/
 
+# Champion arena generated temp files
+data/_champion_arena_tmp.json
+data/champion_loop_arena_gen*.json
+
 # Runtime logs
 *.log
 
