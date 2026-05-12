@@ -1,0 +1,184 @@
+{
+  "champion_config": {
+    "name": "champion",
+    "type": "mcts",
+    "thinking_time_ms": 500,
+    "params": {
+      "deterministic_time_budget": true,
+      "iterations_per_ms": 0.15,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "rollout_policy": "random",
+      "rollout_cutoff_depth": 5,
+      "minimax_backup_alpha": 0.25,
+      "rave_enabled": true,
+      "rave_k": 1000,
+      "state_eval_weights": {
+        "squares_placed": 0.0295,
+        "remaining_piece_area": -0.0295,
+        "accessible_corners": 0.243,
+        "reachable_empty_squares": 0.081,
+        "largest_remaining_piece_size": -0.231,
+        "opponent_avg_mobility": -0.3,
+        "center_proximity": 0.0,
+        "territory_enclosure_area": 0.0
+      },
+      "state_eval_phase_weights": {
+        "early": {
+          "squares_placed": -0.176,
+          "remaining_piece_area": 0.176,
+          "accessible_corners": 0.3,
+          "reachable_empty_squares": 0.0,
+          "largest_remaining_piece_size": 0.0,
+          "opponent_avg_mobility": -0.053,
+          "center_proximity": 0.0,
+          "territory_enclosure_area": 0.0
+        },
+        "mid": {
+          "squares_placed": -0.004,
+          "remaining_piece_area": 0.004,
+          "accessible_corners": 0.3,
+          "reachable_empty_squares": 0.228,
+          "largest_remaining_piece_size": -0.238,
+          "opponent_avg_mobility": -0.203,
+          "center_proximity": 0.0,
+          "territory_enclosure_area": 0.0
+        },
+        "late": {
+          "squares_placed": 0.3,
+          "remaining_piece_area": -0.3,
+          "accessible_corners": 0.176,
+          "reachable_empty_squares": 0.134,
+          "largest_remaining_piece_size": -0.085,
+          "opponent_avg_mobility": -0.063,
+          "center_proximity": 0.0,
+          "territory_enclosure_area": 0.0
+        }
+      },
+      "opponent_modeling_enabled": true,
+      "alliance_detection_enabled": true,
+      "alliance_threshold": 2.0,
+      "kingmaker_detection_enabled": true,
+      "kingmaker_score_gap": 15,
+      "adaptive_rollout_depth_enabled": true,
+      "adaptive_rollout_depth_base": 5,
+      "adaptive_rollout_depth_avg_bf": 80.0,
+      "adaptive_exploration_enabled": true,
+      "adaptive_exploration_base": 1.414,
+      "adaptive_exploration_avg_bf": 80.0,
+      "sufficiency_threshold_enabled": true,
+      "loss_avoidance_enabled": true,
+      "loss_avoidance_threshold": -50.0
+    }
+  },
+  "ratings": {
+    "champion": {
+      "mu": 26.734758026867205,
+      "sigma": 8.320374993150986,
+      "conservative": 1.7736330474142434,
+      "games_played": 1
+    },
+    "pool_heuristic": {
+      "mu": 24.807249108125866,
+      "sigma": 8.278147449560024,
+      "conservative": -0.02719324055420458,
+      "games_played": 1
+    },
+    "pool_mcts_50ms": {
+      "mu": 25.96375445937067,
+      "sigma": 8.300529968243797,
+      "conservative": 1.0621645546392777,
+      "games_played": 1
+    },
+    "pool_random": {
+      "mu": 22.49423840563626,
+      "sigma": 8.278147449560024,
+      "conservative": -2.340203943043811,
+      "games_played": 1
+    }
+  },
+  "history": [
+    {
+      "timestamp": "2026-05-12T04:04:42.354673+00:00",
+      "run_dir": "arena_runs/20260512_040322_889c7249",
+      "num_games": 1,
+      "pool": [
+        "pool_random",
+        "pool_heuristic",
+        "pool_mcts_50ms"
+      ],
+      "arena_seed": 95822412,
+      "win_stats": {
+        "champion": {
+          "wins": 1,
+          "ties": 0,
+          "losses": 0,
+          "games": 1,
+          "avg_score": 99.0,
+          "win_rate": 1.0
+        },
+        "pool_heuristic": {
+          "wins": 0,
+          "ties": 0,
+          "losses": 1,
+          "games": 1,
+          "avg_score": 76.0,
+          "win_rate": 0.0
+        },
+        "pool_mcts_50ms": {
+          "wins": 0,
+          "ties": 0,
+          "losses": 1,
+          "games": 1,
+          "avg_score": 84.0,
+          "win_rate": 0.0
+        },
+        "pool_random": {
+          "wins": 0,
+          "ties": 0,
+          "losses": 1,
+          "games": 1,
+          "avg_score": 57.0,
+          "win_rate": 0.0
+        }
+      },
+      "ratings_after": {
+        "champion": {
+          "mu": 26.734758026867205,
+          "sigma": 8.320374993150986,
+          "conservative": 1.7736330474142434,
+          "games_played": 1
+        },
+        "pool_heuristic": {
+          "mu": 24.807249108125866,
+          "sigma": 8.278147449560024,
+          "conservative": -0.02719324055420458,
+          "games_played": 1
+        },
+        "pool_mcts_50ms": {
+          "mu": 25.96375445937067,
+          "sigma": 8.300529968243797,
+          "conservative": 1.0621645546392777,
+          "games_played": 1
+        },
+        "pool_random": {
+          "mu": 22.49423840563626,
+          "sigma": 8.278147449560024,
+          "conservative": -2.340203943043811,
+          "games_played": 1
+        }
+      },
+      "promoted_to": null,
+      "generation": 0,
+      "total_snapshot_rows": 32,
+      "evaluator_refitted": false,
+      "refit_r2_global": null
+    }
+  ],
+  "generation": 0,
+  "total_snapshot_rows": 32,
+  "last_refit_run": -1
+}
