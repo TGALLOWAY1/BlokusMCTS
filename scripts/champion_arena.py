@@ -112,7 +112,7 @@ CHAMPION_INITIAL_CONFIG: Dict[str, Any] = {
     "thinking_time_ms": 500,
     "params": {
         "deterministic_time_budget": True,
-        "iterations_per_ms": 0.5,
+        "iterations_per_ms": 0.15,   # ~75 iters @ full L9 ~70 iter/s ≈ 1.1 s/move
         "exploration_constant": 1.414,
         "use_transposition_table": True,
         # Layer 3: Progressive Widening
@@ -158,25 +158,29 @@ POOL_CATALOG: List[Dict[str, Any]] = [
     {"name": "pool_random",    "type": "random",    "thinking_time_ms": None, "params": {}},
     {"name": "pool_heuristic", "type": "heuristic", "thinking_time_ms": None, "params": {}},
 
-    # --- Time-budget sweep (plain UCB1) ---
+    # --- Time-budget sweep (UCB1 + cutoff=5 rollout; calibrated for ~6ms/iter on this hw) ---
     {
         "name": "pool_mcts_50ms",
         "type": "mcts",
-        "thinking_time_ms": 50,
+        "thinking_time_ms": 500,
         "params": {
             "deterministic_time_budget": True,
-            "iterations_per_ms": 10.0,
+            "iterations_per_ms": 0.10,   # 50 iters @ ~159 iter/s ≈ 0.31 s/move
             "exploration_constant": 1.414,
+            "rollout_policy": "random",
+            "rollout_cutoff_depth": 5,
         },
     },
     {
         "name": "pool_mcts_100ms",
         "type": "mcts",
-        "thinking_time_ms": 100,
+        "thinking_time_ms": 500,
         "params": {
             "deterministic_time_budget": True,
-            "iterations_per_ms": 10.0,
+            "iterations_per_ms": 0.20,   # 100 iters @ ~159 iter/s ≈ 0.63 s/move
             "exploration_constant": 1.414,
+            "rollout_policy": "random",
+            "rollout_cutoff_depth": 5,
         },
     },
 
@@ -199,10 +203,10 @@ POOL_CATALOG: List[Dict[str, Any]] = [
     {
         "name": "pool_deploy_medium",
         "type": "mcts",
-        "thinking_time_ms": 450,
+        "thinking_time_ms": 500,
         "params": {
             "deterministic_time_budget": True,
-            "iterations_per_ms": 0.5,
+            "iterations_per_ms": 0.20,   # 100 iters @ 159 iter/s ≈ 0.63 s/move
             "exploration_constant": 1.414,
             "rollout_policy": "random",
             "rollout_cutoff_depth": 5,
@@ -217,10 +221,10 @@ POOL_CATALOG: List[Dict[str, Any]] = [
     {
         "name": "pool_deploy_hard",
         "type": "mcts",
-        "thinking_time_ms": 900,
+        "thinking_time_ms": 500,
         "params": {
             "deterministic_time_budget": True,
-            "iterations_per_ms": 0.5,
+            "iterations_per_ms": 0.30,   # 150 iters @ 159 iter/s ≈ 0.94 s/move
             "exploration_constant": 1.414,
             "rollout_policy": "random",
             "rollout_cutoff_depth": 5,
@@ -311,7 +315,7 @@ POOL_CATALOG: List[Dict[str, Any]] = [
         "thinking_time_ms": 200,
         "params": {
             "deterministic_time_budget": True,
-            "iterations_per_ms": 0.5,
+            "iterations_per_ms": 0.025,  # 5 iters @ ~5 iter/s (full rollout, no cutoff) ≈ 1 s/move
             "exploration_constant": 1.414,
             "rollout_policy": "random",
             "minimax_backup_alpha": 0.25,
