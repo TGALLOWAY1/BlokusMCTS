@@ -76,10 +76,10 @@
   },
   "ratings": {
     "champion": {
-      "mu": 26.734758026867205,
-      "sigma": 8.320374993150986,
-      "conservative": 1.7736330474142434,
-      "games_played": 1
+      "mu": 51.41720596355027,
+      "sigma": 7.947440193296949,
+      "conservative": 27.574885383659424,
+      "games_played": 21
     },
     "pool_heuristic": {
       "mu": 24.807249108125866,
@@ -94,10 +94,22 @@
       "games_played": 1
     },
     "pool_random": {
-      "mu": 22.49423840563626,
-      "sigma": 8.278147449560024,
-      "conservative": -2.340203943043811,
-      "games_played": 1
+      "mu": -4.741834036528409,
+      "sigma": 7.6002953851720925,
+      "conservative": -27.542720192044687,
+      "games_played": 21
+    },
+    "pool_full_rollout": {
+      "mu": 27.88438867965939,
+      "sigma": 7.6018300247508055,
+      "conservative": 5.078898605406973,
+      "games_played": 20
+    },
+    "pool_mcts_100ms": {
+      "mu": 25.97878897025053,
+      "sigma": 7.612511629595131,
+      "conservative": 3.1412540814651386,
+      "games_played": 20
     }
   },
   "history": [
@@ -176,9 +188,97 @@
       "total_snapshot_rows": 32,
       "evaluator_refitted": false,
       "refit_r2_global": null
+    },
+    {
+      "timestamp": "2026-05-12T04:38:49.372587+00:00",
+      "run_dir": "arena_runs/20260512_040519_e35bda8b",
+      "num_games": 20,
+      "pool": [
+        "pool_mcts_100ms",
+        "pool_random",
+        "pool_full_rollout"
+      ],
+      "arena_seed": 46913810,
+      "win_stats": {
+        "champion": {
+          "wins": 17,
+          "ties": 0,
+          "losses": 3,
+          "games": 20,
+          "avg_score": 99.4,
+          "win_rate": 0.85
+        },
+        "pool_full_rollout": {
+          "wins": 1,
+          "ties": 0,
+          "losses": 19,
+          "games": 20,
+          "avg_score": 83.2,
+          "win_rate": 0.05
+        },
+        "pool_mcts_100ms": {
+          "wins": 2,
+          "ties": 0,
+          "losses": 18,
+          "games": 20,
+          "avg_score": 80.55,
+          "win_rate": 0.1
+        },
+        "pool_random": {
+          "wins": 0,
+          "ties": 0,
+          "losses": 20,
+          "games": 20,
+          "avg_score": 60.45,
+          "win_rate": 0.0
+        }
+      },
+      "ratings_after": {
+        "champion": {
+          "mu": 51.41720596355027,
+          "sigma": 7.947440193296949,
+          "conservative": 27.574885383659424,
+          "games_played": 21
+        },
+        "pool_heuristic": {
+          "mu": 24.807249108125866,
+          "sigma": 8.278147449560024,
+          "conservative": -0.02719324055420458,
+          "games_played": 1
+        },
+        "pool_mcts_50ms": {
+          "mu": 25.96375445937067,
+          "sigma": 8.300529968243797,
+          "conservative": 1.0621645546392777,
+          "games_played": 1
+        },
+        "pool_random": {
+          "mu": -4.741834036528409,
+          "sigma": 7.6002953851720925,
+          "conservative": -27.542720192044687,
+          "games_played": 21
+        },
+        "pool_full_rollout": {
+          "mu": 27.88438867965939,
+          "sigma": 7.6018300247508055,
+          "conservative": 5.078898605406973,
+          "games_played": 20
+        },
+        "pool_mcts_100ms": {
+          "mu": 25.97878897025053,
+          "sigma": 7.612511629595131,
+          "conservative": 3.1412540814651386,
+          "games_played": 20
+        }
+      },
+      "promoted_to": null,
+      "generation": 0,
+      "total_snapshot_rows": 652,
+      "evaluator_refitted": false,
+      "refit_r2_global": null
     }
   ],
   "generation": 0,
-  "total_snapshot_rows": 32,
+  "total_snapshot_rows": 652,
   "last_refit_run": -1
 }
