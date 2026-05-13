@@ -75,6 +75,15 @@ MAX_CHECKPOINTS_IN_POOL = 3
 # Champion agent name (stable across all generations for TrueSkill tracking)
 CHAMPION_ID = "champion"
 
+# Minimum TrueSkill gap (conservative) and game count for variant → champion promotion
+PROMOTION_THRESHOLD = 2.0
+PROMOTION_MIN_GAMES = 40
+
+# Human-player readiness targets (4-player game baselines)
+HUMAN_TARGET_WIN_RATE = 0.40      # ≥40% outright win rate (random expectation = 25%)
+HUMAN_TARGET_CONSERVATIVE = 30.0  # TrueSkill μ − 3σ ≥ 30
+HUMAN_TARGET_AVG_SCORE = 60.0     # Average final score ≥ 60 squares
+
 # ---------------------------------------------------------------------------
 # Champion starting configuration (Challenge Champion profile as baseline)
 # ---------------------------------------------------------------------------
@@ -84,7 +93,7 @@ BASE_CHAMPION_PARAMS: Dict[str, Any] = {
     "thinking_time_ms": 500,
     "params": {
         "deterministic_time_budget": True,
-        "iterations_per_ms": 10.0,
+        "iterations_per_ms": 0.5,
         "exploration_constant": 1.414,
         "rollout_policy": "random",
         "rollout_cutoff_depth": 5,
@@ -486,6 +495,39 @@ def _save_calibrated_weights(refit: Dict[str, Any]) -> None:
 # Checkpoint management
 # ---------------------------------------------------------------------------
 
+def check_and_promote_champion(
+    tracker: TrueSkillTracker,
+) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """Check if any MCTS variant has outperformed the champion.
+
+    Returns (variant_id, params_override) when a variant's conservative TrueSkill
+    exceeds the champion's by PROMOTION_THRESHOLD with at least PROMOTION_MIN_GAMES
+    played. The params_override (excluding thinking_time_ms) should be merged into
+    the champion config. Returns None if no promotion is warranted.
+    """
+    champ_cons = tracker.get_rating(CHAMPION_ID)["conservative"]
+    best_id: Optional[str] = None
+    best_cons = champ_cons + PROMOTION_THRESHOLD
+    best_override: Dict[str, Any] = {}
+
+    for variant in MCTS_VARIANTS:
+        v_id = variant["id"]
+        rating = tracker.get_rating(v_id)
+        if rating["games_played"] < PROMOTION_MIN_GAMES:
+            continue
+        if rating["conservative"] > best_cons:
+            best_cons = rating["conservative"]
+            best_id = v_id
+            best_override = {
+                k: v for k, v in variant.get("params_override", {}).items()
+                if k != "thinking_time_ms"
+            }
+
+    if best_id:
+        return best_id, best_override
+    return None
+
+
 def save_champion_checkpoint(state: Dict[str, Any], tracker: TrueSkillTracker) -> None:
     generation = state["generation"]
     ckpt_id = f"ckpt_v{generation}"
@@ -525,6 +567,34 @@ def print_leaderboard(tracker: TrueSkillTracker) -> None:
     print(f"{'─'*65}")
 
 
+def _readiness_status(state: Dict[str, Any], tracker: TrueSkillTracker) -> Dict[str, Any]:
+    """Compute human-player readiness metrics from current state."""
+    champ_rating = tracker.get_rating(CHAMPION_ID)
+    history = state.get("history", [])
+
+    # Rolling averages over last 5 completed generations
+    recent = history[-5:] if history else []
+    avg_wr = sum(r.get("champion_win_rate", 0.0) for r in recent) / max(len(recent), 1)
+    avg_score = sum(r.get("champion_avg_score", 0.0) for r in recent) / max(len(recent), 1)
+    cons = champ_rating["conservative"]
+
+    criteria = [
+        ("Win rate (5-gen avg)", avg_wr, HUMAN_TARGET_WIN_RATE, f"{avg_wr*100:.1f}%", f"≥{HUMAN_TARGET_WIN_RATE*100:.0f}%"),
+        ("TrueSkill μ−3σ", cons, HUMAN_TARGET_CONSERVATIVE, f"{cons:.2f}", f"≥{HUMAN_TARGET_CONSERVATIVE:.1f}"),
+        ("Avg score (5-gen avg)", avg_score, HUMAN_TARGET_AVG_SCORE, f"{avg_score:.1f}", f"≥{HUMAN_TARGET_AVG_SCORE:.0f}"),
+    ]
+    met = [c[1] >= c[2] for c in criteria]
+    return {
+        "criteria": criteria,
+        "met": met,
+        "all_met": all(met),
+        "mu": champ_rating["mu"],
+        "sigma": champ_rating["sigma"],
+        "conservative": cons,
+        "games": champ_rating["games_played"],
+    }
+
+
 def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) -> None:
     lines: List[str] = []
     lines.append("# Champion Self-Improvement Progress\n")
@@ -532,6 +602,25 @@ def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) ->
     lines.append(f"\n**Generation:** {state['generation']}  ")
     lines.append(f"**Snapshot rows accumulated:** {state.get('total_snapshot_rows', 0)}  ")
     lines.append(f"**Last weight re-fit:** generation {state.get('last_refit_generation', 'never')}\n")
+
+    # Human-player readiness
+    readiness = _readiness_status(state, tracker)
+    lines.append("\n## Human-Player Readiness\n")
+    lines.append(
+        "> Goal: champion must reliably outperform a typical human Blokus player.\n"
+        "> Proxy: 4-player game win rate, TrueSkill, and average score benchmarks.\n\n"
+    )
+    lines.append("| Metric | Current | Target | Status |\n")
+    lines.append("|--------|---------|--------|--------|\n")
+    for name, current, target, current_str, target_str in readiness["criteria"]:
+        status = "✓ Met" if current >= target else "In progress"
+        lines.append(f"| {name} | {current_str} | {target_str} | {status} |\n")
+
+    if readiness["all_met"]:
+        lines.append("\n**Overall: CHAMPION-READY** — all targets met!\n")
+    else:
+        n_met = sum(readiness["met"])
+        lines.append(f"\n**Overall:** {n_met}/{len(readiness['criteria'])} targets met — training in progress.\n")
 
     # Current leaderboard
     lines.append("\n## TrueSkill Leaderboard\n")
@@ -549,9 +638,15 @@ def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) ->
     history = state.get("history", [])
     if history:
         lines.append("\n## Champion TrueSkill Trend\n")
-        lines.append("| Gen | μ | σ | μ-3σ | WR% | AvgScore | Challengers | Refitted |\n")
-        lines.append("|-----|---|---|------|-----|----------|-------------|----------|\n")
+        lines.append("| Gen | μ | σ | μ-3σ | WR% | AvgScore | Challengers | Events |\n")
+        lines.append("|-----|---|---|------|-----|----------|-------------|--------|\n")
         for rec in history:
+            events = []
+            if rec.get("evaluator_refitted"):
+                r2 = rec.get("refit_r2_global")
+                events.append(f"Refit R²={r2:.3f}" if r2 else "Refit")
+            if rec.get("promoted_from_variant"):
+                events.append(f"Promoted←{rec['promoted_from_variant']}")
             lines.append(
                 f"| {rec['generation']} "
                 f"| {rec['champion_mu']:.2f} "
@@ -560,7 +655,7 @@ def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) ->
                 f"| {rec.get('champion_win_rate', 0)*100:.1f}% "
                 f"| {rec.get('champion_avg_score', 0):.1f} "
                 f"| {', '.join(rec.get('challengers', []))} "
-                f"| {'Yes' if rec.get('evaluator_refitted') else 'No'} |\n"
+                f"| {'; '.join(events) if events else '—'} |\n"
             )
 
     # Current champion params summary
@@ -584,15 +679,29 @@ def show_progress(state: Dict[str, Any]) -> None:
     tracker = build_tracker(state)
     print_leaderboard(tracker)
 
+    # Human-player readiness
+    readiness = _readiness_status(state, tracker)
+    print(f"\n  Human-Player Readiness:")
+    for name, current, target, current_str, target_str in readiness["criteria"]:
+        status = "✓" if current >= target else "✗"
+        print(f"    {status} {name}: {current_str}  (target {target_str})")
+    if readiness["all_met"]:
+        print("  *** CHAMPION-READY — all targets met! ***")
+
     history = state.get("history", [])
     print(f"\n  Trend (last {min(5, len(history))} generations):")
     for rec in history[-5:]:
-        refitted = " [REFITTED]" if rec.get("evaluator_refitted") else ""
+        tags = []
+        if rec.get("evaluator_refitted"):
+            tags.append("REFIT")
+        if rec.get("promoted_from_variant"):
+            tags.append(f"PROMOTED←{rec['promoted_from_variant']}")
+        suffix = f"  [{', '.join(tags)}]" if tags else ""
         print(
             f"    Gen {rec['generation']:>3}: μ={rec['champion_mu']:.2f}  "
             f"σ={rec['champion_sigma']:.2f}  "
             f"μ-3σ={rec['champion_conservative']:.2f}  "
-            f"WR={rec.get('champion_win_rate', 0)*100:.1f}%{refitted}"
+            f"WR={rec.get('champion_win_rate', 0)*100:.1f}%{suffix}"
         )
     print()
 
@@ -630,8 +739,24 @@ def run_loop(args: argparse.Namespace) -> None:
         state["total_snapshot_rows"] = total_rows
 
         # Parse summary for win-rate / avg-score reporting
+        # summary.json uses "win_stats" and "score_stats" keys, not "agents"
         summary = parse_summary(run_dir)
-        champ_summary = summary.get("agents", {}).get(CHAMPION_ID, {})
+        champ_win_stats = summary.get("win_stats", {}).get(CHAMPION_ID, {})
+        champ_score_stats = summary.get("score_stats", {}).get(CHAMPION_ID, {})
+
+        # Check for champion promotion from MCTS variants
+        promotion_result = check_and_promote_champion(tracker)
+        promoted_variant_id: Optional[str] = None
+        promoted_params: Optional[Dict[str, Any]] = None
+        if promotion_result:
+            promoted_variant_id, promo_override = promotion_result
+            old_params = copy.deepcopy(state["champion_params"]["params"])
+            state["champion_params"]["params"].update(promo_override)
+            tracker.reset_agent(CHAMPION_ID, increase_sigma=True)
+            promoted_params = promo_override
+            print(f"\n[champion_loop] *** CHAMPION PROMOTED via variant: {promoted_variant_id} ***")
+            for k, v in promo_override.items():
+                print(f"  {k}: {old_params.get(k)} → {v}")
 
         # Maybe refit evaluator weights
         refit_result = None
@@ -663,11 +788,13 @@ def run_loop(args: argparse.Namespace) -> None:
             "champion_sigma": champion_rating["sigma"],
             "champion_conservative": champion_rating["conservative"],
             "champion_games_played": champion_rating["games_played"],
-            "champion_win_rate": champ_summary.get("win_rate", 0.0),
-            "champion_avg_score": champ_summary.get("avg_score", 0.0),
+            "champion_win_rate": champ_win_stats.get("win_rate", 0.0),
+            "champion_avg_score": champ_score_stats.get("mean") or 0.0,
             "evaluator_refitted": refit_result is not None,
             "refit_r2_global": refit_result["r2_global"] if refit_result else None,
             "total_snapshot_rows": total_rows,
+            "promoted_from_variant": promoted_variant_id,
+            "promoted_params": promoted_params,
         }
         state["history"].append(gen_record)
         state["generation"] = generation
@@ -682,9 +809,11 @@ def run_loop(args: argparse.Namespace) -> None:
             f"  Champion: μ={champion_rating['mu']:.2f}  "
             f"σ={champion_rating['sigma']:.2f}  "
             f"μ-3σ={champion_rating['conservative']:.2f}  "
-            f"WR={champ_summary.get('win_rate', 0)*100:.1f}%  "
-            f"AvgScore={champ_summary.get('avg_score', 0):.1f}"
+            f"WR={champ_win_stats.get('win_rate', 0)*100:.1f}%  "
+            f"AvgScore={champ_score_stats.get('mean') or 0:.1f}"
         )
+        if promoted_variant_id:
+            print(f"  *** Variant promoted: {promoted_variant_id} → applied to champion ***")
         print_leaderboard(tracker)
 
         if refit_result:
