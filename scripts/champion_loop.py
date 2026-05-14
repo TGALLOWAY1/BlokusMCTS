@@ -10,6 +10,7 @@ After each generation:
   - Snapshot data (including se_ state-evaluator features) is accumulated
   - Every REFIT_INTERVAL generations the evaluator phase weights are
     re-derived via per-phase linear regression on accumulated snapshots
+  - A challenger variant that beats the champion in >60% h2h is promoted
   - A detailed markdown progress report is written
 
 Goal: Drive the champion's TrueSkill conservative estimate (μ - 3σ)
@@ -35,6 +36,7 @@ import os
 import random
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -74,6 +76,18 @@ MAX_CHECKPOINTS_IN_POOL = 3
 
 # Champion agent name (stable across all generations for TrueSkill tracking)
 CHAMPION_ID = "champion"
+
+# H2H win-rate threshold for promoting a challenger variant to champion
+PROMOTION_THRESHOLD = 0.60
+# Minimum head-to-head game comparisons required before a promotion can fire
+MIN_PROMOTION_GAMES = 6
+
+# TrueSkill μ target representing "reliably beats a human player".
+# This is a calibration reference, not a real participant in the tournament.
+# Initial estimate: a solid Blokus-experienced human scores ~35 μ when rated
+# against agents at the default TrueSkill μ=25 baseline.  Revise as real
+# human-vs-agent data accumulates.
+HUMAN_BENCHMARK_MU = 35.0
 
 # ---------------------------------------------------------------------------
 # Champion starting configuration (Challenge Champion profile as baseline)
@@ -139,13 +153,17 @@ def _default_state() -> Dict[str, Any]:
         "history": [],       # per-generation records
         "total_snapshot_rows": 0,
         "last_refit_generation": -1,
+        "promotions": [],    # log of champion promotions
     }
 
 
 def load_state() -> Dict[str, Any]:
     if STATE_FILE.exists():
         with STATE_FILE.open() as f:
-            return json.load(f)
+            state = json.load(f)
+        # Back-compat: add promotions key if missing
+        state.setdefault("promotions", [])
+        return state
     return _default_state()
 
 
@@ -225,7 +243,7 @@ def select_challengers(
 
     Strategy:
       - Slot 0: always heuristic (strong baseline)
-      - Slot 1: random checkpoint if available, else random MCTS variant
+      - Slot 1: random checkpoint if available, else random agent as simpler baseline
       - Slot 2: random MCTS variant (different from slot 1 if possible)
     """
     challengers: List[Dict[str, Any]] = []
@@ -260,15 +278,21 @@ def select_challengers(
 # Arena execution
 # ---------------------------------------------------------------------------
 
-def _find_latest_run(output_root: str) -> Optional[str]:
+def _find_run_dir_created_after(output_root: str, after_time: float) -> Optional[str]:
+    """Find the most recently created run dir whose mtime is >= after_time."""
     root = Path(output_root)
     if not root.exists():
         return None
-    runs = sorted(root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
-    for r in runs:
-        if r.is_dir() and (r / "summary.json").exists():
-            return str(r)
-    return None
+    candidates = []
+    for p in root.iterdir():
+        if p.is_dir() and (p / "summary.json").exists():
+            mtime = p.stat().st_mtime
+            if mtime >= after_time:
+                candidates.append((mtime, str(p)))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
 
 
 def run_generation_arena(
@@ -303,14 +327,15 @@ def run_generation_arena(
     print(f"\n[champion_loop] Generation {generation}: running {num_games} games")
     print(f"  Champion vs: {[c['name'] for c in challengers]}")
 
+    start_time = time.time() - 1.0  # 1-second grace window for clock skew
     cmd = [sys.executable, "scripts/arena.py", "--config", str(config_path)]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"Arena exited with code {result.returncode}")
 
-    run_dir = _find_latest_run(ARENA_RUN_ROOT)
+    run_dir = _find_run_dir_created_after(ARENA_RUN_ROOT, start_time)
     if run_dir is None:
-        raise RuntimeError("Could not locate arena output directory")
+        raise RuntimeError("Could not locate arena output directory created by this run")
     print(f"[champion_loop] Run saved to: {run_dir}")
     return run_dir
 
@@ -323,6 +348,42 @@ def parse_summary(run_dir: str) -> Dict[str, Any]:
     path = Path(run_dir) / "summary.json"
     with path.open() as f:
         return json.load(f)
+
+
+def _extract_champion_stats(summary: Dict[str, Any]) -> Tuple[float, float]:
+    """Return (win_rate, avg_score) for the champion from a summary dict."""
+    win_rate = summary.get("win_stats", {}).get(CHAMPION_ID, {}).get("win_rate", 0.0)
+    avg_score = summary.get("score_stats", {}).get(CHAMPION_ID, {}).get("mean", 0.0) or 0.0
+    return float(win_rate), float(avg_score)
+
+
+def _extract_pairwise_h2h(
+    summary: Dict[str, Any], challengers: List[Dict[str, Any]]
+) -> Dict[str, float]:
+    """Return champion win-rate vs each challenger from pairwise matchups.
+
+    Win rate here = fraction of head-to-head score comparisons the champion
+    won (i.e. champion score > challenger score in games where both played).
+    Returns an empty dict if pairwise data is missing.
+    """
+    pairwise = summary.get("pairwise_matchups", {})
+    result: Dict[str, float] = {}
+    for cfg in challengers:
+        opp = cfg["name"]
+        # Keys are sorted alphabetically: champion < most other names
+        key_ab = f"{CHAMPION_ID}__vs__{opp}"
+        key_ba = f"{opp}__vs__{CHAMPION_ID}"
+        if key_ab in pairwise:
+            entry = pairwise[key_ab]
+            total = entry.get("total", 0)
+            if total >= 1:
+                result[opp] = float(entry.get("a_beats_b", 0)) / total
+        elif key_ba in pairwise:
+            entry = pairwise[key_ba]
+            total = entry.get("total", 0)
+            if total >= 1:
+                result[opp] = float(entry.get("b_beats_a", 0)) / total
+    return result
 
 
 def update_trueskill_from_run(tracker: TrueSkillTracker, run_dir: str) -> None:
@@ -342,6 +403,90 @@ def update_trueskill_from_run(tracker: TrueSkillTracker, run_dir: str) -> None:
             agent_scores = record.get("agent_scores", {})
             if agent_scores:
                 tracker.update_game(agent_scores)
+
+
+# ---------------------------------------------------------------------------
+# Champion promotion
+# ---------------------------------------------------------------------------
+
+def _find_promotion_candidate(
+    h2h_rates: Dict[str, float],
+    challengers: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    num_games: int,
+) -> Optional[Dict[str, Any]]:
+    """Return the challenger config to promote, or None.
+
+    A variant is eligible when:
+      - Its pairwise win rate vs champion exceeds PROMOTION_THRESHOLD
+      - At least MIN_PROMOTION_GAMES head-to-head comparisons were made
+      - It is an MCTS type (not heuristic/random — those can't be promoted)
+    """
+    # Build a lookup from challenger name to config
+    cfg_by_name: Dict[str, Dict[str, Any]] = {c["name"]: c for c in challengers}
+
+    best_candidate: Optional[Dict[str, Any]] = None
+    best_rate = PROMOTION_THRESHOLD
+
+    for opp, rate in h2h_rates.items():
+        cfg = cfg_by_name.get(opp)
+        if cfg is None or cfg.get("type") not in (None, "mcts"):
+            continue
+        # Count how many h2h comparisons there were
+        key_ab = f"{CHAMPION_ID}__vs__{opp}"
+        key_ba = f"{opp}__vs__{CHAMPION_ID}"
+        pairwise = summary.get("pairwise_matchups", {})
+        entry = pairwise.get(key_ab) or pairwise.get(key_ba) or {}
+        comparisons = entry.get("total", 0)
+        if comparisons < MIN_PROMOTION_GAMES:
+            continue
+        if rate > best_rate:
+            best_rate = rate
+            best_candidate = cfg
+
+    return best_candidate
+
+
+def promote_challenger(
+    state: Dict[str, Any],
+    tracker: TrueSkillTracker,
+    candidate: Dict[str, Any],
+    h2h_rate: float,
+    generation: int,
+) -> None:
+    """Merge the candidate's params into the champion and log the event."""
+    old_params = copy.deepcopy(state["champion_params"])
+    new_params = copy.deepcopy(candidate)
+    # Preserve champion-specific keys that the variant may not have
+    new_params.setdefault("type", "mcts")
+    new_params.setdefault("thinking_time_ms", old_params.get("thinking_time_ms", 500))
+    new_params.setdefault("params", {})
+    # Start from the old champion params and overlay the candidate's params
+    merged = copy.deepcopy(old_params)
+    for k, v in new_params.get("params", {}).items():
+        merged["params"][k] = v
+    # Don't carry over the challenger's name as the champion's type config
+    merged.pop("name", None)
+
+    state["champion_params"] = merged
+
+    # Increase sigma so TrueSkill can re-converge after the change
+    tracker.reset_agent(CHAMPION_ID, increase_sigma=True)
+
+    promotion_record = {
+        "generation": generation,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "promoted_from": candidate["name"],
+        "h2h_win_rate": h2h_rate,
+        "new_params": dict(merged.get("params", {})),
+    }
+    state["promotions"].append(promotion_record)
+
+    print(
+        f"\n[champion_loop] *** PROMOTION *** Gen {generation}: "
+        f"'{candidate['name']}' h2h={h2h_rate:.1%} → new champion params merged. "
+        f"Champion σ reset for re-convergence."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -498,7 +643,7 @@ def save_champion_checkpoint(state: Dict[str, Any], tracker: TrueSkillTracker) -
         "params": copy.deepcopy(state["champion_params"]),
     }
     state["checkpoints"].append(checkpoint)
-    # Track this checkpoint in TrueSkill with the champion's current rating
+    # Register this checkpoint in TrueSkill with the champion's current rating
     tracker._ratings[ckpt_id] = tracker._model.rating(
         mu=rating["mu"], sigma=rating["sigma"]
     )
@@ -510,28 +655,56 @@ def save_champion_checkpoint(state: Dict[str, Any], tracker: TrueSkillTracker) -
 # Progress reporting
 # ---------------------------------------------------------------------------
 
+def _champion_rank(tracker: TrueSkillTracker) -> int:
+    for entry in tracker.get_leaderboard():
+        if entry["agent_id"] == CHAMPION_ID:
+            return entry["rank"]
+    return -1
+
+
 def print_leaderboard(tracker: TrueSkillTracker) -> None:
     board = tracker.get_leaderboard()
-    print(f"\n{'─'*65}")
-    print(f"  {'#':>2}  {'Agent':<30}  {'μ':>6}  {'σ':>5}  {'μ-3σ':>7}  {'Games':>5}")
-    print(f"{'─'*65}")
+    print(f"\n{'─'*72}")
+    print(f"  {'#':>2}  {'Agent':<32}  {'μ':>6}  {'σ':>5}  {'μ-3σ':>7}  {'Games':>5}")
+    print(f"{'─'*72}")
     for entry in board:
         marker = " ★" if entry["agent_id"] == CHAMPION_ID else "  "
         print(
-            f"  {entry['rank']:>2}  {entry['agent_id']:<30}  "
+            f"  {entry['rank']:>2}  {entry['agent_id']:<32}  "
             f"{entry['mu']:>6.2f}  {entry['sigma']:>5.2f}  "
             f"{entry['conservative']:>7.2f}  {entry['games_played']:>5}{marker}"
         )
-    print(f"{'─'*65}")
+    # Show human benchmark target
+    champ_rating = tracker.get_rating(CHAMPION_ID)
+    gap = HUMAN_BENCHMARK_MU - champ_rating["mu"]
+    gap_str = f"{gap:+.2f}" if gap > 0 else "REACHED ✓"
+    print(f"{'─'*72}")
+    print(f"  ·· Human benchmark target: μ={HUMAN_BENCHMARK_MU:.1f}  (champion gap: {gap_str})")
+    print(f"{'─'*72}")
 
 
-def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) -> None:
+def write_progress_markdown(
+    state: Dict[str, Any],
+    tracker: TrueSkillTracker,
+    last_h2h: Optional[Dict[str, float]] = None,
+    last_challengers: Optional[List[str]] = None,
+) -> None:
     lines: List[str] = []
     lines.append("# Champion Self-Improvement Progress\n")
     lines.append(f"_Updated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}_\n")
     lines.append(f"\n**Generation:** {state['generation']}  ")
     lines.append(f"**Snapshot rows accumulated:** {state.get('total_snapshot_rows', 0)}  ")
     lines.append(f"**Last weight re-fit:** generation {state.get('last_refit_generation', 'never')}\n")
+
+    # Human benchmark progress
+    champ_rating = tracker.get_rating(CHAMPION_ID)
+    gap = HUMAN_BENCHMARK_MU - champ_rating["mu"]
+    lines.append(f"\n### Human Benchmark Target\n")
+    lines.append(f"Target μ = {HUMAN_BENCHMARK_MU:.1f} | Champion μ = {champ_rating['mu']:.2f} | ")
+    if gap <= 0:
+        lines.append("**TARGET REACHED** 🎯\n")
+    else:
+        lines.append(f"Gap = {gap:.2f} μ points remaining\n")
 
     # Current leaderboard
     lines.append("\n## TrueSkill Leaderboard\n")
@@ -544,13 +717,24 @@ def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) ->
             f"{entry['mu']:.2f} | {entry['sigma']:.2f} | "
             f"{entry['conservative']:.2f} | {entry['games_played']} |\n"
         )
+    lines.append(f"| — | _Human benchmark target_ | {HUMAN_BENCHMARK_MU:.1f} | — | — | — |\n")
+
+    # Last generation H2H breakdown
+    if last_h2h and last_challengers:
+        lines.append("\n## Last Generation Head-to-Head\n")
+        lines.append("| Challenger | Champion win % |\n")
+        lines.append("|------------|----------------|\n")
+        for opp in last_challengers:
+            wr = last_h2h.get(opp)
+            wr_str = f"{wr:.1%}" if wr is not None else "N/A"
+            lines.append(f"| {opp} | {wr_str} |\n")
 
     # Champion trend
     history = state.get("history", [])
     if history:
         lines.append("\n## Champion TrueSkill Trend\n")
-        lines.append("| Gen | μ | σ | μ-3σ | WR% | AvgScore | Challengers | Refitted |\n")
-        lines.append("|-----|---|---|------|-----|----------|-------------|----------|\n")
+        lines.append("| Gen | μ | σ | μ-3σ | WR% | AvgScore | Challengers | Promoted | Refitted |\n")
+        lines.append("|-----|---|---|------|-----|----------|-------------|----------|----------|\n")
         for rec in history:
             lines.append(
                 f"| {rec['generation']} "
@@ -560,7 +744,22 @@ def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) ->
                 f"| {rec.get('champion_win_rate', 0)*100:.1f}% "
                 f"| {rec.get('champion_avg_score', 0):.1f} "
                 f"| {', '.join(rec.get('challengers', []))} "
+                f"| {'Yes' if rec.get('challenger_promoted') else 'No'} "
                 f"| {'Yes' if rec.get('evaluator_refitted') else 'No'} |\n"
+            )
+
+    # Promotion history
+    promotions = state.get("promotions", [])
+    if promotions:
+        lines.append("\n## Champion Promotion History\n")
+        lines.append("| Gen | Promoted From | H2H Win Rate | Timestamp |\n")
+        lines.append("|-----|--------------|-------------|----------|\n")
+        for promo in promotions:
+            lines.append(
+                f"| {promo['generation']} "
+                f"| {promo['promoted_from']} "
+                f"| {promo['h2h_win_rate']:.1%} "
+                f"| {promo['timestamp'][:19]} |\n"
             )
 
     # Current champion params summary
@@ -574,9 +773,9 @@ def write_progress_markdown(state: Dict[str, Any], tracker: TrueSkillTracker) ->
 
 
 def show_progress(state: Dict[str, Any]) -> None:
-    print(f"\n{'='*65}")
+    print(f"\n{'='*72}")
     print(f"  Champion Self-Improvement Progress — Generation {state['generation']}")
-    print(f"{'='*65}")
+    print(f"{'='*72}")
     if not state.get("history"):
         print("  No generations run yet.")
         return
@@ -587,13 +786,28 @@ def show_progress(state: Dict[str, Any]) -> None:
     history = state.get("history", [])
     print(f"\n  Trend (last {min(5, len(history))} generations):")
     for rec in history[-5:]:
-        refitted = " [REFITTED]" if rec.get("evaluator_refitted") else ""
+        parts = []
+        if rec.get("challenger_promoted"):
+            parts.append("[PROMOTED]")
+        if rec.get("evaluator_refitted"):
+            parts.append("[REFITTED]")
+        suffix = " " + " ".join(parts) if parts else ""
         print(
             f"    Gen {rec['generation']:>3}: μ={rec['champion_mu']:.2f}  "
             f"σ={rec['champion_sigma']:.2f}  "
             f"μ-3σ={rec['champion_conservative']:.2f}  "
-            f"WR={rec.get('champion_win_rate', 0)*100:.1f}%{refitted}"
+            f"WR={rec.get('champion_win_rate', 0)*100:.1f}%  "
+            f"AvgScore={rec.get('champion_avg_score', 0):.1f}{suffix}"
         )
+
+    promotions = state.get("promotions", [])
+    if promotions:
+        print(f"\n  Promotions: {len(promotions)}")
+        for promo in promotions[-3:]:
+            print(
+                f"    Gen {promo['generation']}: '{promo['promoted_from']}' "
+                f"h2h={promo['h2h_win_rate']:.1%}"
+            )
     print()
 
 
@@ -622,16 +836,28 @@ def run_loop(args: argparse.Namespace) -> None:
             generation, champion_cfg, challengers, args.games_per_gen, seed
         )
 
-        # Update TrueSkill
+        # Update TrueSkill from individual game records
         update_trueskill_from_run(tracker, run_dir)
 
-        # Accumulate snapshots
+        # Accumulate snapshots for evaluator retraining
         total_rows = accumulate_snapshots(run_dir)
         state["total_snapshot_rows"] = total_rows
 
-        # Parse summary for win-rate / avg-score reporting
+        # Parse summary for win-rate, score, and pairwise data
         summary = parse_summary(run_dir)
-        champ_summary = summary.get("agents", {}).get(CHAMPION_ID, {})
+        champ_win_rate, champ_avg_score = _extract_champion_stats(summary)
+        h2h_rates = _extract_pairwise_h2h(summary, challengers)
+
+        # Check for champion promotion
+        promotion_candidate = _find_promotion_candidate(
+            h2h_rates, challengers, summary, args.games_per_gen
+        )
+        challenger_promoted = False
+        if promotion_candidate is not None:
+            opp_name = promotion_candidate["name"]
+            h2h_rate = h2h_rates.get(opp_name, 0.0)
+            promote_challenger(state, tracker, promotion_candidate, h2h_rate, generation)
+            challenger_promoted = True
 
         # Maybe refit evaluator weights
         refit_result = None
@@ -663,8 +889,11 @@ def run_loop(args: argparse.Namespace) -> None:
             "champion_sigma": champion_rating["sigma"],
             "champion_conservative": champion_rating["conservative"],
             "champion_games_played": champion_rating["games_played"],
-            "champion_win_rate": champ_summary.get("win_rate", 0.0),
-            "champion_avg_score": champ_summary.get("avg_score", 0.0),
+            "champion_win_rate": champ_win_rate,
+            "champion_avg_score": champ_avg_score,
+            "champion_rank": _champion_rank(tracker),
+            "h2h_win_rates": h2h_rates,
+            "challenger_promoted": challenger_promoted,
             "evaluator_refitted": refit_result is not None,
             "refit_r2_global": refit_result["r2_global"] if refit_result else None,
             "total_snapshot_rows": total_rows,
@@ -674,7 +903,11 @@ def run_loop(args: argparse.Namespace) -> None:
 
         persist_tracker(tracker, state)
         save_state(state)
-        write_progress_markdown(state, tracker)
+        write_progress_markdown(
+            state, tracker,
+            last_h2h=h2h_rates,
+            last_challengers=[c["name"] for c in challengers],
+        )
 
         # Console summary
         print(f"\n[champion_loop] Generation {generation} complete")
@@ -682,9 +915,15 @@ def run_loop(args: argparse.Namespace) -> None:
             f"  Champion: μ={champion_rating['mu']:.2f}  "
             f"σ={champion_rating['sigma']:.2f}  "
             f"μ-3σ={champion_rating['conservative']:.2f}  "
-            f"WR={champ_summary.get('win_rate', 0)*100:.1f}%  "
-            f"AvgScore={champ_summary.get('avg_score', 0):.1f}"
+            f"WR={champ_win_rate*100:.1f}%  "
+            f"AvgScore={champ_avg_score:.1f}  "
+            f"Rank=#{_champion_rank(tracker)}"
         )
+        if h2h_rates:
+            h2h_str = "  H2H: " + "  ".join(
+                f"{opp}={wr:.0%}" for opp, wr in sorted(h2h_rates.items())
+            )
+            print(h2h_str)
         print_leaderboard(tracker)
 
         if refit_result:
