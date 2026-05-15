@@ -672,6 +672,12 @@ class MCTSAgent:
         )
         # RNG for random rollout policy
         self._rng = np.random.RandomState(seed)
+        # Persist the user-provided seed so root-parallel workers can derive
+        # deterministic per-worker seeds from it (Layer 8 reproducibility).
+        self.seed = seed
+        # Counts select_action calls within a game so worker seeds vary per move
+        # while remaining a deterministic function of (seed, search_counter).
+        self._search_counter = 0
         # Track root player for minimax backups
         self._root_player: Optional[Player] = None
 
@@ -746,6 +752,7 @@ class MCTSAgent:
         """
         if not legal_moves:
             return None
+        self._search_counter += 1
 
         # If only one move, return it
         if len(legal_moves) == 1:

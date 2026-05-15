@@ -259,8 +259,17 @@ def run_root_parallel(
     # Split iterations across workers
     base_iterations = max(1, agent.iterations // num_workers)
 
-    # Build worker args with different seeds
-    base_seed = hash((id(agent), time.time())) & 0xFFFFFFFF
+    # Build worker args with different seeds.
+    # When the agent was constructed with an explicit seed, derive worker seeds
+    # deterministically from (agent.seed, agent._search_counter) so that
+    # rerunning a seeded arena reproduces the same root-parallel trajectories.
+    # Fall back to time-based seeding only when no seed was provided.
+    agent_seed = getattr(agent, "seed", None)
+    search_counter = getattr(agent, "_search_counter", 0)
+    if agent_seed is not None:
+        base_seed = (int(agent_seed) * 1000003 + int(search_counter)) & 0xFFFFFFFF
+    else:
+        base_seed = hash((id(agent), time.time())) & 0xFFFFFFFF
     worker_args = []
     for i in range(num_workers):
         seed_i = (base_seed + i * 7919) & 0xFFFFFFFF  # prime offset for diversity
