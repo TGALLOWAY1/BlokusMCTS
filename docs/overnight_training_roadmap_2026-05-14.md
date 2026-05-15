@@ -1,5 +1,11 @@
 # Overnight Training Roadmap — 2026-05-14
 
+> **Superseded by [`docs/CHAMPION_PROGRESSION.md`](CHAMPION_PROGRESSION.md)
+> for the champion narrative.** The Night-1 reset plan and operational
+> details below are still the live execution plan; this banner exists so
+> readers know the canonical champion-status story lives in
+> `CHAMPION_PROGRESSION.md`.
+
 ## Why this exists
 
 The previous roadmap (`overnight_training_roadmap_2026-05-07.md`) executed

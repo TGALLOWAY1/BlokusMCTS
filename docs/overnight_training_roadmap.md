@@ -1,5 +1,9 @@
 # Overnight Training Roadmap (30 Days, Single Machine, 10 PM–8 AM)
 
+> **Superseded by [`docs/CHAMPION_PROGRESSION.md`](CHAMPION_PROGRESSION.md).**
+> Retained for historical context. Champion status claims in this document
+> predate the v1 reset and should not be used as the current narrative.
+
 ## 1. Top-Line Recommendation
 
 Use the next 30 nights primarily for **MCTS improvement + measurement quality**, with RL limited to scoped feasibility checks.

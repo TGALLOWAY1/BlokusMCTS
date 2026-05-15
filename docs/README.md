@@ -2,6 +2,15 @@
 
 Last updated: March 2026.
 
+## Champion Narrative (read first)
+
+- **CHAMPION_PROGRESSION.md**: Canonical champion-progression doc. Single
+  source of truth for which agent is the current champion / candidate /
+  failed candidate, and the promotion rule.
+- **arena_run_registry.md**: Per-run catalogue with status labels
+  (`diagnostic_failure`, `candidate_validation`, `validated_baseline`,
+  `superseded`, `invalid`, `planned`) for every recent arena run.
+
 ## Active Documentation
 
 - **/architecture/**: Engine optimization reports and performance results.
