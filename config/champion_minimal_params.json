@@ -1,0 +1,32 @@
+{
+  "description": "Champion minimal: only empirically-validated layers from KEY_FINDINGS.md / TODO.md. Drops state_eval_phase_weights (0% WR in L6), adaptive_exploration_enabled (8% WR in L9), opponent_modeling/alliance/kingmaker (no benefit + 2.4x slower in L7), sufficiency_threshold/loss_avoidance (inconclusive in L9). Adds num_workers=2 + parallel_strategy=root (46% WR + TrueSkill #1 in L8 strength run, never deployed in champion_v1). Same total iteration budget as champion_v1 (250 iter at 500ms x 0.5 iter/ms) for an apples-to-apples comparison.",
+  "champion_version": "minimal_candidate",
+  "thinking_time_ms": 500,
+  "deterministic_time_budget": true,
+  "iterations_per_ms": 0.5,
+  "exploration_constant": 1.414,
+  "use_transposition_table": true,
+  "rollout_policy": "random",
+  "rollout_cutoff_depth": 5,
+  "minimax_backup_alpha": 0.25,
+  "rave_enabled": true,
+  "rave_k": 1000,
+  "progressive_widening_enabled": true,
+  "pw_c": 2.0,
+  "pw_alpha": 0.5,
+  "adaptive_rollout_depth_enabled": true,
+  "adaptive_rollout_depth_base": 5,
+  "adaptive_rollout_depth_avg_bf": 80.0,
+  "num_workers": 2,
+  "parallel_strategy": "root",
+  "state_eval_weights": {
+    "squares_placed": 0.0295,
+    "remaining_piece_area": -0.0295,
+    "accessible_corners": 0.243,
+    "reachable_empty_squares": 0.081,
+    "largest_remaining_piece_size": -0.231,
+    "opponent_avg_mobility": -0.3,
+    "center_proximity": 0.0,
+    "territory_enclosure_area": 0.0
+  }
+}

@@ -326,6 +326,50 @@ class TestRootParallelization(unittest.TestCase):
         move = agent.select_action(board, Player.RED, [])
         self.assertIsNone(move)
 
+    def test_root_parallel_deterministic_with_seed(self):
+        """Two agents constructed with the same seed must pick the same move
+        and produce the same merged visit counts on identical inputs.
+
+        Without this, gated-promotion arena runs (e.g. champion_minimal vs
+        champion_v1) are not reproducible across reruns of the same config.
+        """
+        from mcts.parallel import run_root_parallel
+
+        board = Board()
+        move_gen = get_shared_generator()
+        legal_moves = move_gen.get_legal_moves(board, Player.RED)
+
+        results = []
+        for _ in range(2):
+            agent = MCTSAgent(
+                iterations=80,
+                seed=12345,
+                num_workers=2,
+                parallel_strategy="root",
+            )
+            agent._search_counter = 1
+            move, par_stats = run_root_parallel(
+                agent, board, Player.RED, legal_moves, 2
+            )
+            merged = par_stats.get("merged_moves", {})
+            sorted_visits = sorted(
+                ((k, int(v[0])) for k, v in merged.items()),
+                key=lambda kv: kv[0],
+            )
+            results.append((
+                (move.piece_id, move.orientation, move.anchor_row, move.anchor_col),
+                sorted_visits,
+            ))
+
+        self.assertEqual(
+            results[0][0], results[1][0],
+            "Same seed must select the same root-parallel move",
+        )
+        self.assertEqual(
+            results[0][1], results[1][1],
+            "Same seed must produce identical per-child visit counts",
+        )
+
 
 # ---------------------------------------------------------------------------
 # Parallel module unit tests
