@@ -1,5 +1,9 @@
 # Overnight Training Roadmap (30 Nights, Single Machine, 10 PM–8 AM)
 
+> **Superseded by [`docs/CHAMPION_PROGRESSION.md`](CHAMPION_PROGRESSION.md).**
+> Retained for historical context. Champion status claims in this document
+> predate the v1 reset and should not be used as the current narrative.
+
 Date: 2026-03-30
 
 ## 1) Top-Line Recommendation

@@ -1,5 +1,10 @@
 # Night 1 Results — Champion Gauntlet v1 + v2
 
+> **Superseded by [`docs/CHAMPION_PROGRESSION.md`](CHAMPION_PROGRESSION.md).**
+> Retained for historical context. The "champion" labelled here is
+> `champion_v1`, a failed full-stack candidate per the current
+> champion-progression narrative.
+
 **Date executed:** 2026-05-10 to 2026-05-13  
 **Plan reference:** `docs/overnight_training_roadmap_2026-05-07.md`, Night 1
 

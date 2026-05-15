@@ -1,5 +1,9 @@
 # Champion Portfolio Readiness — Findings + Next-Week Overnight Plan
 
+> **Superseded by [`docs/CHAMPION_PROGRESSION.md`](CHAMPION_PROGRESSION.md).**
+> Retained for historical context. Champion status claims in this document
+> predate the v1 reset and should not be used as the current narrative.
+
 ## Context
 
 Recent work (PRs #139–#143, all merged 2026-05-04) built infrastructure for
