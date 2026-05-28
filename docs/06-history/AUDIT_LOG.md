@@ -21,10 +21,20 @@ Files inspected: root `README.md`, `FEATURES.md`, `KEY_FINDINGS.md`, `TODO.md`,
 agents) `engine/`, `mcts/`, `agents/`, `analytics/`, `scripts/`, `tests/`.
 Docs changed:
 - Archived 13 docs → `docs/_archived-2026-05/` with `ARCHIVE_RATIONALE.md`.
-- Added `00-overview/PROJECT_SNAPSHOT.md`, `03-implementation/CODEBASE_INVENTORY.md`,
-  `03-implementation/CONFIG_AND_ENVIRONMENT.md`, and this log.
-- (Subsequent phases add product/architecture/quality/planning/AI-context/
-  decision/visual docs and the master index.)
+- Added the full numbered system: `00-overview/` (README, DOCUMENTATION_INDEX,
+  PROJECT_SNAPSHOT), `01-product/` (brief, feature inventory, current behavior,
+  user flows, screen inventory), `02-architecture/` (architecture, system map,
+  data model, API, state, integrations), `03-implementation/` (codebase + route
+  inventory, config, testing strategy), `04-quality/` (known issues, tech debt,
+  risk register, regression checklist, security), `05-planning/` (backlog,
+  prioritized TODO, roadmap, next agent tasks), `06-history/` (decision log,
+  changelog notes, this log), `07-ai-context/` (context-loading protocol, agent
+  workflow, CLAUDE entry, prompt inventory), `08-visuals/` (screenshot manifest,
+  visual regression plan, flow diagrams).
+- Extended root `CLAUDE.md` and `README.md` with documentation pointers; fixed a
+  stale FastMCTS reference in `docs/mcts-analysis-mode/01-how-to-use.md`.
+- Ran a 96-passing pytest smoke subset; attempted live frontend screenshot
+  capture (blocked by network allowlist — documented in the manifest).
 Findings:
 - Documentation quality was already high; the main gap was navigability and a
   single status-labeled view of what works vs. is partial/not-recommended.
