@@ -56,6 +56,21 @@ the in-browser Pyodide bundle, see [`docs/deployment.md`](docs/deployment.md).
 
 ---
 
+## Documentation
+
+Full project documentation lives under [`docs/`](docs/), organized as a
+numbered, status-labeled system for humans and AI agents.
+
+- **Start here:** [`docs/00-overview/DOCUMENTATION_INDEX.md`](docs/00-overview/DOCUMENTATION_INDEX.md) — the master map.
+- **Status at a glance:** [`docs/00-overview/PROJECT_SNAPSHOT.md`](docs/00-overview/PROJECT_SNAPSHOT.md)
+- **What works (status labels):** [`docs/01-product/FEATURE_INVENTORY.md`](docs/01-product/FEATURE_INVENTORY.md)
+- **Architecture:** [`docs/02-architecture/ARCHITECTURE.md`](docs/02-architecture/ARCHITECTURE.md)
+- **Known issues & risks:** [`docs/04-quality/`](docs/04-quality/)
+- **What to do next:** [`docs/05-planning/NEXT_AGENT_TASKS.md`](docs/05-planning/NEXT_AGENT_TASKS.md)
+- **For AI agents:** [`docs/07-ai-context/CONTEXT_LOADING_PROTOCOL.md`](docs/07-ai-context/CONTEXT_LOADING_PROTOCOL.md) and the root [`CLAUDE.md`](CLAUDE.md).
+
+---
+
 ## Project History & Development Milestones
 
 This project began as a Blokus reinforcement learning environment and evolved into an MCTS-centered AI experimentation platform. The shift happened in stages: engine speed became the real bottleneck, then league/tournament infrastructure broadened the focus from training to evaluation, and finally the RL components were archived to clarify the project's identity.

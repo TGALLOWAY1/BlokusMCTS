@@ -5,7 +5,7 @@ Welcome to the MCTS Analysis Mode! This feature transforms the Blokus RL agent i
 ## Enabling the Mode
 1. In the **Game** (or **Research**) panel on the right side of the screen, locate the **Enable MCTS Diagnostics** toggle.
 2. Check the box to enable telemetry collection.
-3. Once enabled, every AI move played by the `FastMCTSAgent` will attach a deep trace of its search process to the game history.
+3. Once enabled, every AI move played by the `MCTSAgent` (with diagnostics enabled) will attach a deep trace of its search process to the game history.
 
 *(Note: Enabling this feature incurs a small performance overhead as the agent samples its internal tree state during search. Keep it off during high-speed self-play or normal casual matches unless you are actively debugging or analyzing the agent's behavior.)*
 

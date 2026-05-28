@@ -95,3 +95,22 @@ When making changes to the codebase, update `FEATURES.md` accordingly:
 - **Add** a feature entry when introducing new functionality
 - **Edit** a feature entry when modifying existing functionality (e.g., renaming, changing behavior, moving files)
 - **Delete** a feature entry when removing functionality
+
+## Documentation & Context Loading
+
+The repo has a structured docs system under `docs/`. Start at the index and load
+only the smallest relevant bundle for your task — do **not** read everything.
+
+- **Map of all docs:** `docs/00-overview/DOCUMENTATION_INDEX.md`
+- **What to read per task type:** `docs/07-ai-context/CONTEXT_LOADING_PROTOCOL.md`
+- **How to work (inspect-before / update-docs-after / commit):** `docs/07-ai-context/AGENT_WORKFLOW.md`
+- **Current behavior & status labels:** `docs/01-product/FEATURE_INVENTORY.md`, `docs/01-product/CURRENT_BEHAVIOR.md`
+- **Architecture:** `docs/02-architecture/`
+- **Known issues / risks / tests:** `docs/04-quality/`
+- **What to do next:** `docs/05-planning/PRIORITIZED_TODO.md`, `docs/05-planning/NEXT_AGENT_TASKS.md`
+
+After a change, update the affected docs in the same commit (feature status,
+known issues, decision log, audit log) per the agent workflow. Use the exact
+status labels: `Implemented | Partial | Stubbed | Broken | Designed only |
+Deprecated | Unknown`. Stale/RL-era docs live in `docs/_archived-2026-05/` — avoid
+loading them.
