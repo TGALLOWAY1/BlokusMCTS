@@ -8,7 +8,7 @@
 
 ## Why this exists
 
-The previous roadmap (`overnight_training_roadmap_2026-05-07.md`) executed
+The previous roadmap (`_archived-2026-05/overnight_training_roadmap_2026-05-07.md`) executed
 Night 1 across PRs #146–#148. The data exposed a flaw in the premise:
 `champion v1` (in `data/champion_registry.json`, promoted 2026-04-29 with
 all win-rate fields `null`) loses to `pool_peer_500ms` at the same time

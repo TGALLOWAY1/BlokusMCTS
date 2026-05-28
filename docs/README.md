@@ -24,7 +24,6 @@ Last updated: March 2026.
 - **/webapi/**: FastAPI gameplay and research endpoint documentation.
 - **arena.md**: Arena experiment runner, output artifacts, win-probability training, learned-evaluator integration.
 - **datasets.md**: Arena dataset schemas (`games.jsonl`, snapshots parquet/csv), pairwise transformation.
-- **evaluation.md**: State evaluation design and feature descriptions.
 - **profiler_baseline.md**: MCTS profiler baseline — time breakdown by phase, memory footprint, optimization notes.
 - **project-history.md**: Full narrative of the project's evolution from RL environment to MCTS platform.
 
