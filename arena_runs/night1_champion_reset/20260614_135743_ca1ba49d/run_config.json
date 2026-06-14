@@ -1,0 +1,178 @@
+{
+  "agents": [
+    {
+      "name": "champion_minimal",
+      "params": {
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_enabled": true,
+        "deterministic_time_budget": true,
+        "exploration_constant": 1.414,
+        "iterations_per_ms": 0.5,
+        "minimax_backup_alpha": 0.25,
+        "num_workers": 2,
+        "parallel_strategy": "root",
+        "progressive_widening_enabled": true,
+        "pw_alpha": 0.5,
+        "pw_c": 2.0,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "rollout_cutoff_depth": 5,
+        "rollout_policy": "random",
+        "state_eval_weights": {
+          "accessible_corners": 0.243,
+          "center_proximity": 0.0,
+          "largest_remaining_piece_size": -0.231,
+          "opponent_avg_mobility": -0.3,
+          "reachable_empty_squares": 0.081,
+          "remaining_piece_area": -0.0295,
+          "squares_placed": 0.0295,
+          "territory_enclosure_area": 0.0
+        },
+        "use_transposition_table": true
+      },
+      "thinking_time_ms": 500,
+      "type": "mcts"
+    },
+    {
+      "name": "champion_v1",
+      "params": {
+        "adaptive_exploration_avg_bf": 80.0,
+        "adaptive_exploration_base": 1.414,
+        "adaptive_exploration_enabled": true,
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_enabled": true,
+        "alliance_detection_enabled": true,
+        "alliance_threshold": 2.0,
+        "deterministic_time_budget": true,
+        "exploration_constant": 1.414,
+        "iterations_per_ms": 0.5,
+        "kingmaker_detection_enabled": true,
+        "kingmaker_score_gap": 15,
+        "loss_avoidance_enabled": true,
+        "loss_avoidance_threshold": -50.0,
+        "minimax_backup_alpha": 0.25,
+        "opponent_modeling_enabled": true,
+        "progressive_widening_enabled": true,
+        "pw_alpha": 0.5,
+        "pw_c": 2.0,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "rollout_cutoff_depth": 5,
+        "rollout_policy": "random",
+        "state_eval_phase_weights": {
+          "early": {
+            "accessible_corners": 0.3,
+            "center_proximity": 0.0,
+            "largest_remaining_piece_size": 0.0,
+            "opponent_avg_mobility": -0.05287834609528694,
+            "reachable_empty_squares": 0.0,
+            "remaining_piece_area": 0.17599664484103822,
+            "squares_placed": -0.17599664484103847,
+            "territory_enclosure_area": 0.0
+          },
+          "late": {
+            "accessible_corners": 0.17573409689186584,
+            "center_proximity": 0.0,
+            "largest_remaining_piece_size": -0.08518919739412929,
+            "opponent_avg_mobility": -0.06278383996091268,
+            "reachable_empty_squares": 0.13361753070802862,
+            "remaining_piece_area": -0.3,
+            "squares_placed": 0.3,
+            "territory_enclosure_area": 0.0
+          },
+          "mid": {
+            "accessible_corners": 0.3,
+            "center_proximity": 0.0,
+            "largest_remaining_piece_size": -0.238473591231953,
+            "opponent_avg_mobility": -0.20277351241243552,
+            "reachable_empty_squares": 0.22774497158891033,
+            "remaining_piece_area": 0.0038750218558150614,
+            "squares_placed": -0.00387502185581506,
+            "territory_enclosure_area": 0.0
+          }
+        },
+        "state_eval_weights": {
+          "accessible_corners": 0.243,
+          "center_proximity": 0.0,
+          "largest_remaining_piece_size": -0.231,
+          "opponent_avg_mobility": -0.3,
+          "reachable_empty_squares": 0.081,
+          "remaining_piece_area": -0.0295,
+          "squares_placed": 0.0295,
+          "territory_enclosure_area": 0.0
+        },
+        "sufficiency_threshold_enabled": true,
+        "use_transposition_table": true
+      },
+      "thinking_time_ms": 500,
+      "type": "mcts"
+    },
+    {
+      "name": "pool_peer_500ms",
+      "params": {
+        "adaptive_exploration_avg_bf": 80.0,
+        "adaptive_exploration_base": 1.414,
+        "adaptive_exploration_enabled": true,
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_enabled": true,
+        "deterministic_time_budget": true,
+        "exploration_constant": 1.414,
+        "iterations_per_ms": 0.5,
+        "loss_avoidance_enabled": true,
+        "minimax_backup_alpha": 0.25,
+        "progressive_widening_enabled": true,
+        "pw_alpha": 0.5,
+        "pw_c": 2.0,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "rollout_cutoff_depth": 5,
+        "rollout_policy": "random",
+        "state_eval_weights": {
+          "accessible_corners": 0.243,
+          "center_proximity": 0.0,
+          "largest_remaining_piece_size": -0.231,
+          "opponent_avg_mobility": -0.3,
+          "reachable_empty_squares": 0.081,
+          "remaining_piece_area": -0.0295,
+          "squares_placed": 0.0295,
+          "territory_enclosure_area": 0.0
+        },
+        "sufficiency_threshold_enabled": true,
+        "use_transposition_table": true
+      },
+      "thinking_time_ms": 500,
+      "type": "mcts"
+    },
+    {
+      "name": "pool_heuristic",
+      "params": {},
+      "thinking_time_ms": null,
+      "type": "heuristic"
+    }
+  ],
+  "created_at": "2026-06-14T13:57:43",
+  "max_turns": 2500,
+  "notes": "Night 1 of overnight roadmap 2026-05-14. Tests whether dropping the empirically-debunked features from champion_v1 and adding Layer 8 root parallelization (num_workers=2) produces a stronger agent at the same iteration budget. Four agents: (1) champion_minimal = candidate stripped to only validated layers + L8; (2) champion_v1 = the current bloated champion (incumbent); (3) pool_peer_500ms = the agent that has been beating champion_v1 in the recent gauntlets; (4) pool_heuristic = Tier-0 anchor. Promotion gate: champion_minimal must beat champion_v1 by Delta-mu >= 0.5 TrueSkill. Run with: python scripts/arena.py --config scripts/arena_config_night1_champion_reset.json",
+  "num_games": 60,
+  "output_root": "arena_runs/night1_champion_reset",
+  "run_id": "20260614_135743_ca1ba49d",
+  "seat_policy": "round_robin",
+  "seed": 20260514,
+  "snapshots": {
+    "checkpoints": [
+      8,
+      16,
+      24,
+      32,
+      40,
+      48,
+      56,
+      64
+    ],
+    "enabled": true,
+    "strategy": "fixed_ply"
+  }
+}

@@ -1,23 +1,23 @@
 # Champion Progression
 
-**Status as of 2026-05-15.** Single source of truth for the agent storyline.
+**Status as of 2026-06-14.** Single source of truth for the agent storyline.
 If a doc disagrees with this page, this page is right.
 
 ## Current Status
 
-- **There is no validated champion.** No agent currently in the registry has
-  passed the promotion gates defined below.
+- **`champion_v2` is the current validated champion.** Promoted 2026-06-14
+  after Night-1 reset run (`20260614_135743_ca1ba49d`). Gate: Δμ=7.39 ≥ 0.5
+  AND pairwise 38-22 vs `champion_v1`. TrueSkill μ=39.38 (conservative 18.72).
 - `champion_v1` is a **failed integrated candidate** kept as a regression
-  baseline. It loses head-to-head to a same-budget peer (see "v1 failure"
-  below), so it cannot be used as the headline agent.
-- `champion_minimal` is the **current candidate**, not the champion. It
-  isolates only the empirically validated layers and adds the Layer 8
-  parallelization that v1 missed. It still has to clear the promotion gate
-  on the Night-1 reset run.
-- The project has **not** demonstrated human-level play. The closest
-  evidence — 65.0% WR vs `pool_heuristic` over 60 games — has a Wilson-95
-  lower bound of 52.4%, below the ≥65% bar the roadmap requires before
-  the headline can be claimed.
+  baseline. Night-1 data confirms it loses 22-38 to `champion_minimal` and
+  scores μ=32.00 vs μ=39.38.
+- **`champion_v2` ties `pool_peer_500ms` 30-30** — this is the peer gap that
+  Night 2 (L8 sweep) aims to close. The tie means the correct headline framing
+  is "v1 cleanup complete, peer gap narrowed but not closed."
+- **Headline "beats humans" claim is NOT YET valid.** Wilson-95 LB vs
+  `pool_heuristic` is 0.819 at 60 games (1 seed), which looks promising but
+  the roadmap requires ≥240 games across ≥4 seeds with LB ≥ 0.65 before the
+  headline can be made. That is Night 4.
 
 ## Agent Lineage
 
@@ -28,8 +28,8 @@ If a doc disagrees with this page, this page is right.
 | 3 | `pool_l45_100ms` | Layer 4 + Layer 5 MCTS at 100 ms / 50 iter | Reference (low tier) | arena pool |
 | 5 | `pool_peer_500ms` | MCTS same time budget as champion candidates, no opponent modeling | **Active peer to beat** — currently outperforms `champion_v1` | arena pool |
 | – | `champion_v1` | Full-stack MCTS w/ phase weights, opponent modeling, adaptive C, sufficiency/loss-avoidance | **Failed full-stack candidate** — promoted prematurely with null metrics, lost to `pool_peer_500ms` | `config/champion_arena_params.json`, `data/champion_registry.json` |
-| – | `champion_minimal` | Validated-only layers + L8 root parallelization | **Current candidate** — awaiting Night-1 reset gate | `config/champion_minimal_params.json` |
-| – | `champion_v2` | _placeholder_ | Reserved for the Night-1 winner if the gate passes | TBD |
+| – | `champion_minimal` | Validated-only layers + L8 root parallelization | **Promoted to v2 on 2026-06-14** — Night-1 gate PASS (Δμ=7.39, pairwise 38-22 vs v1) | `config/champion_minimal_params.json` |
+| – | `champion_v2` | Same config as champion_minimal | **Current champion** — promoted 2026-06-14 after Night-1 reset, μ=39.38 | `data/champion_registry.json` v2 entry |
 | – | `champion_v3` | _placeholder_ | Reserved for Night-3 refit-weight candidate | TBD |
 
 ## Why `champion_v1` is the failed candidate
@@ -113,36 +113,18 @@ If the current code does not make this straightforward to write into
 `data/champion_registry.json`, the registry change is a **TODO** rather
 than a blocker for the doc.
 
-## Next experiment
+## Next experiment (Night 2)
 
-The Night-1 reset run is the immediate gate. It is configured in
-`scripts/arena_config_night1_champion_reset.json` and pits four agents
-at the same 500 ms budget: `champion_minimal`, `champion_v1`,
-`pool_peer_500ms`, `pool_heuristic`.
+Night-1 reset is **complete** (`20260614_135743_ca1ba49d`, gate PASS, v2 promoted).
 
-1. **Smoke test the config first.** Run the same arena CLI with
-   `--num-games 4` to confirm all four agents parse, construct, and
-   produce distinct telemetry. Specifically verify `champion_minimal`
-   is actually using `num_workers=2, parallel_strategy="root"` and that
-   `champion_v1` still loads its phase weights — a silent fallback to
-   identical configs is the most likely way this run goes wrong.
-2. **Verify agent distinctness.** Inspect `run_config.json` and the
-   per-move telemetry in `games.jsonl` to confirm the four agents are
-   not collapsing into duplicate parameter sets.
-3. **Run the full 60-game reset gauntlet.**
-   `python scripts/arena.py --config scripts/arena_config_night1_champion_reset.json`.
-   Expect ≤3 h wall clock if `champion_minimal` is materially faster than
-   v1 (it should be — no opponent-modeling overhead, plus parallelization).
-4. **Promote only on gate pass.** `champion_minimal → champion_v2` only
-   if it beats `champion_v1` by Δμ ≥ 0.5 TrueSkill **and** has a positive
-   pairwise record, with the registry entry populated per the promotion
-   rule above. Otherwise, the registry stays as-is and the failure is
-   recorded in `docs/arena_run_registry.md`.
-5. **Label the outcome honestly.** If `champion_minimal` beats v1 but
-   still loses badly to `pool_peer_500ms`, the correct framing is
-   **"v1 cleanup successful, peer gap remains"** — not a champion
-   promotion, and not a human-play claim. The headline run is Night 4
-   (multi-seed vs `pool_heuristic`), not Night 1.
+Night 2 is the Layer 8 parallelization sweep: `num_workers ∈ {1,4,8}` ×
+`thinking_time_ms ∈ {500,2000,5000}`, 24 games each, opponents =
+`pool_heuristic` + `pool_l9_partial_200ms`. Goal: find the wall-clock-efficient
+parallelization point, then carry the winning cell into Night 3 refit.
+
+Key constraint carried into Night 2: champion_v2 ties `pool_peer_500ms` 30-30
+at 500 ms / 2 workers. Any cell that beats the peer decisively at the same or
+lower budget is a candidate for the headline run (Night 4).
 
 ## Reusable assets from the v1 era
 

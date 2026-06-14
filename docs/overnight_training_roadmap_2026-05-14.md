@@ -67,7 +67,11 @@ the prior Arena Champion.
 Each night = one ~8 h slot. All runs use `python scripts/arena.py --config <config>`
 unless noted. Outputs land in `arena_runs/<run_id>/`.
 
-### Night 1 — Champion reset (gated promotion to v2)
+### Night 1 — Champion reset (gated promotion to v2) ✓ COMPLETE 2026-06-14
+
+**Run:** `arena_runs/night1_champion_reset/20260614_135743_ca1ba49d/`
+**Gate:** PASS — Δμ=7.39, pairwise 38-22 vs v1. champion_minimal promoted to v2.
+**Key numbers:** CM μ=39.38, v1 μ=32.00, peer μ=36.15. CM ties peer 30-30.
 
 ```
 python scripts/arena.py --config scripts/arena_config_night1_champion_reset.json

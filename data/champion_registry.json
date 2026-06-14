@@ -1,10 +1,10 @@
 {
-  "current_version": "v1",
+  "current_version": "v2",
   "versions": {
     "v1": {
       "promoted_at": "2026-04-29T00:00:00+00:00",
       "promoted_from": null,
-      "promotion_reason": "Initial champion — challenge_champion_config + Layer 9 adaptive rollout depth",
+      "promotion_reason": "Initial champion \u2014 challenge_champion_config + Layer 9 adaptive rollout depth",
       "params": {
         "deterministic_time_budget": true,
         "iterations_per_ms": 0.5,
@@ -39,9 +39,54 @@
       "_mu_acc": 0.0,
       "_sc_acc": 0.0,
       "_count": 0
+    },
+    "v2": {
+      "promoted_at": "2026-06-14T19:06:19.606693+00:00",
+      "promoted_from": "champion_minimal_candidate",
+      "promotion_reason": "Night 1 champion reset: champion_minimal beats champion_v1 (Night 1 2026-05-14 roadmap). Delta-mu > 0.5, positive pairwise record.",
+      "params": {
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_enabled": true,
+        "deterministic_time_budget": true,
+        "exploration_constant": 1.414,
+        "iterations_per_ms": 0.5,
+        "minimax_backup_alpha": 0.25,
+        "num_workers": 2,
+        "parallel_strategy": "root",
+        "progressive_widening_enabled": true,
+        "pw_alpha": 0.5,
+        "pw_c": 2.0,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "rollout_cutoff_depth": 5,
+        "rollout_policy": "random",
+        "state_eval_weights": {
+          "accessible_corners": 0.243,
+          "center_proximity": 0.0,
+          "largest_remaining_piece_size": -0.231,
+          "opponent_avg_mobility": -0.3,
+          "reachable_empty_squares": 0.081,
+          "remaining_piece_area": -0.0295,
+          "squares_placed": 0.0295,
+          "territory_enclosure_area": 0.0
+        },
+        "use_transposition_table": true
+      },
+      "thinking_time_ms": 500,
+      "avg_trueskill_mu": 39.3833768910478,
+      "avg_trueskill_sigma": 6.889323867667425,
+      "avg_win_rate": 0.36666666666666664,
+      "avg_score": null,
+      "_wr_acc": 0.0,
+      "_mu_acc": 0.0,
+      "_sc_acc": 0.0,
+      "_count": 0
     }
   },
   "iterations": [],
-  "snapshot_csv_paths": [],
-  "total_games_played": 0
+  "snapshot_csv_paths": [
+    "arena_runs/night1_champion_reset/20260614_135743_ca1ba49d"
+  ],
+  "total_games_played": 60
 }
