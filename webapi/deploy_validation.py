@@ -8,10 +8,15 @@ from typing import Dict
 
 from fastapi import HTTPException
 
+from agents.champion import CHAMPION_PROFILE
 from mcts.champion_profile import CHALLENGE_CHAMPION_PROFILE, load_challenge_champion_profile
 from schemas.game_state import AgentType, GameConfig, PlayerConfig
 
 DEPLOY_TIME_BUDGET_CAP_MS = 30000
+# Default per-move budget for registry-backed champion opponents in the public
+# "Play the Champion" demo. Kept modest so the demo stays responsive; callers
+# may override up to the deploy cap.
+DEPLOY_CHAMPION_DEFAULT_MS = 1000
 DEPLOY_DIFFICULTY_TO_MS: Dict[str, int] = {
     "easy": 200,
     "medium": 450,
@@ -81,6 +86,7 @@ def normalize_deploy_game_config(config: GameConfig) -> GameConfig:
         )
 
     challenge_players = []
+    champion_players = []
     difficulty_players = []
     for player_cfg in mcts_players:
         agent_config = dict(player_cfg.agent_config or {})
@@ -89,13 +95,36 @@ def normalize_deploy_game_config(config: GameConfig) -> GameConfig:
             difficulty_players.append(player_cfg)
         elif profile == CHALLENGE_CHAMPION_PROFILE:
             challenge_players.append(player_cfg)
+        elif profile == CHAMPION_PROFILE:
+            champion_players.append(player_cfg)
         else:
             raise _bad_request(f"Invalid MCTS profile '{profile}'.")
 
-    if challenge_players and difficulty_players:
+    profile_groups = [g for g in (challenge_players, champion_players) if g]
+    if profile_groups and difficulty_players:
         raise _bad_request(
-            "Deploy mode cannot mix challenge champion profile players with difficulty preset players."
+            "Deploy mode cannot mix profile players "
+            "(challenge champion / champion) with difficulty preset players."
         )
+    if len(profile_groups) > 1:
+        raise _bad_request(
+            "Deploy mode cannot mix challenge champion and champion profile players."
+        )
+
+    if champion_players:
+        # Registry-backed champion opponents. We validate/normalize the budget
+        # here but resolve the actual champion config through the registry at
+        # game-creation time (no hardcoded config path).
+        for player_cfg in champion_players:
+            agent_config = dict(player_cfg.agent_config or {})
+            budget_raw = agent_config.get("time_budget_ms", DEPLOY_CHAMPION_DEFAULT_MS)
+            budget_ms = _normalize_time_budget_ms(budget_raw)
+            agent_config["profile"] = CHAMPION_PROFILE
+            agent_config["time_budget_ms"] = budget_ms
+            player_cfg.agent_config = agent_config
+        human_cfg: PlayerConfig = human_players[0]
+        human_cfg.agent_config = dict(human_cfg.agent_config or {})
+        return config
 
     if challenge_players:
         profile = load_challenge_champion_profile()

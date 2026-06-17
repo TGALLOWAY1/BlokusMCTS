@@ -26,6 +26,7 @@ that ships with null metrics is therefore *not* loadable — by design.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
@@ -33,9 +34,26 @@ from typing import Any, Dict, Mapping, Optional
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REGISTRY_PATH = _REPO_ROOT / "data" / "champion_registry.json"
 
+# Agent-config / profile marker used by the web API and gameplay factory to
+# request "the champion" and have it resolved through this registry-backed
+# loader (instead of a hardcoded or stale config path).
+CHAMPION_PROFILE = "champion"
+
+# Environment override for the registry location. Lets the web API and tests
+# point at an alternate registry without editing code or the shipped default.
+REGISTRY_PATH_ENV = "CHAMPION_REGISTRY_PATH"
+
 
 class NoValidatedChampionError(RuntimeError):
     """Raised when the registry contains no validated champion to serve."""
+
+
+def default_registry_path() -> Path:
+    """Resolve the registry path, honoring the ``CHAMPION_REGISTRY_PATH`` env override."""
+    override = os.getenv(REGISTRY_PATH_ENV)
+    if override:
+        return Path(override)
+    return DEFAULT_REGISTRY_PATH
 
 
 @dataclass(frozen=True)
@@ -55,6 +73,7 @@ class ChampionMetadata:
     total_games: Optional[int]
     promoted_at: Optional[str]
     promotion_reason: Optional[str]
+    notes: str
 
     def summary(self) -> str:
         """One-line human summary for logs / API responses."""
@@ -123,7 +142,7 @@ def load_champion_metadata(
     registry has no current version, the version is missing, or the entry has not
     cleared the gauntlet's promotion gates.
     """
-    registry_path = Path(registry_path) if registry_path else DEFAULT_REGISTRY_PATH
+    registry_path = Path(registry_path) if registry_path else default_registry_path()
     registry = _load_registry(registry_path)
 
     current = registry.get("current_version")
@@ -171,6 +190,7 @@ def load_champion_metadata(
         total_games=entry.get("total_games_played"),
         promoted_at=entry.get("promoted_at"),
         promotion_reason=entry.get("promotion_reason"),
+        notes=str(entry.get("notes") or ""),
     )
 
 
@@ -204,3 +224,18 @@ def load_champion(
     metadata = load_champion_metadata(registry_path)
     agent = build_champion_agent(metadata, seed=seed)
     return ChampionHandle(metadata=metadata, agent=agent)
+
+
+def build_champion_gameplay_agent(
+    registry_path: Optional[Path | str] = None,
+    seed: Optional[int] = None,
+) -> Any:
+    """Return a ready-to-play champion agent for the web gameplay backend.
+
+    Thin wrapper over :func:`load_champion` that returns just the agent. The
+    agent exposes the deploy ``choose_move(board, player, legal_moves, budget_ms)``
+    protocol, so it slots directly into the web API's gameplay loop. Raises
+    :class:`NoValidatedChampionError` when no validated champion exists — it
+    never falls back to a stale or unvalidated config.
+    """
+    return load_champion(registry_path=registry_path, seed=seed).agent

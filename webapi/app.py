@@ -53,6 +53,12 @@ from schemas.game_state import (
     MoveRequest,
     MoveResponse,
     Player,
+    ScoringMode,
+)
+from agents.champion import (
+    CHAMPION_PROFILE,
+    NoValidatedChampionError,
+    load_champion_metadata,
 )
 from webapi.deploy_validation import (
     DEPLOY_TIME_BUDGET_CAP_MS,
@@ -89,6 +95,20 @@ except Exception:  # pragma: no cover - deploy runtime may omit mongo deps
         )
 
 
+def _resolve_scoring_mode(config: GameConfig, app_profile: str) -> ScoringMode:
+    """Resolve the scoring mode for a new game.
+
+    - If the config explicitly sets ``scoring_mode``, honor it.
+    - Otherwise default to ``standard`` for public deploy play and ``house``
+      for the research profile (preserving the project's historical default).
+    """
+    if config.scoring_mode is not None:
+        return ScoringMode(config.scoring_mode)
+    if app_profile == APP_PROFILE_DEPLOY:
+        return ScoringMode.STANDARD
+    return ScoringMode.HOUSE
+
+
 class GameManager:
     """Manages active games and their state."""
 
@@ -105,14 +125,18 @@ class GameManager:
         if game_id in self.games:
             raise HTTPException(status_code=400, detail="Game ID already exists")
 
+        # Resolve scoring mode (explicit config wins; otherwise profile default).
+        scoring_mode = _resolve_scoring_mode(config, self.app_profile)
+
         # Create game instance
-        game = BlokusGame()
+        game = BlokusGame(scoring_mode=scoring_mode.value)
 
         # Store game data
         now = datetime.now()
         self.games[game_id] = {
             'game': game,
             'config': config,
+            'scoring_mode': scoring_mode,
             'status': GameStatus.WAITING,
             'created_at': now,
             'updated_at': now,
@@ -152,7 +176,7 @@ class GameManager:
             elif agent_type == AgentType.MCTS:
                 budget_ms = int(agent_config.get('time_budget_ms', 1000))
                 cfg = dict(agent_config)
-                if cfg.get("profile") == "challenge_champion":
+                if cfg.get("profile") in ("challenge_champion", CHAMPION_PROFILE):
                     agents[player] = build_deploy_gameplay_agent(agent_type, cfg)
                     continue
                 agents[player] = MCTSAgent(
@@ -956,6 +980,7 @@ class GameManager:
             move_count=game.get_move_count(),
             game_over=game.is_game_over(),
             winner=self._convert_player_back(game.winner) if game.winner else None,
+            scoring_mode=game_data.get('scoring_mode', ScoringMode.HOUSE),
             legal_moves=legal_moves,
             created_at=game_data['created_at'],
             updated_at=game_data['updated_at'],
@@ -1103,6 +1128,33 @@ async def root():
             "websocket": "/ws/games/{game_id}",
             "health": "/health",
         },
+    }
+
+
+async def get_champion():
+    """Return validated-champion metadata for the public demo.
+
+    Resolves the champion through the registry-backed loader
+    (:mod:`agents.champion`). Fails clearly with HTTP 404 when no validated
+    champion exists — it never falls back to an unvalidated config.
+    """
+    try:
+        meta = load_champion_metadata()
+    except NoValidatedChampionError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:  # pragma: no cover - unexpected registry error
+        raise HTTPException(status_code=500, detail=f"Failed to load champion: {exc}")
+
+    return {
+        "name": meta.champion_name,
+        "version": meta.version,
+        "configPath": meta.config_path,
+        "validationDate": meta.validation_date,
+        "totalGamesPlayed": meta.total_games,
+        "winRate": meta.win_rate,
+        "trueSkill": meta.trueskill_mu,
+        "gauntletRunPath": meta.gauntlet_run_path,
+        "notes": meta.notes or meta.promotion_reason or "",
     }
 
 
@@ -1804,6 +1856,7 @@ def create_app(
         pass_turn=pass_turn,
         list_arena_runs=list_arena_runs,
         get_arena_run=get_arena_run,
+        get_champion=get_champion,
     )
 
     register_research = (
