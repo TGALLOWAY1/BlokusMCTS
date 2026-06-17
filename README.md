@@ -47,6 +47,18 @@ the in-browser Pyodide bundle, see [`docs/deployment.md`](docs/deployment.md).
 
 ## How to Run the Demo
 
+### Take the Tour 🧭
+
+New here? Start at **[`/tour`](frontend/src/pages/TourPage.tsx)** (alias `/about`) — a
+mobile-friendly, ~3-minute guided walkthrough that explains Blokus, why it is hard
+for AI, the agents under test, the MCTS techniques explored, the evaluation harness,
+TrueSkill validation, champion progression, and ends with a "Play the Champion" CTA.
+It runs standalone (no MCTS search required) and uses live arena/champion metrics
+when available, with clearly-labeled demo fallbacks otherwise. See
+[`docs/TOUR_IMPLEMENTATION.md`](docs/TOUR_IMPLEMENTATION.md).
+
+### Demo game
+
 1. Open the live deployment (or run frontend locally via `npm run dev`).
 2. Click **Run Demo Game** on the home page.
 3. The game will automatically start an AI vs. AI match.

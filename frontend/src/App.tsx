@@ -8,6 +8,7 @@ import { Benchmark } from './pages/Benchmark';
 import { History } from './pages/History';
 import { MctsVisualization } from './pages/MctsVisualization';
 import { RecruiterStoryPage } from './pages/RecruiterStoryPage';
+import { TourPage } from './pages/TourPage';
 import { IS_DEPLOY_PROFILE } from './constants/gameConstants';
 import './App.css';
 
@@ -19,6 +20,9 @@ function App() {
           <Route path="/" element={<Play />} />
           <Route path="/play" element={<Play />} />
           <Route path="/story" element={<RecruiterStoryPage />} />
+          {/* Standalone, mobile-friendly guided tour — available in all profiles. */}
+          <Route path="/tour" element={<TourPage />} />
+          <Route path="/about" element={<TourPage />} />
           {!IS_DEPLOY_PROFILE && (
             <>
               <Route path="/train" element={<TrainEval />} />
