@@ -42,6 +42,7 @@ export interface GameState {
   move_count: number;
   game_over: boolean;
   winner: string | null;
+  scoring_mode?: string;
   legal_moves: LegalMove[];
   created_at: string;
   updated_at: string;
@@ -140,6 +141,7 @@ import { type PlayerMobilityMetrics } from '../utils/mobilityMetrics';
 import { useDebugLogStore } from './debugLogStore';
 import { type MoveTelemetryDelta } from '../types/telemetry';
 import { type MctsDiagnosticsV1 } from '../types/mcts';
+import { type ChampionMetadata } from '../utils/championConfig';
 
 export interface GameHistoryEntry {
   turn_number: number;
@@ -199,6 +201,8 @@ interface GameStore {
   activeRightTab: 'main' | 'telemetry' | 'explanation' | 'moveDelta' | 'analysis' | 'mcts_analysis';
   boardOverlay: Record<string, { color: string; opacity?: number }> | null;
   analysisModeEnabled: boolean;
+  /** Set when the current game is a "Play the Champion" game; powers the banner. */
+  championMeta: ChampionMetadata | null;
 
   connect: (gameId: string) => Promise<void>;
   disconnect: () => void;
@@ -218,6 +222,7 @@ interface GameStore {
   clearLogs: () => void;
   setActiveRightTab: (tab: 'main' | 'telemetry' | 'explanation' | 'moveDelta' | 'analysis' | 'mcts_analysis') => void;
   setBoardOverlay: (overlay: Record<string, { color: string; opacity?: number }> | null) => void;
+  setChampionMeta: (champion: ChampionMetadata | null) => void;
   saveGame: () => void;
   loadGame: (history: GameHistoryEntry[]) => Promise<void>;
 }
@@ -297,6 +302,7 @@ export const useGameStore = create<GameStore>()(
     activeRightTab: 'main' as const,
     boardOverlay: null,
     analysisModeEnabled: false,
+    championMeta: null,
 
     setAnalysisModeEnabled: (enabled: boolean) => {
       set({ analysisModeEnabled: enabled });
@@ -436,6 +442,7 @@ export const useGameStore = create<GameStore>()(
     clearLogs: () => { set({ logs: [] }); },
     setActiveRightTab: (tab: 'main' | 'telemetry' | 'explanation' | 'moveDelta' | 'analysis' | 'mcts_analysis') => { set({ activeRightTab: tab }); },
     setBoardOverlay: (overlay) => { set({ boardOverlay: overlay }); },
+    setChampionMeta: (champion) => { set({ championMeta: champion }); },
 
     saveGame: () => {
       const state = get().gameState;

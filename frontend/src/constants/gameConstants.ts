@@ -26,6 +26,16 @@ export const DEPLOY_MCTS_PRESETS = {
 export const CHALLENGE_CHAMPION_PROFILE = 'challenge_champion';
 export const CHALLENGE_CHAMPION_BUDGET_MS = 30000;
 
+// Registry-backed validated champion (Phase 5/6 "Play the Champion" demo).
+// The frontend never hardcodes a champion config path: it forwards whatever the
+// /api/champion endpoint resolves from the champion registry.
+export const CHAMPION_PROFILE = 'champion';
+// Per-move budget for the champion in the public demo. Kept responsive; the
+// deploy backend caps budgets at 30s but the in-browser demo stays snappy.
+export const CHAMPION_DEFAULT_BUDGET_MS = 1200;
+export const CHAMPION_MIN_BUDGET_MS = 200;
+export const CHAMPION_MAX_BUDGET_MS = 4000;
+
 // Derive WebSocket URL from API URL if VITE_WS_URL is not set
 // Convert http:// to ws:// and https:// to wss://
 const getWebSocketURL = (): string => {

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Play } from '../pages/Play';
-import { useGameStore } from '../store/gameStore';
 import { BrowserRouter } from 'react-router-dom';
 import '@testing-library/jest-dom';
 

@@ -28,6 +28,8 @@ from agents.champion import (
     NoValidatedChampionError,
     REGISTRY_PATH_ENV,
     build_champion_gameplay_agent,
+    champion_browser_config,
+    load_champion_metadata,
 )
 from engine.board import Player
 from engine.game import BlokusGame
@@ -142,6 +144,65 @@ def test_champion_endpoint_returns_metadata():
     assert body["gauntletRunPath"] == "arena_runs/gauntlets/gauntlet_test"
     assert body["notes"] == "fast random champion for tests"
     assert body["configPath"].endswith("champ.json")
+
+
+def test_champion_endpoint_includes_browser_agent_config():
+    """The public demo runs gameplay in-browser, so it needs a browser-ready
+    agent spec (resolved server-side, not a hardcoded config path)."""
+    app = create_app(profile=APP_PROFILE_DEPLOY, include_research_routes=False)
+    with _validated_champion_registry() as reg, _env(REGISTRY_PATH_ENV, str(reg)):
+        client = TestClient(app)
+        resp = client.get("/api/champion")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["agentConfig"] is not None
+    # The fixture champion is a cheap "random" agent.
+    assert body["agentConfig"]["type"] == "random"
+    assert body["agentConfig"]["thinkingTimeMs"] == 50
+
+
+@contextmanager
+def _mcts_champion_registry():
+    """Validated champion backed by a deterministic-budget MCTS config."""
+    with TemporaryDirectory() as tmp:
+        cfg = Path(tmp) / "champ.json"
+        cfg.write_text(
+            json.dumps(
+                {
+                    "type": "mcts",
+                    "thinking_time_ms": 800,
+                    "deterministic_time_budget": True,
+                    "iterations_per_ms": 0.5,
+                    "rollout_policy": "random",
+                    "rave_enabled": True,
+                    "rave_k": 1000,
+                    "state_eval_weights": {"accessible_corners": 0.24},
+                }
+            ),
+            encoding="utf-8",
+        )
+        reg = Path(tmp) / "registry.json"
+        _write_registry(reg, _validated_entry(str(cfg)))
+        yield reg
+
+
+def test_champion_browser_config_translates_mcts_params():
+    with _mcts_champion_registry() as reg, _env(REGISTRY_PATH_ENV, str(reg)):
+        meta = load_champion_metadata()
+        spec = champion_browser_config(meta)
+
+    assert spec["type"] == "mcts"
+    assert spec["thinkingTimeMs"] == 800
+    mcts = spec["mcts"]
+    # Deterministic budget translates to a concrete iteration count (0.5 * 800).
+    assert mcts["iterations"] == 400
+    # Wrapper-only keys are stripped; validated MCTS params are forwarded verbatim.
+    assert "deterministic_time_budget" not in mcts
+    assert "iterations_per_ms" not in mcts
+    assert mcts["rollout_policy"] == "random"
+    assert mcts["rave_enabled"] is True
+    assert mcts["state_eval_weights"] == {"accessible_corners": 0.24}
 
 
 # ---------------------------------------------------------------------------

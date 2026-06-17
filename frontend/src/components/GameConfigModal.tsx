@@ -14,6 +14,13 @@ import {
   DEPLOY_TIME_BUDGET_CAP_MS,
   type LeaderboardAgent,
 } from '../hooks/useArenaLeaderboard';
+import { useChampion } from '../hooks/useChampion';
+import {
+  buildChampionGameConfig,
+  championIsPlayable,
+  type ChampionMetadata,
+} from '../utils/championConfig';
+import { ChampionCard } from './ChampionCard';
 
 interface GameConfigModalProps {
   isOpen: boolean;
@@ -74,7 +81,8 @@ export const GameConfigModal: React.FC<GameConfigModalProps> = ({
   onGameCreated,
   canClose = true,
 }) => {
-  const { createGame, connect, loadGame } = useGameStore();
+  const { createGame, connect, loadGame, setChampionMeta } = useGameStore();
+  const championState = useChampion();
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -107,9 +115,11 @@ export const GameConfigModal: React.FC<GameConfigModalProps> = ({
 
   // --- Shared helpers -------------------------------------------------------------
 
-  const startFromConfig = async (config: any) => {
+  const startFromConfig = async (config: any, champion: ChampionMetadata | null = null) => {
     setIsCreating(true);
     setError(null);
+    // Tag (or clear) the champion banner for this game before it boots.
+    setChampionMeta(champion);
     try {
       const gameId = await createGame(config);
       await connect(gameId);
@@ -239,6 +249,18 @@ export const GameConfigModal: React.FC<GameConfigModalProps> = ({
   };
 
   const startChallengeChampion = () => startFromConfig(buildChallengeChampionConfig());
+
+  const startPlayTheChampion = () => {
+    const champion = championState.champion;
+    if (!champion || !championIsPlayable(champion)) {
+      setError(
+        championState.error ||
+          'No validated champion is available to play right now.',
+      );
+      return;
+    }
+    return startFromConfig(buildChampionGameConfig(champion), champion);
+  };
 
   // --- Research mode -------------------------------------------------------------
 
@@ -399,6 +421,15 @@ export const GameConfigModal: React.FC<GameConfigModalProps> = ({
               {error}
             </div>
           )}
+
+          {/* Headline demo: Play the Champion (registry-backed) */}
+          <div className="mb-4">
+            <ChampionCard
+              state={championState}
+              isCreating={isCreating}
+              onPlay={startPlayTheChampion}
+            />
+          </div>
 
           {/* Mode tabs */}
           <div className="flex mb-4 rounded-lg overflow-hidden border border-charcoal-700">
@@ -608,6 +639,15 @@ export const GameConfigModal: React.FC<GameConfigModalProps> = ({
                 {leaderboard.agents.length} rated agents available as opponents. Pick any per slot below.
               </div>
             )}
+          </div>
+
+          {/* Registry-backed "Play the Champion" demo */}
+          <div className="mb-6">
+            <ChampionCard
+              state={championState}
+              isCreating={isCreating}
+              onPlay={startPlayTheChampion}
+            />
           </div>
 
           <div className="mb-6 rounded-lg border border-neon-green/30 bg-neon-green/5 p-4">

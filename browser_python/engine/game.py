@@ -22,6 +22,20 @@ except Exception as _tel_err:
 
 logger = logging.getLogger(__name__)
 
+# Scoring modes.
+#
+#   "standard" — standard Blokus scoring only: 1 point per covered square plus
+#                the +15 all-pieces bonus (see Board.get_score). No positional
+#                bonuses. This is the mode intended for public "Play the
+#                Champion" play.
+#   "house"    — the project's historical house scoring: standard scoring PLUS
+#                non-standard corner-control (+5/corner) and center-control
+#                (+2/center square) bonuses. This is the default to preserve the
+#                behavior of all prior arena runs and experiments.
+SCORING_MODE_STANDARD = "standard"
+SCORING_MODE_HOUSE = "house"
+VALID_SCORING_MODES = (SCORING_MODE_STANDARD, SCORING_MODE_HOUSE)
+
 
 @dataclass
 class GameResult:
@@ -45,7 +59,12 @@ class BlokusGame:
     Manages game state, scoring, and game flow.
     """
 
-    def __init__(self, enable_telemetry: bool = True, telemetry_fast_mode: bool = True):
+    def __init__(
+        self,
+        enable_telemetry: bool = True,
+        telemetry_fast_mode: bool = True,
+        scoring_mode: str = SCORING_MODE_HOUSE,
+    ):
         self.board = Board()
         self.move_generator = get_shared_generator()
         self.piece_generator = PieceGenerator()
@@ -53,6 +72,15 @@ class BlokusGame:
         self.winner = None
         self.enable_telemetry = enable_telemetry
         self.telemetry_fast_mode = telemetry_fast_mode
+        if scoring_mode not in VALID_SCORING_MODES:
+            raise ValueError(
+                f"Invalid scoring_mode {scoring_mode!r}. "
+                f"Valid modes: {', '.join(VALID_SCORING_MODES)}."
+            )
+        # Default is "house" to preserve historical behavior for all existing
+        # arena runs and experiments, which construct BlokusGame() with no
+        # explicit scoring_mode. Public play opts into "standard" explicitly.
+        self.scoring_mode = scoring_mode
 
     def make_move(self, move: Move, player: Optional[Player] = None) -> bool:
         """
@@ -217,15 +245,16 @@ class BlokusGame:
         """
         Get the canonical game result with final scores and winner information.
         
-        This method computes final scores for all players using a Blokus variant
-        scoring system (includes house bonuses beyond standard Blokus rules):
-        - Base score: 1 point per square covered by pieces
-        - Bonus: +15 points if player used all 21 pieces
-        - Corner control bonus: +5 points per controlled corner (4 corners max)
-        - Center control bonus: +2 points per center square (4×4 center area)
+        This method computes final scores for all players via ``get_score``,
+        which honors this game's ``scoring_mode``:
+        - Base score (all modes): 1 point per square covered by pieces
+        - Bonus (all modes): +15 points if player used all 21 pieces
+        - Corner control bonus (house mode only): +5 per controlled corner
+        - Center control bonus (house mode only): +2 per center square (4×4)
 
-        Note: Corner and center bonuses are custom additions, not part of
-        standard Blokus scoring.
+        Note: Corner and center bonuses are custom "house" additions, not part
+        of standard Blokus scoring; they apply only when ``scoring_mode ==
+        "house"`` (the historical default).
         
         The method can be safely called:
         - After the game is over (recommended): Returns accurate final scores
@@ -287,18 +316,23 @@ class BlokusGame:
     def get_score(self, player: Player) -> int:
         """
         Get the score for a player.
-        
-        Scoring rules:
+
+        Standard Blokus scoring (``scoring_mode == "standard"``):
         - 1 point per square covered by pieces
         - 15 bonus points for using all 21 pieces
-        - Additional bonuses for strategic placement
+
+        House scoring (``scoring_mode == "house"``, the historical default)
+        additionally awards non-standard positional bonuses:
+        - Corner control bonus (+5 per controlled corner)
+        - Center control bonus (+2 per controlled center square)
         """
         base_score = self.board.get_score(player)
 
-        # Additional scoring considerations
-        bonus_score = self._calculate_bonus_score(player)
+        if self.scoring_mode == SCORING_MODE_STANDARD:
+            return base_score
 
-        return base_score + bonus_score
+        # House scoring: add non-standard positional bonuses.
+        return base_score + self._calculate_bonus_score(player)
 
     def _calculate_bonus_score(self, player: Player) -> int:
         """

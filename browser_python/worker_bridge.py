@@ -20,16 +20,27 @@ from engine.move_generator import Move as EngineMove
 from mcts.champion_profile import CHALLENGE_CHAMPION_PROFILE, build_mcts_kwargs, load_challenge_champion_profile
 from mcts.mcts_agent import MCTSAgent
 
+# Profile marker for the registry-backed champion (kept in sync with
+# agents.champion.CHAMPION_PROFILE; hardcoded here to avoid importing the
+# registry/analytics stack into the Pyodide bundle).
+CHAMPION_PROFILE = "champion"
+
+# Valid scoring modes mirrored from engine.game; used to plumb the public demo's
+# "standard" scoring through to the in-browser game.
+_VALID_SCORING_MODES = ("standard", "house")
+
 
 class WebWorkerGameBridge:
     def __init__(self):
         self.game = BlokusGame()
+        self.scoring_mode = "house"
         self.agents = {}
         self.players_config = []
         self.mcts_top_moves = []
         self.mcts_stats = {}
         self.mcts_diagnostics = None
         self.game_id = "local-webworker"
+        self._mcts_kwarg_names = self._discover_mcts_kwargs()
 
         self.frontend_to_backend = {}
         self.backend_to_frontend = {}
@@ -76,8 +87,33 @@ class WebWorkerGameBridge:
     def _get_frontend_ori(self, piece_id, backend_ori):
         return self.backend_to_frontend.get(int(piece_id), {}).get(int(backend_ori), 0)
 
+    def _discover_mcts_kwargs(self):
+        """Names accepted by ``MCTSAgent.__init__`` (minus ``self``).
+
+        Used to defensively filter a forwarded champion config down to valid
+        constructor kwargs, so a registry champion can carry any layer's params
+        without breaking the in-browser build.
+        """
+        import inspect
+
+        try:
+            params = inspect.signature(MCTSAgent.__init__).parameters
+            return {name for name in params if name != "self"}
+        except (ValueError, TypeError):
+            return set()
+
+    def _new_game(self) -> BlokusGame:
+        """Construct a game honoring the active scoring mode (best-effort)."""
+        try:
+            return BlokusGame(scoring_mode=self.scoring_mode)
+        except TypeError:
+            # Older bundled engine without scoring_mode support.
+            return BlokusGame()
+
     def init_game(self, config_dict: Dict[str, Any]):
-        self.game = BlokusGame()
+        raw_mode = str(config_dict.get("scoring_mode") or "house").lower()
+        self.scoring_mode = raw_mode if raw_mode in _VALID_SCORING_MODES else "house"
+        self.game = self._new_game()
         # Convert config_dict to native Python objects to avoid Pyodide proxy destruction issues
         self.players_config = []
         for p in config_dict.get("players", []):
@@ -106,9 +142,12 @@ class WebWorkerGameBridge:
         return self.get_state()
 
     def _build_mcts_agent(self, agent_config: Dict[str, Any], budget_ms: int) -> MCTSAgent:
-        if agent_config.get("profile") == CHALLENGE_CHAMPION_PROFILE:
-            profile = load_challenge_champion_profile()
-            kwargs = build_mcts_kwargs(profile)
+        profile = agent_config.get("profile")
+        if profile == CHALLENGE_CHAMPION_PROFILE:
+            champ_profile = load_challenge_champion_profile()
+            kwargs = build_mcts_kwargs(champ_profile)
+        elif profile == CHAMPION_PROFILE:
+            kwargs = self._champion_mcts_kwargs(agent_config)
         else:
             kwargs = {
                 "iterations": int(agent_config.get("iterations", 500000)),
@@ -118,6 +157,26 @@ class WebWorkerGameBridge:
         if agent_config.get("seed") is not None:
             kwargs["seed"] = int(agent_config["seed"])
         return MCTSAgent(**kwargs)
+
+    def _champion_mcts_kwargs(self, agent_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Build MCTSAgent kwargs for the registry-backed champion.
+
+        The browser receives the champion's resolved spec from ``/api/champion``
+        under ``agent_config["champion"]`` (``{"type", "thinkingTimeMs", "mcts"}``).
+        We forward the validated ``mcts`` params verbatim, filtered to the
+        ``MCTSAgent`` signature so the exact gauntlet-validated agent is rebuilt
+        client-side. Falls back to a plain search if no spec is present.
+        """
+        champ = agent_config.get("champion") or {}
+        spec = dict(champ.get("mcts") or {}) if isinstance(champ, dict) else {}
+        if not spec:
+            return {
+                "iterations": int(agent_config.get("iterations", 500000)),
+                "exploration_constant": float(agent_config.get("exploration_constant", 1.414)),
+            }
+        if self._mcts_kwarg_names:
+            spec = {k: v for k, v in spec.items() if k in self._mcts_kwarg_names}
+        return spec
 
     def _agent_stats(self, agent: MCTSAgent, budget_ms: int, elapsed_ms: int) -> Dict[str, Any]:
         info = agent.get_action_info() if hasattr(agent, "get_action_info") else {}
@@ -356,6 +415,7 @@ class WebWorkerGameBridge:
 
         return {
             "game_id": self.game_id, "status": status, "current_player": current_player.name,
+            "scoring_mode": self.scoring_mode,
             "board": board_list, "scores": scores, "pieces_used": pieces_used,
             "move_count": game.get_move_count(), "game_over": game.is_game_over(), "winner": winner_name,
             "legal_moves": legal_moves_out, "created_at": "", "updated_at": "", "players": self.players_config,
@@ -369,7 +429,7 @@ class WebWorkerGameBridge:
         }
 
     def load_game(self, history: List[Dict[str, Any]]):
-        self.game = BlokusGame()
+        self.game = self._new_game()
         self.mcts_top_moves = []
         self.game_id = "loaded-game"
         for entry in history:
