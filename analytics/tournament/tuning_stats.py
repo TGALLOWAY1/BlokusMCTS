@@ -6,22 +6,13 @@ import math
 from collections.abc import Mapping
 from typing import Any, Dict, List
 
+from analytics.tournament.statistics import wilson_score_interval
 from analytics.tournament.tuning import TuningSet
 
-
-def wilson_score_interval(wins: float, trials: float, z: float = 1.96) -> Dict[str, float]:
-    """Calculate the Wilson score interval for a binomial proportion."""
-    if trials == 0:
-        return {"lower": 0.0, "upper": 0.0, "center": 0.0}
-    p = wins / trials
-    denominator = 1 + z**2 / trials
-    center = (p + z**2 / (2 * trials)) / denominator
-    spread = z * math.sqrt((p * (1 - p) + z**2 / (4 * trials)) / trials) / denominator
-    return {
-        "lower": max(0.0, center - spread),
-        "upper": min(1.0, center + spread),
-        "center": p,
-    }
+# ``wilson_score_interval`` now lives in analytics.tournament.statistics so the
+# gauntlet harness and tuning stats share a single implementation. Re-exported
+# here for backward compatibility with existing imports.
+__all__ = ["wilson_score_interval", "compute_tuning_summary", "render_tuning_summary_markdown"]
 
 
 def compute_tuning_summary(
