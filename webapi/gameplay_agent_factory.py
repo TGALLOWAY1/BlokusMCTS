@@ -7,6 +7,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from agents.champion import CHAMPION_PROFILE, build_champion_gameplay_agent
 from mcts.adaptive_budget import AdaptiveBudgetController, BudgetDecision, BudgetSignals
 from mcts.champion_profile import (
     CHALLENGE_CHAMPION_PROFILE,
@@ -214,6 +215,11 @@ def build_deploy_gameplay_agent(
     if agent_type == AgentType.HUMAN:
         return None
     if agent_type == AgentType.MCTS:
+        if cfg.get("profile") == CHAMPION_PROFILE:
+            # Resolve "the champion" through the registry-backed loader. This
+            # raises NoValidatedChampionError when no validated champion exists,
+            # rather than silently serving a stale or unvalidated config.
+            return build_champion_gameplay_agent(seed=cfg.get("seed"))
         if cfg.get("profile") == CHALLENGE_CHAMPION_PROFILE:
             return _ChallengeChampionGameplayAdapter(
                 seed=cfg.get("seed"),

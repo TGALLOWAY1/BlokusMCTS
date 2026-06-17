@@ -33,6 +33,17 @@ class GameStatus(str, Enum):
     ERROR = "error"
 
 
+class ScoringMode(str, Enum):
+    """Scoring rule set for a game.
+
+    - ``standard``: standard Blokus scoring (covered squares + all-pieces bonus).
+    - ``house``: standard scoring plus non-standard corner/center positional
+      bonuses used in prior experiments.
+    """
+    STANDARD = "standard"
+    HOUSE = "house"
+
+
 class Position(BaseModel):
     """Represents a position on the board."""
     row: int = Field(ge=0, le=19)
@@ -59,6 +70,15 @@ class GameConfig(BaseModel):
     players: List[PlayerConfig] = Field(min_items=2, max_items=4)
     game_id: Optional[str] = None
     auto_start: bool = Field(default=True, description="Whether to start the game automatically")
+    scoring_mode: Optional[ScoringMode] = Field(
+        default=None,
+        description=(
+            "Scoring rule set: 'standard' (standard Blokus) or 'house' "
+            "(standard plus corner/center bonuses). When omitted, the backend "
+            "picks a profile-appropriate default (standard for public deploy "
+            "play, house for the research profile)."
+        ),
+    )
 
 
 class GameState(BaseModel):
@@ -72,6 +92,10 @@ class GameState(BaseModel):
     move_count: int
     game_over: bool
     winner: Optional[Player] = None
+    scoring_mode: ScoringMode = Field(
+        default=ScoringMode.HOUSE,
+        description="Scoring rule set in effect for this game ('standard' or 'house')",
+    )
     legal_moves: List[Move] = Field(description="Available legal moves for current player")
     created_at: datetime
     updated_at: datetime

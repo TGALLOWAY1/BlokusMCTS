@@ -182,6 +182,14 @@ prohibition — all enforced.
    - A public web app would surprise users who expect standard scoring.
    *Recommendation:* keep but make it a config flag (`standard | house`) before
    the web demo. Do **not** change silently — experiments depend on it.
+   *Resolved (Phase 5):* `BlokusGame(scoring_mode=...)` now exposes
+   `standard | house`. The default remains `house` so every prior arena run and
+   experiment is byte-for-byte unchanged (arena_runner constructs `BlokusGame()`
+   with no mode). The web API defaults public **deploy** play to `standard` and
+   the **research** profile to `house`, and surfaces the active mode in
+   `GameState.scoring_mode`. House bonuses (corner/center) are therefore the
+   scoring system used in all prior win-rate / TrueSkill experiments —
+   `engine/game.py`, `schemas/game_state.py`, `webapi/app.py`.
 2. **Engine duplication drift.** `browser_python/engine/` is a manual copy. No
    guard enforces parity → the in-browser game can diverge from the arena
    engine. (Flagged in `PRIORITIZED_TODO` #6.)
