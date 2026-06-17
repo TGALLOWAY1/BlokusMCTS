@@ -23,7 +23,7 @@
 - [Product Brief](../01-product/PRODUCT_BRIEF.md) · [Feature Inventory](../01-product/FEATURE_INVENTORY.md) · [Current Behavior](../01-product/CURRENT_BEHAVIOR.md) · [User Flows](../01-product/USER_FLOWS.md) · [Screen Inventory](../01-product/SCREEN_INVENTORY.md)
 
 ### 02 — Architecture
-- [Architecture](../02-architecture/ARCHITECTURE.md) · [System Map](../02-architecture/SYSTEM_MAP.md) · [Data Model](../02-architecture/DATA_MODEL.md) · [API Inventory](../02-architecture/API_INVENTORY.md) · [State Management](../02-architecture/STATE_MANAGEMENT.md) · [Integrations](../02-architecture/INTEGRATIONS.md)
+- [Architecture](../02-architecture/ARCHITECTURE.md) · [System Map](../02-architecture/SYSTEM_MAP.md) · [Agent Interface](../02-architecture/AGENT_INTERFACE.md) · [Data Model](../02-architecture/DATA_MODEL.md) · [API Inventory](../02-architecture/API_INVENTORY.md) · [State Management](../02-architecture/STATE_MANAGEMENT.md) · [Integrations](../02-architecture/INTEGRATIONS.md)
 
 ### 03 — Implementation
 - [Codebase Inventory](../03-implementation/CODEBASE_INVENTORY.md) · [Route Inventory](../03-implementation/ROUTE_INVENTORY.md) · [Config & Environment](../03-implementation/CONFIG_AND_ENVIRONMENT.md) · [Testing Strategy](../03-implementation/TESTING_STRATEGY.md)
