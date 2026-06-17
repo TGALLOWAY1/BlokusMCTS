@@ -47,9 +47,14 @@ const getWebSocketURL = (): string => {
   return API_URL.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
 };
 
-// API_BASE: Empty string means use relative URLs (works with Vite proxy in dev)
-// In production, this should be the full API URL
-export const API_BASE = import.meta.env.PROD ? API_URL : '';
+// API_BASE: Empty string means use relative, same-origin URLs (e.g. `/api/...`).
+// - In dev, always '' so requests flow through the Vite proxy (see vite.config.ts).
+// - In production, default to '' (same-origin) so the SPA and the Vercel Python
+//   serverless function share an origin and no CORS/localhost dependency exists.
+//   Only fall back to an absolute base when VITE_API_URL is explicitly provided
+//   (e.g. a cross-origin backend); an unset VITE_API_URL must never leak
+//   `http://localhost:8000` into a production build.
+export const API_BASE = import.meta.env.PROD ? (import.meta.env.VITE_API_URL || '') : '';
 
 // WS_BASE: WebSocket URL (always needs full URL)
 export const WS_BASE = getWebSocketURL();

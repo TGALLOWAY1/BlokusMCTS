@@ -6,8 +6,11 @@
 
 echo "📦 Bundling Python core for Pyodide WebWorker..."
 
-# 1. Ensure browser_python directory is up-to-date with backend changes
+# 1. Ensure browser_python directory is up-to-date with backend changes.
+# Clean the synced subdirectories first so files deleted/archived upstream
+# (e.g. the archived FastMCTS agent) cannot linger and drift into the bundle.
 echo "Syncing backend code to browser_python directory..."
+rm -rf browser_python/engine browser_python/mcts browser_python/agents browser_python/config
 mkdir -p browser_python/engine browser_python/mcts browser_python/agents browser_python/config
 cp -R engine/* browser_python/engine/
 cp -R mcts/* browser_python/mcts/

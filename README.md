@@ -197,7 +197,8 @@ MCTS_Laboratory/
 ├── frontend/            # React/TypeScript SPA
 ├── browser_python/      # Pyodide mirror of engine + MCTS
 ├── webapi/              # FastAPI app module (research + deploy profiles)
-├── api-runtime/         # Vercel entry point — loads webapi in deploy profile
+├── api/                 # Vercel serverless function (api/index.py, deploy profile)
+├── api-runtime/         # Local uvicorn entry — loads webapi in deploy profile
 ├── run_server.py        # Local dev entry point — runs webapi/app.py on :8000
 ├── benchmarks/          # Performance benchmarks
 ├── schemas/             # Pydantic data models

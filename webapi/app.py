@@ -1849,9 +1849,25 @@ def create_app(
         lifespan=lifespan,
     )
 
+    # CORS: on Vercel the SPA and this function are same-origin, so CORS is not
+    # exercised in the common case. We still configure it sensibly so that
+    # local dev and any cross-origin (preview/prod) setups work without
+    # weakening to a blanket "*". Origins are environment-driven:
+    #   CORS_ALLOW_ORIGINS        — comma-separated explicit origins (production)
+    #   CORS_ALLOW_ORIGIN_REGEX   — regex (defaults to *.vercel.app previews)
+    _default_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    _env_origins = [
+        origin.strip()
+        for origin in os.getenv("CORS_ALLOW_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+    _allow_origin_regex = os.getenv(
+        "CORS_ALLOW_ORIGIN_REGEX", r"https://.*\.vercel\.app"
+    )
     app_instance.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=_default_origins + _env_origins,
+        allow_origin_regex=_allow_origin_regex or None,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

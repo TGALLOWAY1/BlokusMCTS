@@ -13,7 +13,12 @@ Key concepts:
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from openskill.models import PlackettLuce
+# NOTE: ``openskill`` is imported lazily inside ``TrueSkillTracker.__init__`` (not
+# at module top) so that importing this module — and anything that transitively
+# imports it, e.g. ``arena_stats`` → ``gauntlet`` → ``agents.champion`` — does not
+# require the openskill dependency. This keeps the deploy serverless function slim
+# (it only needs the JSON config loader, never the rating model) while research/
+# arena code that actually constructs a tracker still pulls openskill on demand.
 
 
 # Default TrueSkill-compatible parameters
@@ -35,6 +40,8 @@ class TrueSkillTracker:
         beta: float = DEFAULT_MU / 2.0,
         tau: float = DEFAULT_MU / 100.0,
     ):
+        from openskill.models import PlackettLuce
+
         self._mu = mu
         self._sigma = sigma
         self._model = PlackettLuce(mu=mu, sigma=sigma, beta=beta, tau=tau)

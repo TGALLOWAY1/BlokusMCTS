@@ -1,0 +1,10 @@
+# Slim, deploy-only dependencies for the Vercel Python serverless function.
+# Kept adjacent to api/index.py so @vercel/python installs THESE (not the heavy
+# research deps in the repo-root requirements.txt / pyproject.toml).
+# Mirrors api-runtime/requirements.txt — keep the two in sync.
+fastapi
+uvicorn[standard]
+pydantic
+numpy
+orjson
+websockets

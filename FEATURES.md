@@ -115,6 +115,15 @@
 - Challenge Champion gameplay profile with tier/cap/reason move stats — `webapi/gameplay_agent_factory.py`, `schemas/game_state.py`
 - MongoDB integration — `webapi/db/`
 - Research and deploy profiles — `webapi/profile.py`
+- Environment-driven CORS: explicit local-dev origins plus `CORS_ALLOW_ORIGINS` (comma-separated) and `CORS_ALLOW_ORIGIN_REGEX` (defaults to `*.vercel.app` previews); no blanket `*` — `webapi/app.py`
+
+## Deployment (Vercel)
+
+- Vercel config: Vite SPA built from `frontend/` (`buildCommand` + `outputDirectory=frontend/dist`, no legacy `builds` array) served as static assets, with the Python serverless function auto-detected at `api/index.py`; rewrites route `/api/*` and `/health` to the function and all else to the SPA. `functions.includeFiles` ships read-only runtime data (`data/`, `arena_runs/`, `config/`) — `vercel.json`
+- Vercel serverless entry: `api/index.py` exposes the deploy-profile FastAPI ASGI `app` (gameplay + read-only `/api/champion`, `/api/arena-runs`, `/health`; no research routes, no MongoDB) with a slim adjacent `api/requirements.txt` — `api/index.py`, `api/requirements.txt`
+- Same-origin API by default: the frontend uses relative `/api/...` paths in production unless `VITE_API_URL` is explicitly set, so an unset value never leaks `localhost` into a production build — `frontend/src/constants/gameConstants.ts`
+- Browser-core bundle staleness guard: `scripts/check_browser_core.sh` fails (CI-friendly) if `frontend/public/blokus_core.zip` is missing or drifts from `engine/`/`mcts/`/`agents/`/`config/`/`worker_bridge.py`; `build_browser_core.sh` now cleans synced dirs so archived files cannot linger in the bundle — `scripts/check_browser_core.sh`, `scripts/build_browser_core.sh`
+- Lazy `openskill` import in the TrueSkill tracker so the deploy function (and anything importing `arena_stats`/`gauntlet`/`agents.champion`) does not require the rating dependency just to load a champion config — `analytics/tournament/trueskill_rating.py`
 
 ## Browser-Side Execution
 

@@ -1,30 +1,15 @@
 {
-  "builds": [
-    {
-      "src": "api-runtime/app.py",
-      "use": "@vercel/python"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm --prefix frontend install && npm --prefix frontend run build",
+  "outputDirectory": "frontend/dist",
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "{data/**,arena_runs/**/summary.json,config/**}"
     }
-  ],
+  },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api-runtime/app.py"
-    },
-    {
-      "source": "/health",
-      "destination": "/api-runtime/app.py"
-    },
-    {
-      "source": "/docs",
-      "destination": "/api-runtime/app.py"
-    },
-    {
-      "source": "/openapi.json",
-      "destination": "/api-runtime/app.py"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/health", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
