@@ -205,6 +205,38 @@ def test_champion_browser_config_translates_mcts_params():
     assert mcts["state_eval_weights"] == {"accessible_corners": 0.24}
 
 
+@contextmanager
+def _parallel_champion_registry():
+    """Validated champion whose config uses root parallelization (num_workers=2)."""
+    with TemporaryDirectory() as tmp:
+        cfg = Path(tmp) / "champ.json"
+        cfg.write_text(
+            json.dumps(
+                {
+                    "type": "mcts",
+                    "thinking_time_ms": 500,
+                    "rollout_policy": "random",
+                    "num_workers": 2,
+                    "parallel_strategy": "root",
+                }
+            ),
+            encoding="utf-8",
+        )
+        reg = Path(tmp) / "registry.json"
+        _write_registry(reg, _validated_entry(str(cfg)))
+        yield reg
+
+
+def test_champion_browser_config_forces_single_worker():
+    """Pyodide has no working multiprocessing, so root parallelization cannot run
+    in-browser. The browser spec must collapse num_workers to 1."""
+    with _parallel_champion_registry() as reg, _env(REGISTRY_PATH_ENV, str(reg)):
+        meta = load_champion_metadata()
+        spec = champion_browser_config(meta)
+
+    assert spec["mcts"]["num_workers"] == 1
+
+
 # ---------------------------------------------------------------------------
 # 2. No validated champion -> clear failure
 # ---------------------------------------------------------------------------

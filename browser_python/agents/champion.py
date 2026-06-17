@@ -277,6 +277,12 @@ def _mcts_browser_kwargs(
     if deterministic and thinking_time_ms is not None:
         kwargs["iterations"] = max(1, int(round(iterations_per_ms * float(thinking_time_ms))))
         kwargs.pop("time_limit", None)
+    # The in-browser (Pyodide) runtime has no working multiprocessing, so root
+    # parallelization (ProcessPoolExecutor) cannot run there. Force single-worker
+    # for the browser spec — root parallelization is a throughput optimization, so
+    # collapsing it preserves move quality while keeping the demo runnable.
+    if int(kwargs.get("num_workers", 1) or 1) != 1:
+        kwargs["num_workers"] = 1
     return kwargs
 
 

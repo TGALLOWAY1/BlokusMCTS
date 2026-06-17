@@ -141,13 +141,33 @@ diagnostics minimal — enough for portfolio storytelling without overbuilding.
 
 ---
 
+## Current champion (provisional)
+
+The registry's current champion (`v2`) is **`key_findings_best`** — the "Best
+Configuration" from the Layer 1-9 assessment (`KEY_FINDINGS.md`), promoted
+**provisionally** (not by a gauntlet) via `scripts/promote_layered_best.py` so the
+demo has a concrete opponent now. Its banner stats are the documented
+layered-assessment numbers: **win rate 0.54** (the KEY_FINDINGS headline) and the
+**TrueSkill prior (μ=25.0)** — no gauntlet has rated this exact config, so
+validation games show as "—". A future `scripts/champion_gauntlet.py --promote`
+supersedes it with a gauntlet-validated champion. The provisional status is stated
+plainly in the registry's `promotion_reason` / `notes`.
+
+> Note: `key_findings_best` uses `num_workers=2` (root parallelization). Pyodide
+> has no working multiprocessing, so `champion_browser_config()` forces
+> `num_workers=1` in the browser spec — root parallelization is a throughput
+> optimization, so move quality is preserved.
+
 ## Known limitations
 
 - **Requires a promoted champion.** When the registry has no validated champion
-  (the shipped seed `v1` has null metrics and does not pass the gauntlet gates),
+  (the shipped seed `v1` had null metrics and did not pass the gauntlet gates),
   `GET /api/champion` returns `404` and the demo shows a friendly "no validated
   champion yet" state instead of a Play button. Promote one with
-  `scripts/champion_gauntlet.py --promote`.
+  `scripts/champion_gauntlet.py --promote` (or, provisionally, with
+  `scripts/promote_layered_best.py`).
+- **The current champion is provisional**, not gauntlet-validated; its TrueSkill
+  is the prior and its win rate is the documented layered-assessment headline.
 - **Champion runs in-browser.** Per-move budgets are kept small
   (`CHAMPION_*_BUDGET_MS` in `frontend/src/constants/gameConstants.ts`) so the
   demo stays responsive in Pyodide; the in-browser champion is therefore weaker

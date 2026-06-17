@@ -1,16 +1,28 @@
 # Champion Progression
 
-**Status as of 2026-05-15.** Single source of truth for the agent storyline.
+**Status as of 2026-06-17.** Single source of truth for the agent storyline.
 If a doc disagrees with this page, this page is right.
 
 ## Current Status
 
-- **There is no validated champion.** No agent currently in the registry has
-  passed the promotion gates defined below.
+- **The registry's current champion (`v2`) is `key_findings_best`, promoted
+  PROVISIONALLY — not by a gauntlet.** It was selected as the best agent from
+  the Layer 1-9 assessment (the "Best Configuration" documented in
+  `KEY_FINDINGS.md`) so the public "Play the Champion" demo has a concrete,
+  documented opponent *for now*. Its registry metrics are the **documented
+  layered-assessment numbers**, not fresh measurements: win rate `0.54` (the
+  `KEY_FINDINGS.md` headline) and the TrueSkill **prior** (`mu=25.0`), because no
+  gauntlet has rated this exact combined config. `total_games_played` and
+  `gauntlet_run_path` are null. See `scripts/promote_layered_best.py`.
+- **There is still no _gauntlet-validated_ champion.** A future
+  `scripts/champion_gauntlet.py --promote` run supersedes the provisional `v2`
+  with a fully validated champion. The provisional entry is labelled honestly in
+  `data/champion_registry.json` (`promotion_reason` / `notes`).
 - `champion_v1` is a **failed integrated candidate** kept as a regression
   baseline. It loses head-to-head to a same-budget peer (see "v1 failure"
   below), so it cannot be used as the headline agent.
-- `champion_minimal` is the **current candidate**, not the champion. It
+- `champion_minimal` is the **current gauntlet candidate**, not yet the
+  gauntlet-validated champion. It
   isolates only the empirically validated layers and adds the Layer 8
   parallelization that v1 missed. It still has to clear the promotion gate
   on the Night-1 reset run.
@@ -28,8 +40,9 @@ If a doc disagrees with this page, this page is right.
 | 3 | `pool_l45_100ms` | Layer 4 + Layer 5 MCTS at 100 ms / 50 iter | Reference (low tier) | arena pool |
 | 5 | `pool_peer_500ms` | MCTS same time budget as champion candidates, no opponent modeling | **Active peer to beat** — currently outperforms `champion_v1` | arena pool |
 | – | `champion_v1` | Full-stack MCTS w/ phase weights, opponent modeling, adaptive C, sufficiency/loss-avoidance | **Failed full-stack candidate** — promoted prematurely with null metrics, lost to `pool_peer_500ms` | `config/champion_arena_params.json`, `data/champion_registry.json` |
-| – | `champion_minimal` | Validated-only layers + L8 root parallelization | **Current candidate** — awaiting Night-1 reset gate | `config/champion_minimal_params.json` |
-| – | `champion_v2` | _placeholder_ | Reserved for the Night-1 winner if the gate passes | TBD |
+| – | `champion_minimal` | Validated-only layers + L8 root parallelization | **Current gauntlet candidate** — awaiting Night-1 reset gate | `config/champion_minimal_params.json` |
+| 3–9 | `key_findings_best` | The layered assessment's "Best Configuration" (random rollout, depth-5 cutoff, minimax α=0.25, calibrated weights, RAVE k=1000, root-2w, adaptive depth) | **Provisional champion (`v2`)** — selected from the Layer 1-9 assessment, *not* gauntlet-validated; serves the public demo for now | `config/key_findings_best_params.json`, `scripts/promote_layered_best.py` |
+| – | `champion_v2` | _now used by the provisional `key_findings_best` entry_ | The next **gauntlet** winner will supersede it | TBD |
 | – | `champion_v3` | _placeholder_ | Reserved for Night-3 refit-weight candidate | TBD |
 
 ## Why `champion_v1` is the failed candidate
