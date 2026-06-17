@@ -1,6 +1,43 @@
 # MCTS Laboratory — TODO
 
-Aggregated from Layers 0–9 PR reports. Last updated: 2026-03-26.
+Aggregated from Layers 0–9 PR reports. Last updated: 2026-06-17.
+
+## Manual Setup Required for Overnight MCTS Runs
+
+These steps cannot be safely automated and must be done by a human before (or
+alongside) an agent-assisted overnight run. See
+`docs/03-implementation/TRAINING_AND_OVERNIGHT_RUNS.md`.
+
+**Environment & compute**
+- [ ] Install Python deps: `pip install -r requirements.txt` (numpy, pandas,
+      scikit-learn, joblib, pyarrow, openskill are required for the gauntlet).
+- [ ] Decide local vs cloud compute. The remote web container is **ephemeral** —
+      anything not committed/pushed is lost when it is reclaimed.
+- [ ] Disable system/display sleep on a local machine for the run's duration.
+- [ ] Confirm ≥ ~2 GB free disk (`df -h .`) for snapshots + arena run logs.
+- [ ] Confirm expected runtime: ~4–5 min/game with cutoff configs; a 3-seed ×
+      60-game gauntlet is a few hours. Never use full (uncut) rollouts overnight.
+- [ ] Set any required environment variables for your machine (none are needed
+      by default).
+
+**Agent tooling (only if using the automation runbooks)**
+- [ ] Install Claude Code if you want to use `.claude/commands/run-overnight-mcts.md`.
+- [ ] Install + authenticate the Codex CLI if you want to use
+      `prompts/codex/overnight_mcts.md` (`codex exec`). Not assumed to be set up.
+- [ ] GitHub Actions / hooks are **not** configured in this repo; wire them up
+      manually if you want scheduled runs.
+
+**Promotion & artifacts (human-in-the-loop)**
+- [ ] Manually review the gauntlet summary before any promotion.
+- [ ] Manually approve champion promotion by re-running
+      `python scripts/champion_gauntlet.py ... --promote` (agents must never do this).
+- [ ] Verify and commit generated artifacts (snapshots, dated models, registry
+      change) before they are lost with the container.
+
+**Known wart to fix**
+- [ ] `scripts/generate_training_data.py` defaults `--agent-type` to `fast_mcts`,
+      which is archived and fails to import. Change the default to `mcts` (and
+      drop `fast_mcts` from `choices`). Until then, always pass `--agent-type mcts`.
 
 ## Status Summary
 

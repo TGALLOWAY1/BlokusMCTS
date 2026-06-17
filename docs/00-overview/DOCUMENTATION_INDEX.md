@@ -26,7 +26,7 @@
 - [Architecture](../02-architecture/ARCHITECTURE.md) · [System Map](../02-architecture/SYSTEM_MAP.md) · [Agent Interface](../02-architecture/AGENT_INTERFACE.md) · [Data Model](../02-architecture/DATA_MODEL.md) · [API Inventory](../02-architecture/API_INVENTORY.md) · [State Management](../02-architecture/STATE_MANAGEMENT.md) · [Integrations](../02-architecture/INTEGRATIONS.md)
 
 ### 03 — Implementation
-- [Codebase Inventory](../03-implementation/CODEBASE_INVENTORY.md) · [Route Inventory](../03-implementation/ROUTE_INVENTORY.md) · [Config & Environment](../03-implementation/CONFIG_AND_ENVIRONMENT.md) · [Testing Strategy](../03-implementation/TESTING_STRATEGY.md)
+- [Codebase Inventory](../03-implementation/CODEBASE_INVENTORY.md) · [Route Inventory](../03-implementation/ROUTE_INVENTORY.md) · [Config & Environment](../03-implementation/CONFIG_AND_ENVIRONMENT.md) · [Testing Strategy](../03-implementation/TESTING_STRATEGY.md) · [Training & Overnight Runs](../03-implementation/TRAINING_AND_OVERNIGHT_RUNS.md)
 
 ### 04 — Quality
 - [Known Issues](../04-quality/KNOWN_ISSUES.md) · [Technical Debt](../04-quality/TECHNICAL_DEBT.md) · [Risk Register](../04-quality/RISK_REGISTER.md) · [Regression Checklist](../04-quality/REGRESSION_CHECKLIST.md) · [Security & Privacy Notes](../04-quality/SECURITY_AND_PRIVACY_NOTES.md)
