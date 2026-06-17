@@ -16,7 +16,8 @@ export const TourProgressRail: React.FC<{
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    // Progressive enhancement: not all environments (e.g. jsdom) implement this.
+    activeRef.current?.scrollIntoView?.({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }, [activeIndex]);
 
   return (
