@@ -1,10 +1,10 @@
 {
-  "current_version": "v1",
+  "current_version": "v2",
   "versions": {
     "v1": {
       "promoted_at": "2026-04-29T00:00:00+00:00",
       "promoted_from": null,
-      "promotion_reason": "Initial champion — challenge_champion_config + Layer 9 adaptive rollout depth",
+      "promotion_reason": "Initial champion \u2014 challenge_champion_config + Layer 9 adaptive rollout depth",
       "params": {
         "deterministic_time_budget": true,
         "iterations_per_ms": 0.5,
@@ -39,9 +39,62 @@
       "_mu_acc": 0.0,
       "_sc_acc": 0.0,
       "_count": 0
+    },
+    "v2": {
+      "promoted_at": "2026-06-17T09:00:03.011908+00:00",
+      "promoted_from": "v1",
+      "promotion_reason": "PROVISIONAL (not gauntlet-validated): selected as the best agent from the Layer 1-9 assessment \u2014 the 'Best Configuration' documented in KEY_FINDINGS.md (random rollout, cutoff depth 5, minimax backup alpha=0.25, ML-calibrated state-eval weights, RAVE k=1000, root 2-worker parallelization, adaptive rollout depth). Promoted to give the public 'Play the Champion' demo a concrete opponent for now, pending a full multi-seed champion gauntlet.",
+      "champion_name": "key_findings_best",
+      "config_path": "config/key_findings_best_params.json",
+      "params": {
+        "deterministic_time_budget": true,
+        "iterations_per_ms": 0.5,
+        "exploration_constant": 1.414,
+        "use_transposition_table": true,
+        "rollout_policy": "random",
+        "rollout_cutoff_depth": 5,
+        "minimax_backup_alpha": 0.25,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "num_workers": 2,
+        "parallel_strategy": "root",
+        "adaptive_rollout_depth_enabled": true,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "state_eval_weights": {
+          "squares_placed": 0.0295,
+          "remaining_piece_area": -0.0295,
+          "accessible_corners": 0.243,
+          "reachable_empty_squares": 0.081,
+          "largest_remaining_piece_size": -0.231,
+          "opponent_avg_mobility": -0.3,
+          "center_proximity": 0.0,
+          "territory_enclosure_area": 0.0
+        }
+      },
+      "thinking_time_ms": 500,
+      "avg_win_rate": 0.54,
+      "win_rate_ci": null,
+      "avg_trueskill_mu": 25.0,
+      "trueskill_sigma": 8.333,
+      "trueskill_conservative": 0.0,
+      "avg_score": null,
+      "total_games_played": null,
+      "seeds": [],
+      "validation_date": "2026-06-17T09:00:03.011908+00:00",
+      "gauntlet_run_path": null,
+      "comparison_opponents": [],
+      "notes": "Provisional champion from the layered (Layer 1-9) assessment, not a gauntlet. Win rate is the documented KEY_FINDINGS.md headline (0.54); TrueSkill is the prior (mu=25.0) because no gauntlet has rated this exact config. Supersede with scripts/champion_gauntlet.py --promote.",
+      "gate_pass": true
     }
   },
-  "iterations": [],
+  "iterations": [
+    {
+      "version": "v2",
+      "champion": "key_findings_best",
+      "promoted_at": "2026-06-17T09:00:03.011908+00:00"
+    }
+  ],
   "snapshot_csv_paths": [],
   "total_games_played": 0
 }

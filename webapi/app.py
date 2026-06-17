@@ -58,6 +58,7 @@ from schemas.game_state import (
 from agents.champion import (
     CHAMPION_PROFILE,
     NoValidatedChampionError,
+    champion_browser_config,
     load_champion_metadata,
 )
 from webapi.deploy_validation import (
@@ -1145,6 +1146,16 @@ async def get_champion():
     except Exception as exc:  # pragma: no cover - unexpected registry error
         raise HTTPException(status_code=500, detail=f"Failed to load champion: {exc}")
 
+    # Browser-ready agent spec so the in-browser (Pyodide) demo can instantiate
+    # the exact validated champion. Resolved server-side (registry-backed) so the
+    # frontend never hardcodes a champion config path. Best-effort: if it cannot
+    # be resolved we still return metadata so the banner renders.
+    agent_config = None
+    try:
+        agent_config = champion_browser_config(meta)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(f"Could not resolve champion browser config: {exc}")
+
     return {
         "name": meta.champion_name,
         "version": meta.version,
@@ -1153,8 +1164,12 @@ async def get_champion():
         "totalGamesPlayed": meta.total_games,
         "winRate": meta.win_rate,
         "trueSkill": meta.trueskill_mu,
+        "trueSkillConservative": meta.trueskill_conservative,
+        "thinkingTimeMs": meta.thinking_time_ms,
         "gauntletRunPath": meta.gauntlet_run_path,
         "notes": meta.notes or meta.promotion_reason or "",
+        # Flat, JSON-serialisable spec the Pyodide worker uses to build the agent.
+        "agentConfig": agent_config,
     }
 
 

@@ -54,6 +54,26 @@ the in-browser Pyodide bundle, see [`docs/deployment.md`](docs/deployment.md).
 5. Watch the **Explain This Move** panel to see the MCTS agent's thought process — top candidates, simulation counts, and Q-values.
 6. Click **AI Scoreboard** to view the statistically significant evaluation matrix mapping agent strength hierarchy.
 
+### Play the Champion 🏆
+
+The headline portfolio demo: play a full game of Blokus against the **validated
+champion** — the agent that cleared the [gauntlet](docs/CHAMPION_GAUNTLET.md) and
+was promoted into the champion registry.
+
+1. From the start screen, open the **Play the Champion** card. It shows the
+   champion's win rate, TrueSkill, total validation games, and validation date,
+   pulled from the registry-backed `GET /api/champion` endpoint.
+2. Click **Play the Champion** — you (Red) face three champion opponents.
+3. An in-game banner pins the champion's metadata, the **scoring mode** (standard
+   Blokus by default), a live *"Champion thinking…"* indicator, and lightweight
+   search diagnostics (time, simulations, depth) for its last move.
+4. Gameplay runs entirely in the browser via Pyodide; the frontend never
+   hardcodes a config path — it instantiates whatever the registry serves.
+
+If no champion has been promoted yet, the demo says so and points you at
+`scripts/champion_gauntlet.py --promote`. Full details:
+[`docs/05-frontend/PLAY_THE_CHAMPION_DEMO.md`](docs/05-frontend/PLAY_THE_CHAMPION_DEMO.md).
+
 ---
 
 ## Documentation

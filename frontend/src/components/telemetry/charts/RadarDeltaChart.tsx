@@ -165,9 +165,9 @@ export const RadarDeltaChart: React.FC<RadarDeltaChartProps> = ({ telemetry, sho
             </h3>
 
             <div className="flex-1 flex gap-2 min-h-0">
-                <MiniRadar title="Expansion" data={expansionData} moverColor={moverColor} moverId={telemetry.moverId} showOpponents={showOpponents} />
+                <MiniRadar title="Expansion" data={expansionData} moverColor={moverColor} showOpponents={showOpponents} />
                 <div className="w-px bg-charcoal-700 shrink-0" />
-                <MiniRadar title="Risk" data={riskData} moverColor={moverColor} moverId={telemetry.moverId} showOpponents={showOpponents} />
+                <MiniRadar title="Risk" data={riskData} moverColor={moverColor} showOpponents={showOpponents} />
             </div>
 
             {/* Shared legend */}

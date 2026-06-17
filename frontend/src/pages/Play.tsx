@@ -6,6 +6,7 @@ import { PieceTray } from '../components/PieceTray';
 import { TrayLeaderboard } from '../components/TrayLeaderboard';
 import { LogConsole } from '../components/LogConsole';
 import { GameConfigModal } from '../components/GameConfigModal';
+import { ChampionBanner } from '../components/ChampionBanner';
 import { useNavigate } from 'react-router-dom';
 import { IS_DEPLOY_PROFILE } from '../constants/gameConstants';
 
@@ -87,6 +88,9 @@ export const Play: React.FC = () => {
   const currentPlayer = gameState?.current_player;
   const playerConfig = gameState?.players?.find((p: any) => p.player === currentPlayer);
   const isHumanPlayer = playerConfig?.agent_type === 'human' || !gameState?.players; // Default to human if no player config
+  // Whether the game has any human seat — critical controls (hint/pass/save) stay
+  // visible across AI turns so the layout never shifts and actions stay discoverable.
+  const hasHumanPlayer = !gameState?.players || gameState.players.some((p: any) => p.agent_type === 'human');
   const legalMovesCount = gameState?.legal_moves?.length || 0;
 
   // Set viewingPlayer once when the game first loads (to human player's color)
@@ -312,6 +316,8 @@ export const Play: React.FC = () => {
 
       {/* Center Column - Board and Log Console */}
       <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Champion demo banner (renders only for "Play the Champion" games) */}
+        <ChampionBanner />
         {gameState?.game_over && (
           <div className="w-full mb-4 bg-charcoal-800 border border-charcoal-700 p-4 flex items-center justify-between">
             <div className="text-gray-200">Game finished. Winner: <span className="font-semibold">{gameState.winner || 'None'}</span></div>
@@ -374,10 +380,19 @@ export const Play: React.FC = () => {
                   ))}
                 </span>
               )}
+              {gameState?.scoring_mode && (
+                <span
+                  className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-charcoal-600 text-gray-400"
+                  title="Scoring rule set in effect for this game"
+                >
+                  {gameState.scoring_mode === 'house' ? 'House scoring' : 'Standard scoring'}
+                </span>
+              )}
             </div>
             <div className="flex items-center space-x-2">
               <button
                 onClick={saveGame}
+                data-testid="critical-ui-save"
                 className="p-2 text-gray-400 hover:text-gray-200 transition-colors"
                 title="Save Game to File"
               >
@@ -439,9 +454,10 @@ export const Play: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </button>
-              {isHumanPlayer && !gameState?.game_over && (
+              {hasHumanPlayer && !gameState?.game_over && (
                 <button
                   onClick={() => setShowHintModal(true)}
+                  data-testid="critical-ui-hint"
                   className="p-2 text-gray-400 hover:text-yellow-300 transition-colors"
                   title="Move Hints — legal moves by piece and legal positions"
                 >
@@ -471,17 +487,18 @@ export const Play: React.FC = () => {
                   </svg>
                 </button>
               )}
-              {isHumanPlayer && (
+              {hasHumanPlayer && (
                 <button
                   onClick={handlePassTurn}
-                  disabled={isPassing || isMakingMove}
-                  className={`px-4 py-2 text-sm font-medium border transition-colors ${isPassing || isMakingMove
+                  data-testid="critical-ui-pass"
+                  disabled={isPassing || isMakingMove || !isHumanPlayer}
+                  className={`px-4 py-2 text-sm font-medium border transition-colors ${isPassing || isMakingMove || !isHumanPlayer
                     ? 'bg-charcoal-900 border-charcoal-700 text-gray-500 cursor-not-allowed'
                     : legalMovesCount === 0
                       ? 'bg-charcoal-800 border-neon-yellow text-neon-yellow hover:bg-charcoal-700 hover:border-neon-yellow/80'
                       : 'bg-charcoal-800 border-charcoal-700 text-gray-200 hover:bg-charcoal-700 hover:border-charcoal-600'
                     }`}
-                  title={legalMovesCount === 0 ? 'Pass turn (no moves available)' : 'Pass turn'}
+                  title={!isHumanPlayer ? 'Pass (only on your turn)' : legalMovesCount === 0 ? 'Pass turn (no moves available)' : 'Pass turn'}
                 >
                   {isPassing ? 'Passing...' : legalMovesCount === 0 ? 'Pass Turn (No Moves)' : 'Pass Turn'}
                 </button>
