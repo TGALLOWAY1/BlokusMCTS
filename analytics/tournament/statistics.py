@@ -12,6 +12,39 @@ import random
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
+def wilson_score_interval(wins: float, trials: float, z: float = 1.96) -> Dict[str, float]:
+    """Wilson score confidence interval for a binomial proportion.
+
+    The Wilson interval is well behaved for small samples and extreme
+    proportions (unlike the normal approximation), which makes it the
+    right tool for arena win rates measured over tens of games.
+
+    ``wins`` may be fractional to accommodate shared-win accounting
+    (a 2-way tie counts as 0.5 of a win), matching ``win_points`` in
+    :func:`analytics.tournament.arena_stats.compute_summary`.
+
+    Args:
+        wins: Number of wins (may be fractional for shared wins).
+        trials: Number of games played.
+        z: Z-score for the desired confidence level (1.96 = 95%).
+
+    Returns:
+        Dict with ``lower``, ``upper`` (clamped to [0, 1]) and ``center``
+        (the raw point estimate ``wins / trials``).
+    """
+    if trials <= 0:
+        return {"lower": 0.0, "upper": 0.0, "center": 0.0}
+    p = wins / trials
+    denominator = 1 + z**2 / trials
+    center = (p + z**2 / (2 * trials)) / denominator
+    spread = z * math.sqrt((p * (1 - p) + z**2 / (4 * trials)) / trials) / denominator
+    return {
+        "lower": max(0.0, center - spread),
+        "upper": min(1.0, center + spread),
+        "center": p,
+    }
+
+
 def bootstrap_score_ci(
     scores_a: Sequence[float],
     scores_b: Sequence[float],

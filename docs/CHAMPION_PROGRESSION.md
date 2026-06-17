@@ -109,13 +109,37 @@ checklist:
 - `known_limitations` — free-text list of caveats the next iteration
   needs to address
 
-If the current code does not make this straightforward to write into
-`data/champion_registry.json`, the registry change is a **TODO** rather
-than a blocker for the doc.
+Writing this into `data/champion_registry.json` is **no longer a manual
+TODO**: `scripts/champion_gauntlet.py` (see `docs/CHAMPION_GAUNTLET.md`)
+runs the multi-seed gauntlet, enforces these gates, and — only with
+`--promote` and only when every gate passes — writes a fully-populated
+registry entry (with non-null metrics, CIs, seeds, and the gauntlet run
+path), preserving the historical `v1` entry and backing up the previous
+file. Without `--promote` it evaluates and reports but never touches the
+registry.
+
+## Champion gauntlet harness (Phase 2)
+
+The decision run is now a one-command harness rather than a hand-assembled
+arena config. `scripts/champion_gauntlet.py` runs a multi-seed, four-way
+tournament between the candidate configs — `champion_v1`,
+`champion_minimal`, `pool_peer_500ms`, and the `KEY_FINDINGS.md`
+"best config" (`key_findings_best`) — pools the games across seeds,
+ranks by TrueSkill conservative with Wilson-95 win-rate CIs, reports
+pairwise and seat-position records, and applies the promotion gates above.
+It refuses to promote on inconclusive evidence and only edits the registry
+under `--promote`. Full details: `docs/CHAMPION_GAUNTLET.md`.
+
+**Status:** the harness is built, unit-tested, and smoke-validated
+end-to-end, but the full decision run has **not** yet been executed at the
+real 500 ms budget (≈9 h for 3 seeds × 60 games). Until it is, the
+registry intentionally remains unpromoted and this page's "no validated
+champion" status stands.
 
 ## Next experiment
 
-The Night-1 reset run is the immediate gate. It is configured in
+The Night-1 reset run is the immediate gate (now runnable as the gauntlet
+above). It is configured in
 `scripts/arena_config_night1_champion_reset.json` and pits four agents
 at the same 500 ms budget: `champion_minimal`, `champion_v1`,
 `pool_peer_500ms`, `pool_heuristic`.
@@ -157,6 +181,8 @@ Catalogued in `docs/arena_run_registry.md`. The short list:
 
 ## Related docs
 
+- `docs/CHAMPION_GAUNTLET.md` — the one-command, multi-seed evaluation +
+  promotion harness that decides this page's status.
 - `KEY_FINDINGS.md` — layer-by-layer experimental verdicts that
   `champion_minimal` is built from.
 - `docs/arena_run_registry.md` — per-run status, what each run is
