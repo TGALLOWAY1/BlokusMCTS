@@ -41,6 +41,8 @@
 - Full MCTS agent (Layers 1-9) — `mcts/mcts_agent.py`
 - Agent registry for dynamic construction — `agents/registry.py`
 - Gameplay protocol for human play — `agents/gameplay_protocol.py`, `agents/gameplay_human.py`
+- Canonical agent interface (Phase 3): single `BlokusAgent` Protocol plus `AgentDecisionContext`/`AgentDecision` and a `decide()` front door that unifies the three historical calling conventions (`select_action`, `choose_move`, legacy RL `act`) behind thin adapters — `agents/interface.py`, `docs/02-architecture/AGENT_INTERFACE.md`
+- Registry-backed champion contract (Phase 3): `load_champion()` resolves the validated champion from `data/champion_registry.json` (config path, validation date, gauntlet run path, win rate, TrueSkill, total games) and builds it through the canonical interface, failing clearly with `NoValidatedChampionError` rather than serving an unvalidated champion — `agents/champion.py`
 
 ## Arena & Tournament System
 
