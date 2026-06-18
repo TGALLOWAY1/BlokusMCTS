@@ -1849,9 +1849,22 @@ def create_app(
         lifespan=lifespan,
     )
 
+    # Same-origin Vercel rewrites route /api/* to this function, so CORS is not
+    # exercised in the default deploy. These origins are defensive: explicit
+    # localhost for dev, plus a regex covering Vercel preview/production
+    # (*.vercel.app) domains. Extra origins (e.g. a custom domain) can be added
+    # via the ALLOWED_ORIGINS env var (comma-separated).
+    allow_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    extra_origins = os.getenv("ALLOWED_ORIGINS", "")
+    if extra_origins:
+        allow_origins.extend(
+            origin.strip() for origin in extra_origins.split(",") if origin.strip()
+        )
+
     app_instance.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=allow_origins,
+        allow_origin_regex=r"https://.*\.vercel\.app",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

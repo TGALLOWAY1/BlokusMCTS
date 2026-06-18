@@ -233,3 +233,39 @@ route `/api/*` to the function and everything else to the SPA.
 _No functionality is recommended for removal. The only required change is a
 deployment-config fix; all gameplay, MCTS, agent-vs-agent, and visualization
 capabilities are preserved by deploying the in-browser engine as static assets._
+
+---
+
+## 8. Execution follow-up (2026-06-18)
+
+Two ground-truth facts surfaced while executing the rollout (Stage 1) that the
+audit above did not capture. Both are fixed; see `docs/deployment.md`.
+
+1. **Production builds actively leaked `http://localhost:8000`.** Beyond §7's
+   "no `localhost` leakage in `VITE_API_URL`" note, the code path made the leak
+   unavoidable: `frontend/src/constants/gameConstants.ts` set
+   `API_BASE = import.meta.env.PROD ? API_URL : ''` where `API_URL` falls back
+   to `http://localhost:8000`, and the committed `frontend/.env` set
+   `VITE_API_URL=http://localhost:8000`. A production `vite build` therefore
+   baked localhost into the bundle (verified in the built JS). **Fix:** PROD now
+   uses the un-defaulted `VITE_API_URL` (empty ⇒ relative same-origin), plus
+   `frontend/.env.production` pins deploy profile + empty API URL + no debug UI.
+
+2. **The slim function needs `openskill`.** §1/§2 described the deploy function
+   as "pure Python + numpy". That holds for gameplay, but `/api/champion`
+   resolves the champion's browser agent spec through
+   `agents.champion → analytics.tournament.gauntlet → arena_stats →
+   trueskill_rating`, which imports `openskill` at module load. Without it,
+   `agentConfig` returns `null` and the in-browser "Play the Champion" demo
+   loses its exact validated config (banner still renders). **Fix:** added
+   `openskill` (pure Python, no native deps) to `api-runtime/requirements.txt`
+   and `analytics/**` to the function's `includeFiles`.
+
+**Deployment mechanism note:** the Vercel MCP `deploy_to_vercel` tool only
+returns instructions; the environment used for Stage 1 had no Vercel CLI or
+token and no `.vercel/` project link. The live preview/production deploy
+(Stages 2–3 verification) therefore requires the repo to be linked to a Vercel
+project via the Git integration (or a CLI token). All code/config is staged so
+the deploy works once linked. CSP (Stage 5) is intentionally documented but not
+yet enabled, so the first preview verifies gameplay without a CSP masking other
+issues.

@@ -1,0 +1,29 @@
+name: browser-core-sync
+
+# Fails if frontend/public/blokus_core.zip drifts from the Python sources it
+# bundles (engine/, mcts/, agents/, config/, worker_bridge.py). The in-browser
+# Pyodide worker runs this zip, so stale bundles would ship old engine/MCTS code.
+
+on:
+  pull_request:
+    paths:
+      - "engine/**"
+      - "mcts/**"
+      - "agents/**"
+      - "config/challenge_champion_config.json"
+      - "browser_python/worker_bridge.py"
+      - "frontend/public/blokus_core.zip"
+      - "scripts/build_browser_core.sh"
+      - "scripts/check_browser_core.sh"
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install zip tools
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+      - name: Verify blokus_core.zip is in sync
+        run: bash scripts/check_browser_core.sh
