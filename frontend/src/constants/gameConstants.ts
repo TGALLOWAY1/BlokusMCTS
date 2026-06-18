@@ -4,7 +4,11 @@
 // Environment variables are loaded from .env file (development) or OS env (production)
 // Vite requires VITE_ prefix for environment variables exposed to client code
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Raw, un-defaulted API URL. Empty/unset means "same origin" (relative URLs).
+const RAW_VITE_API_URL = (import.meta.env.VITE_API_URL || '').trim();
+// Localhost fallback is only used to derive a dev WebSocket URL; it must never
+// leak into a same-origin production deploy (see API_BASE below).
+const API_URL = RAW_VITE_API_URL || 'http://localhost:8000';
 const APP_PROFILE_RAW = (import.meta.env.VITE_APP_PROFILE || 'research').toLowerCase();
 
 export const APP_PROFILE: 'research' | 'deploy' = APP_PROFILE_RAW === 'deploy' ? 'deploy' : 'research';
@@ -47,9 +51,11 @@ const getWebSocketURL = (): string => {
   return API_URL.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
 };
 
-// API_BASE: Empty string means use relative URLs (works with Vite proxy in dev)
-// In production, this should be the full API URL
-export const API_BASE = import.meta.env.PROD ? API_URL : '';
+// API_BASE: Empty string means use relative, same-origin URLs (works with the
+// Vite proxy in dev and with Vercel same-origin rewrites in production). Only an
+// explicitly configured VITE_API_URL produces an absolute (cross-origin) base;
+// we never fall back to localhost in production.
+export const API_BASE = import.meta.env.PROD ? RAW_VITE_API_URL : '';
 
 // WS_BASE: WebSocket URL (always needs full URL)
 export const WS_BASE = getWebSocketURL();

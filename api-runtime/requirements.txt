@@ -4,3 +4,8 @@ pydantic
 numpy
 orjson
 websockets
+# Pure-Python TrueSkill (Plackett-Luce) ratings. Pulled in transitively when
+# /api/champion resolves the champion's browser agent spec
+# (agents.champion -> analytics.tournament.gauntlet -> arena_stats ->
+# trueskill_rating). No native/runtime deps; keeps the deploy bundle slim.
+openskill
