@@ -1,0 +1,193 @@
+{
+  "agents": [
+    {
+      "name": "champion",
+      "params": {
+        "adaptive_exploration_avg_bf": 80.0,
+        "adaptive_exploration_base": 1.414,
+        "adaptive_exploration_enabled": true,
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_enabled": true,
+        "alliance_detection_enabled": true,
+        "alliance_threshold": 2.0,
+        "deterministic_time_budget": true,
+        "exploration_constant": 1.414,
+        "iterations_per_ms": 0.5,
+        "kingmaker_detection_enabled": true,
+        "kingmaker_score_gap": 15,
+        "loss_avoidance_enabled": true,
+        "loss_avoidance_threshold": -50.0,
+        "minimax_backup_alpha": 0.25,
+        "opponent_modeling_enabled": true,
+        "progressive_widening_enabled": true,
+        "pw_alpha": 0.5,
+        "pw_c": 2.0,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "rollout_cutoff_depth": 5,
+        "rollout_policy": "random",
+        "state_eval_phase_weights": {
+          "early": {
+            "accessible_corners": 0.3,
+            "center_proximity": 0.0,
+            "largest_remaining_piece_size": 0.0,
+            "opponent_avg_mobility": -0.05287834609528694,
+            "reachable_empty_squares": 0.0,
+            "remaining_piece_area": 0.17599664484103822,
+            "squares_placed": -0.17599664484103847,
+            "territory_enclosure_area": 0.0
+          },
+          "late": {
+            "accessible_corners": 0.17573409689186584,
+            "center_proximity": 0.0,
+            "largest_remaining_piece_size": -0.08518919739412929,
+            "opponent_avg_mobility": -0.06278383996091268,
+            "reachable_empty_squares": 0.13361753070802862,
+            "remaining_piece_area": -0.3,
+            "squares_placed": 0.3,
+            "territory_enclosure_area": 0.0
+          },
+          "mid": {
+            "accessible_corners": 0.3,
+            "center_proximity": 0.0,
+            "largest_remaining_piece_size": -0.238473591231953,
+            "opponent_avg_mobility": -0.20277351241243552,
+            "reachable_empty_squares": 0.22774497158891033,
+            "remaining_piece_area": 0.0038750218558150614,
+            "squares_placed": -0.00387502185581506,
+            "territory_enclosure_area": 0.0
+          }
+        },
+        "state_eval_weights": {
+          "accessible_corners": 0.243,
+          "center_proximity": 0.0,
+          "largest_remaining_piece_size": -0.231,
+          "opponent_avg_mobility": -0.3,
+          "reachable_empty_squares": 0.081,
+          "remaining_piece_area": -0.0295,
+          "squares_placed": 0.0295,
+          "territory_enclosure_area": 0.0
+        },
+        "sufficiency_threshold_enabled": true,
+        "use_transposition_table": true
+      },
+      "thinking_time_ms": 500,
+      "type": "mcts"
+    },
+    {
+      "name": "pool_l45_100ms",
+      "params": {
+        "deterministic_time_budget": true,
+        "iterations_per_ms": 0.5,
+        "minimax_backup_alpha": 0.25,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "rollout_cutoff_depth": 5,
+        "rollout_policy": "random",
+        "state_eval_weights": {
+          "accessible_corners": 0.243,
+          "center_proximity": 0.0,
+          "largest_remaining_piece_size": -0.231,
+          "opponent_avg_mobility": -0.3,
+          "reachable_empty_squares": 0.081,
+          "remaining_piece_area": -0.0295,
+          "squares_placed": 0.0295,
+          "territory_enclosure_area": 0.0
+        }
+      },
+      "thinking_time_ms": 100,
+      "type": "mcts"
+    },
+    {
+      "name": "pool_l9_partial_200ms",
+      "params": {
+        "adaptive_exploration_avg_bf": 80.0,
+        "adaptive_exploration_base": 1.414,
+        "adaptive_exploration_enabled": true,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_enabled": true,
+        "deterministic_time_budget": true,
+        "iterations_per_ms": 0.5,
+        "loss_avoidance_enabled": true,
+        "minimax_backup_alpha": 0.25,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "rollout_cutoff_depth": 5,
+        "rollout_policy": "random",
+        "state_eval_weights": {
+          "accessible_corners": 0.243,
+          "center_proximity": 0.0,
+          "largest_remaining_piece_size": -0.231,
+          "opponent_avg_mobility": -0.3,
+          "reachable_empty_squares": 0.081,
+          "remaining_piece_area": -0.0295,
+          "squares_placed": 0.0295,
+          "territory_enclosure_area": 0.0
+        },
+        "sufficiency_threshold_enabled": true
+      },
+      "thinking_time_ms": 200,
+      "type": "mcts"
+    },
+    {
+      "name": "pool_peer_500ms",
+      "params": {
+        "adaptive_exploration_avg_bf": 80.0,
+        "adaptive_exploration_base": 1.414,
+        "adaptive_exploration_enabled": true,
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_enabled": true,
+        "deterministic_time_budget": true,
+        "exploration_constant": 1.414,
+        "iterations_per_ms": 0.5,
+        "loss_avoidance_enabled": true,
+        "minimax_backup_alpha": 0.25,
+        "progressive_widening_enabled": true,
+        "pw_alpha": 0.5,
+        "pw_c": 2.0,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "rollout_cutoff_depth": 5,
+        "rollout_policy": "random",
+        "state_eval_weights": {
+          "accessible_corners": 0.243,
+          "center_proximity": 0.0,
+          "largest_remaining_piece_size": -0.231,
+          "opponent_avg_mobility": -0.3,
+          "reachable_empty_squares": 0.081,
+          "remaining_piece_area": -0.0295,
+          "squares_placed": 0.0295,
+          "territory_enclosure_area": 0.0
+        },
+        "sufficiency_threshold_enabled": true,
+        "use_transposition_table": true
+      },
+      "thinking_time_ms": 500,
+      "type": "mcts"
+    }
+  ],
+  "created_at": "2026-06-21T13:28:02",
+  "max_turns": 2500,
+  "notes": "Champion Gauntlet v1 \u2014 reproducible reference run. Champion (v1, all layers enabled, 500 ms) vs one fixed challenger from each pool tier: Tier 3 (L4+5, 100 ms), Tier 4 (L9 partial, 200 ms), Tier 5 (near-peer, 500 ms, no opponent model). Snapshots at plies 8-64 for evaluator refinement. Run with: python scripts/arena.py --config scripts/arena_config_champion_gauntlet.json",
+  "num_games": 40,
+  "output_root": "arena_runs",
+  "run_id": "20260621_132802_002f9dab",
+  "seat_policy": "round_robin",
+  "seed": 20260503,
+  "snapshots": {
+    "checkpoints": [
+      8,
+      16,
+      24,
+      32,
+      40,
+      48,
+      56,
+      64
+    ],
+    "enabled": true,
+    "strategy": "fixed_ply"
+  }
+}
