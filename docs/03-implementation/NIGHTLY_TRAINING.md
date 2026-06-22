@@ -1,11 +1,14 @@
-# Durable Nightly MCTS Training Pipeline
+# Durable MCTS Training Pipeline
 
 Status: **Implemented**
 
 A continuously-improving, AlphaZero-spirit self-play training system that runs
-every night, **resumes from durable on-disk state**, generates improved candidate
-agents, promotes them when statistically justified, tracks Elo + TrueSkill over
-time, estimates progress toward human-level play, and emails a concise summary.
+**every 6 hours** (00/06/12/18 UTC), **resumes from durable on-disk state**,
+generates improved candidate agents, promotes them when statistically justified,
+tracks Elo + TrueSkill over time, estimates progress toward human-level play,
+and emails a concise summary. The pipeline was originally daily; running four
+times a day takes advantage of GitHub Actions' unlimited free minutes on public
+repos (the file/dir names still say "nightly" for historical compatibility).
 
 The cardinal rule — and the reason previous nightly attempts failed — is that
 **all training memory lives on disk under `training/state/`**. Every run loads it,
@@ -51,7 +54,13 @@ Reports also live at `training/status.md` and `training/reports/latest_diagnosis
    generations until the wall-clock budget (`--hours × 0.7`) is spent, writing
    state atomically and appending to `history.jsonl` **after each generation**
    (so a crash never loses completed generations). Each generation grows the
-   shared snapshot corpus `data/champion_snapshots.csv`.
+   shared snapshot corpus `data/champion_snapshots.csv`. Each generation's
+   3-challenger lineup is Elo-improvement oriented (see :func:`select_challengers`
+   in `scripts/champion_loop.py`): slot 0 is always `heuristic`; slot 1 is a
+   recent learned checkpoint; slot 2 is an MCTS variant, with a small
+   `WEAK_OPPONENT_PROB` (default 0.2) chance of being swapped for `random` —
+   the explicit "occasional weak agent" that anchors the bottom of the rating
+   ladder and broadens the snapshot corpus.
 4. **Candidate:** re-fit evaluator weights on the corpus → candidate = champion +
    new per-phase weights. (No candidate until ≥200 snapshot rows exist.)
 5. **Evaluate:** a battery of 4-agent arenas — `[champion, candidate, opp_A, opp_B]`
@@ -82,10 +91,18 @@ python -m training.email_summary --failed   # failure
 
 ## GitHub Actions (`.github/workflows/nightly-mcts-training.yml`)
 
-- `schedule: cron "0 3 * * *"` (03:00 UTC) + `workflow_dispatch` (manual, with
-  `hours`/`games_per_arena` inputs).
+- `schedule: cron "0 */6 * * *"` (every 6 hours at :00 UTC — 4 runs/day) +
+  `workflow_dispatch` (manual, with `hours`/`games_per_arena` inputs).
 - `concurrency: nightly-mcts-training`, `cancel-in-progress: false` — never two at
-  once, never kill an in-flight run.
+  once, never kill an in-flight run. With the 5-hour default budget and a
+  6-hour cadence there is a ~1h buffer between runs; if one runs long the next
+  scheduled tick queues rather than starting concurrently.
+- **Counter semantics under multi-run cadence:** `state["days_trained"]`
+  increments once per *run*, not once per calendar day. With 4 runs/day it now
+  reads as "training cycles completed" rather than literal days; the
+  human-strength projection's per-day rate is similarly a per-run rate. Both
+  numbers are still monotonic and useful for trend visualisation; only the
+  unit label is loose.
 - Steps: checkout → install → **train** (`continue-on-error`) → reports
   (`if: always()`) → optional Claude augmentation → **commit state back** →
   **email** (`if: always()`, `--failed` when training failed) → mark job failed.
