@@ -1,0 +1,8 @@
+{
+  "name": "mcts-laboratory",
+  "private": true,
+  "description": "Build shim so Vercel's @vercel/static-build mounts the Vite SPA output at the site root. Builds the real app in frontend/ and emits to frontend/dist (declared as distDir in vercel.json).",
+  "scripts": {
+    "build": "npm --prefix frontend ci && npm --prefix frontend run build"
+  }
+}
