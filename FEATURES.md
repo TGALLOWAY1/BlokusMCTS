@@ -150,12 +150,13 @@
 - Atomic state persistence (tmp + `os.replace`) + append-only JSONL history for partial-progress durability — `training/state_store.py`
 - Append-only SQLite rating timeline (Elo + TrueSkill per agent per run; never overwritten) with cross-run rating seeding — `training/ratings_db.py`
 - Candidate generation via Layer-6 evaluator-weight re-fit on accumulated self-play snapshots; rotating-opponent evaluation battery (vs champion, random, heuristic, previous + historical champions) under the 4-agent arena rule; conservative 6-gate promotion (reuses `analytics/tournament/gauntlet.py`) — `training/selfplay_core.py`
+- Elo-improvement-oriented per-generation challenger mix: heuristic + recent checkpoint + MCTS variant, with a `WEAK_OPPONENT_PROB`=0.2 sprinkle of `random` to anchor the bottom of the rating ladder and broaden the snapshot corpus — `scripts/champion_loop.py` (`select_challengers`)
 - Internal-only champion promotion (updates `training/state/`; opt-in `--promote-registry` to also update the deployed `data/champion_registry.json`) — `training/nightly_run.py`
 - Human-strength Elo estimation (1200/1500/1700 anchors) with moving-average trend, uncertainty band, and no-fabricated-confidence rule — `training/human_estimate.py`
 - Nightly status report (`training/status.md`: Summary / Daily Progress / Baseline Results / Human Strength Estimate / Training Trends / Risks) — `training/status_report.py`
 - Deterministic diagnostics (regression, stagnation, rating instability, refit health, promotion drought) → `training/reports/latest_diagnosis.md` (always written) — `training/diagnostics.py`
 - SMTP email digest from repo secrets, for both success and failure (graceful skip when unconfigured) — `training/email_summary.py`
-- Nightly GitHub Actions workflow (cron + manual dispatch, concurrency guard, commit-back of durable state, always-send email) — `.github/workflows/nightly-mcts-training.yml`
+- GitHub Actions training workflow: cron `0 */6 * * *` (every 6 hours, ~4 runs/day) + manual dispatch, concurrency guard (queues rather than cancels), commit-back of durable state, always-send email — `.github/workflows/nightly-mcts-training.yml`
 - Pipeline guide (architecture, operations, self-hosted runner fallback, storage growth) — `docs/03-implementation/NIGHTLY_TRAINING.md`
 
 ## Testing

@@ -1,16 +1,18 @@
 name: nightly-mcts-training
 
-# Durable, resumable nightly Blokus MCTS self-play training.
+# Durable, resumable Blokus MCTS self-play training.
 #
-# Runs every night, RESUMES from the committed durable state under training/state/,
+# Runs every 6 hours, RESUMES from the committed durable state under training/state/,
 # trains within a wall-clock budget, evaluates + (internally) promotes a candidate,
 # regenerates reports, commits the updated state back to the repo, and ALWAYS emails
 # a summary — on success and on failure. See docs/03-implementation/NIGHTLY_TRAINING.md.
 
 on:
   schedule:
-    # 03:00 UTC nightly. (cron is always UTC.)
-    - cron: "0 3 * * *"
+    # Every 6 hours at :00 (00/06/12/18 UTC) — ~20h/day of training with a ~1h
+    # buffer between runs for eval, reports, commit-back, and email. The
+    # `concurrency` block below queues (does not cancel) any overlap.
+    - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
       hours:
