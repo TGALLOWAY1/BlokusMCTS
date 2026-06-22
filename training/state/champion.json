@@ -68,10 +68,10 @@
   },
   "promoted_at": "2026-06-21T21:28:46.948571+00:00",
   "rating": {
-    "conservative": 0.0,
-    "elo": 1200.0,
-    "trueskill_mu": 25.0,
-    "trueskill_sigma": 8.333333333333334
+    "conservative": -0.09793513432550327,
+    "elo": 1174.557963615103,
+    "trueskill_mu": 24.575200860368756,
+    "trueskill_sigma": 8.224378664898087
   },
   "version": "gen0"
 }

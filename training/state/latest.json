@@ -36,23 +36,48 @@
     "type": "mcts"
   },
   "checkpoints": [],
-  "days_trained": 0,
-  "elo": 1200.0,
+  "days_trained": 1,
+  "elo": 1174.557963615103,
   "estimate_confidence": "none",
   "estimated_days_to_target": null,
   "estimated_games_to_target": null,
-  "games_today": 0,
-  "generation": 0,
+  "games_today": 2,
+  "generation": 1,
   "human_target_elo": 1700,
   "last_error": null,
   "last_promoted_generation": null,
   "last_refit_generation": -1,
-  "run_id": null,
+  "run_id": "20260622T003148Z",
   "schema_version": 1,
-  "total_games": 0,
-  "total_snapshot_rows": 0,
-  "trueskill_mu": 25.0,
-  "trueskill_ratings": {},
-  "trueskill_sigma": 8.333333333333334,
-  "updated_at": "2026-06-21T21:28:46.948607+00:00"
+  "total_games": 2,
+  "total_snapshot_rows": 64,
+  "trueskill_mu": 24.575200860368756,
+  "trueskill_ratings": {
+    "champion": {
+      "conservative": -0.09793513432550327,
+      "games_played": 2,
+      "mu": 24.575200860368756,
+      "sigma": 8.224378664898087
+    },
+    "heuristic": {
+      "conservative": 2.7510496705637557,
+      "games_played": 2,
+      "mu": 27.610190465535602,
+      "sigma": 8.286380264990616
+    },
+    "mcts_opp_model": {
+      "conservative": 2.8071401823963384,
+      "games_played": 2,
+      "mu": 27.669455131270976,
+      "sigma": 8.287438316291546
+    },
+    "random": {
+      "conservative": -4.514800090294653,
+      "games_played": 2,
+      "mu": 20.16318715632454,
+      "sigma": 8.225995748873064
+    }
+  },
+  "trueskill_sigma": 8.224378664898087,
+  "updated_at": "2026-06-22T00:35:36.531391+00:00"
 }
