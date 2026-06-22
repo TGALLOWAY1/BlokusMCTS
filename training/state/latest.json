@@ -1,0 +1,58 @@
+{
+  "candidate_params": null,
+  "champion": {
+    "config_ref": "state/champion.json",
+    "name": "champion",
+    "version": "gen0"
+  },
+  "champion_params": {
+    "params": {
+      "adaptive_rollout_depth_avg_bf": 80.0,
+      "adaptive_rollout_depth_base": 5,
+      "adaptive_rollout_depth_enabled": true,
+      "deterministic_time_budget": true,
+      "exploration_constant": 1.414,
+      "iterations_per_ms": 0.5,
+      "minimax_backup_alpha": 0.25,
+      "num_workers": 2,
+      "parallel_strategy": "root",
+      "rave_enabled": true,
+      "rave_k": 1000,
+      "rollout_cutoff_depth": 5,
+      "rollout_policy": "random",
+      "state_eval_weights": {
+        "accessible_corners": 0.243,
+        "center_proximity": 0.0,
+        "largest_remaining_piece_size": -0.231,
+        "opponent_avg_mobility": -0.3,
+        "reachable_empty_squares": 0.081,
+        "remaining_piece_area": -0.0295,
+        "squares_placed": 0.0295,
+        "territory_enclosure_area": 0.0
+      },
+      "use_transposition_table": true
+    },
+    "thinking_time_ms": 500,
+    "type": "mcts"
+  },
+  "checkpoints": [],
+  "days_trained": 0,
+  "elo": 1200.0,
+  "estimate_confidence": "none",
+  "estimated_days_to_target": null,
+  "estimated_games_to_target": null,
+  "games_today": 0,
+  "generation": 0,
+  "human_target_elo": 1700,
+  "last_error": null,
+  "last_promoted_generation": null,
+  "last_refit_generation": -1,
+  "run_id": null,
+  "schema_version": 1,
+  "total_games": 0,
+  "total_snapshot_rows": 0,
+  "trueskill_mu": 25.0,
+  "trueskill_ratings": {},
+  "trueskill_sigma": 8.333333333333334,
+  "updated_at": "2026-06-21T21:28:46.948607+00:00"
+}

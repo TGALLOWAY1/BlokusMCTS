@@ -143,8 +143,24 @@
 - Frontier video generation for per-turn board snapshots — `scripts/generate_frontier_video.py`
 - Legal-move-count plot generation from per-turn board snapshots — `scripts/plot_legal_move_counts.py`
 
+## Nightly Training Pipeline
+
+- Durable, resumable nightly self-play training orchestrator (time-budgeted; resumes from on-disk state every run, never starts over) — `training/nightly_run.py`
+- Durable state layout under `training/state/` (`latest.json`, `champion.json`, `ratings.sqlite`, `history.jsonl`, `checkpoints/`, `selfplay_runs/`, `reports/`) reconstructable in full from disk — `training/__init__.py`, `training/state_store.py`
+- Atomic state persistence (tmp + `os.replace`) + append-only JSONL history for partial-progress durability — `training/state_store.py`
+- Append-only SQLite rating timeline (Elo + TrueSkill per agent per run; never overwritten) with cross-run rating seeding — `training/ratings_db.py`
+- Candidate generation via Layer-6 evaluator-weight re-fit on accumulated self-play snapshots; rotating-opponent evaluation battery (vs champion, random, heuristic, previous + historical champions) under the 4-agent arena rule; conservative 6-gate promotion (reuses `analytics/tournament/gauntlet.py`) — `training/selfplay_core.py`
+- Internal-only champion promotion (updates `training/state/`; opt-in `--promote-registry` to also update the deployed `data/champion_registry.json`) — `training/nightly_run.py`
+- Human-strength Elo estimation (1200/1500/1700 anchors) with moving-average trend, uncertainty band, and no-fabricated-confidence rule — `training/human_estimate.py`
+- Nightly status report (`training/status.md`: Summary / Daily Progress / Baseline Results / Human Strength Estimate / Training Trends / Risks) — `training/status_report.py`
+- Deterministic diagnostics (regression, stagnation, rating instability, refit health, promotion drought) → `training/reports/latest_diagnosis.md` (always written) — `training/diagnostics.py`
+- SMTP email digest from repo secrets, for both success and failure (graceful skip when unconfigured) — `training/email_summary.py`
+- Nightly GitHub Actions workflow (cron + manual dispatch, concurrency guard, commit-back of durable state, always-send email) — `.github/workflows/nightly-mcts-training.yml`
+- Pipeline guide (architecture, operations, self-hosted runner fallback, storage growth) — `docs/03-implementation/NIGHTLY_TRAINING.md`
+
 ## Testing
 
+- Durable nightly training pipeline tests: state store/atomicity, append-only ratings DB, human-estimate math, status rendering, diagnostics, email, and resume/failure end-to-end — `tests/test_training_*.py`
 - Layer-specific test suites (Layers 3, 5, 6, 7, 8, 9) — `tests/test_layer*.py`
 - Core engine tests: legality, game over, pass, piece shapes, bitboard — `tests/`
 - Integration tests: audit invariants, agent timeout, telemetry — `tests/`
