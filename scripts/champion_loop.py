@@ -72,6 +72,12 @@ WEIGHT_SCALE = 0.30
 # Number of most-recent checkpoints to keep in the active pool
 MAX_CHECKPOINTS_IN_POOL = 3
 
+# Probability of swapping the "MCTS variant" slot for a weak random baseline
+# each generation. Mostly-strong opponents drive Elo improvement; an occasional
+# weak agent anchors the bottom of the rating ladder and diversifies the
+# snapshot corpus with easy-win trajectories.
+WEAK_OPPONENT_PROB = 0.2
+
 # Champion agent name (stable across all generations for TrueSkill tracking)
 CHAMPION_ID = "champion"
 
@@ -221,12 +227,20 @@ def select_challengers(
     base_params: Dict[str, Any],
     rng: random.Random,
 ) -> List[Dict[str, Any]]:
-    """Choose 3 challengers for this generation.
+    """Choose 3 challengers for this generation (Elo-improvement oriented).
 
     Strategy:
-      - Slot 0: always heuristic (strong baseline)
-      - Slot 1: random checkpoint if available, else random MCTS variant
-      - Slot 2: random MCTS variant (different from slot 1 if possible)
+      - Slot 0: always heuristic — strong, stable baseline; anchors the ladder
+        near "good play" so champion Elo gains track real skill, not drift.
+      - Slot 1: recent checkpoint (a learned, historically-strong opponent),
+        falling back to ``random`` only on cold start when no checkpoints exist.
+      - Slot 2: with probability ``WEAK_OPPONENT_PROB``, a ``random`` baseline
+        (occasional weak agent — anchors the bottom of the ladder and broadens
+        the snapshot corpus with closing-out trajectories). Otherwise an MCTS
+        variant — strong and exploratory — distinct from slots 0/1.
+
+    The mix is mostly-strong on every generation; the random sprinkle is an
+    explicit calibration signal, not a fallback.
     """
     challengers: List[Dict[str, Any]] = []
 
@@ -244,14 +258,17 @@ def select_challengers(
     else:
         challengers.append(_build_baseline_agent_config("random"))
 
-    # Slot 2: MCTS variant (sample one not already in challengers)
+    # Slot 2: occasional weak sprinkle OR MCTS variant (distinct from slots 0/1).
     used_ids = {c["name"] for c in challengers}
-    available_variants = [v for v in MCTS_VARIANTS if v["id"] not in used_ids]
-    if available_variants:
-        variant = rng.choice(available_variants)
-        challengers.append(_build_variant_agent_config(base_params, variant))
-    else:
+    if rng.random() < WEAK_OPPONENT_PROB and "random" not in used_ids:
         challengers.append(_build_baseline_agent_config("random"))
+    else:
+        available_variants = [v for v in MCTS_VARIANTS if v["id"] not in used_ids]
+        if available_variants:
+            variant = rng.choice(available_variants)
+            challengers.append(_build_variant_agent_config(base_params, variant))
+        else:
+            challengers.append(_build_baseline_agent_config("random"))
 
     return challengers
 

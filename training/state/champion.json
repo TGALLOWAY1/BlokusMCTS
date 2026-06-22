@@ -1,0 +1,77 @@
+{
+  "flat_config": {
+    "adaptive_rollout_depth_avg_bf": 80.0,
+    "adaptive_rollout_depth_base": 5,
+    "adaptive_rollout_depth_enabled": true,
+    "champion_version": "key_findings_best",
+    "description": "The 'Best Configuration' described literally in KEY_FINDINGS.md (the layer-by-layer experimental verdict doc). No standalone config existed for it, so this wrapper was created for the champion gauntlet. It combines ONLY the explicitly-listed winning ingredients: random rollout, cutoff depth 5, minimax backup alpha 0.25, ML-calibrated state-eval weights, RAVE k=1000, root 2-worker parallelization, and adaptive rollout depth. It deliberately OMITS progressive widening (champion_minimal adds that on top), so the gauntlet's key_findings_best vs champion_minimal head-to-head measures whether progressive widening earns its place on the validated stack. Same 500 ms / 0.5 iter-per-ms budget as the other candidates for an apples-to-apples comparison.",
+    "deterministic_time_budget": true,
+    "exploration_constant": 1.414,
+    "iterations_per_ms": 0.5,
+    "minimax_backup_alpha": 0.25,
+    "num_workers": 2,
+    "parallel_strategy": "root",
+    "rave_enabled": true,
+    "rave_k": 1000,
+    "rollout_cutoff_depth": 5,
+    "rollout_policy": "random",
+    "state_eval_weights": {
+      "accessible_corners": 0.243,
+      "center_proximity": 0.0,
+      "largest_remaining_piece_size": -0.231,
+      "opponent_avg_mobility": -0.3,
+      "reachable_empty_squares": 0.081,
+      "remaining_piece_area": -0.0295,
+      "squares_placed": 0.0295,
+      "territory_enclosure_area": 0.0
+    },
+    "thinking_time_ms": 500,
+    "use_transposition_table": true
+  },
+  "lineage": [
+    {
+      "promoted_at": "2026-06-21T21:28:46.948571+00:00",
+      "reason": "Cold-start seed from config/key_findings_best_params.json",
+      "version": "gen0"
+    }
+  ],
+  "name": "champion",
+  "params": {
+    "params": {
+      "adaptive_rollout_depth_avg_bf": 80.0,
+      "adaptive_rollout_depth_base": 5,
+      "adaptive_rollout_depth_enabled": true,
+      "deterministic_time_budget": true,
+      "exploration_constant": 1.414,
+      "iterations_per_ms": 0.5,
+      "minimax_backup_alpha": 0.25,
+      "num_workers": 2,
+      "parallel_strategy": "root",
+      "rave_enabled": true,
+      "rave_k": 1000,
+      "rollout_cutoff_depth": 5,
+      "rollout_policy": "random",
+      "state_eval_weights": {
+        "accessible_corners": 0.243,
+        "center_proximity": 0.0,
+        "largest_remaining_piece_size": -0.231,
+        "opponent_avg_mobility": -0.3,
+        "reachable_empty_squares": 0.081,
+        "remaining_piece_area": -0.0295,
+        "squares_placed": 0.0295,
+        "territory_enclosure_area": 0.0
+      },
+      "use_transposition_table": true
+    },
+    "thinking_time_ms": 500,
+    "type": "mcts"
+  },
+  "promoted_at": "2026-06-21T21:28:46.948571+00:00",
+  "rating": {
+    "conservative": -0.09793513432550327,
+    "elo": 1174.557963615103,
+    "trueskill_mu": 24.575200860368756,
+    "trueskill_sigma": 8.224378664898087
+  },
+  "version": "gen0"
+}

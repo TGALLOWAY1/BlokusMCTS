@@ -1,0 +1,541 @@
+"""Nightly training entry point — the durable, resumable orchestrator.
+
+    python -m training.nightly_run --hours 5 --resume training/state/latest.json
+
+The cardinal guarantee: **resume from disk, never start over.** On every run we
+load ``latest.json`` + ``champion.json`` + ``ratings.sqlite``, run as many
+self-play generations as the wall-clock budget allows (writing state atomically
+after *each* generation), build and evaluate a candidate, promote it if the
+conservative gates pass, append to the never-overwritten rating timeline, and
+regenerate the reports. A crash leaves the last atomic state intact and is
+reported by the workflow's always-run email step; the next night picks up where
+this one stopped.
+
+Promotion is **internal only** by default: it updates ``training/state/`` but does
+*not* touch the deployed ``data/champion_registry.json`` unless ``--promote-registry``
+is passed (preserving the existing "humans promote the live champion" safety rule).
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import json
+import os
+import random
+import sys
+import time
+import traceback
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from analytics.tournament.elo import EloTracker
+from analytics.tournament.trueskill_rating import TrueSkillTracker
+from scripts.champion_loop import CHAMPION_ID, build_tracker, persist_tracker
+from training import REPO_ROOT, TrainingPaths
+from training import human_estimate, ratings_db, state_store
+from training import diagnostics, status_report
+from training import selfplay_core as sc
+
+# Fraction of the wall-clock budget spent on self-play generations; the remainder
+# is reserved for candidate evaluation, reports, commit, and email.
+_GENERATION_BUDGET_FRACTION = 0.7
+# Safety multiplier on the rolling per-generation duration estimate.
+_GEN_ESTIMATE_SAFETY = 1.25
+
+SEED_CHAMPION_CONFIG = REPO_ROOT / "config" / "key_findings_best_params.json"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _new_run_id() -> str:
+    return _utc_now().strftime("%Y%m%dT%H%M%SZ")
+
+
+def _seed_champion_params_from_config() -> Dict[str, Any]:
+    """Cold start: build champion_params (champion_loop shape) from the seed config.
+
+    Splits the flat ``config/key_findings_best_params.json`` wrapper into the
+    ``{type, thinking_time_ms, params}`` shape the reused helpers expect.
+    """
+    payload = json.loads(SEED_CHAMPION_CONFIG.read_text(encoding="utf-8"))
+    metadata_keys = {"description", "champion_version", "thinking_time_ms", "type", "name"}
+    params = {k: v for k, v in payload.items() if k not in metadata_keys and not k.startswith("_")}
+    return {
+        "type": str(payload.get("type", "mcts")),
+        "thinking_time_ms": int(payload.get("thinking_time_ms", 500)),
+        "params": params,
+    }
+
+
+def _ensure_cold_start(state: Dict[str, Any], champion: Dict[str, Any]) -> None:
+    """Populate champion_params on the very first run (mutates in place)."""
+    if not state.get("champion_params"):
+        seeded = _seed_champion_params_from_config()
+        state["champion_params"] = seeded
+        if not champion.get("params"):
+            champion["params"] = seeded
+            champion["flat_config"] = json.loads(SEED_CHAMPION_CONFIG.read_text(encoding="utf-8"))
+            champion["lineage"] = [
+                {
+                    "version": "gen0",
+                    "promoted_at": _utc_now().isoformat(),
+                    "reason": "Cold-start seed from config/key_findings_best_params.json",
+                }
+            ]
+
+
+def _seed_elo_tracker(latest: Dict[str, Dict[str, Any]]) -> EloTracker:
+    """Build an EloTracker seeded from the SQLite timeline (Elo has no serializer)."""
+    elo = EloTracker()
+    for agent, r in latest.items():
+        elo.ratings[agent] = float(r["elo"])
+        elo.games_played[agent] = int(r.get("games_played", 0))
+    return elo
+
+
+def _seed_trueskill_tracker(
+    state: Dict[str, Any], latest: Dict[str, Dict[str, Any]]
+) -> TrueSkillTracker:
+    """Build the TrueSkill tracker, preferring in-state ratings, backfilling from DB.
+
+    ``state['trueskill_ratings']`` is the in-loop authority (kept by champion_loop
+    helpers); the DB row backfills any agent missing from state on a cold restart.
+    """
+    tracker = build_tracker(state)  # seeds from state['trueskill_ratings']
+    for agent, r in latest.items():
+        if agent not in tracker.agent_ids:
+            tracker.load_ratings({agent: r})
+    return tracker
+
+
+def _replay_games_through_elo(elo: EloTracker, games: List[Dict[str, Any]]) -> None:
+    for record in games:
+        agent_scores = record.get("agent_scores", {})
+        if agent_scores:
+            elo.update_game(agent_scores)
+
+
+# ---------------------------------------------------------------------------
+# Core run
+# ---------------------------------------------------------------------------
+
+def run(
+    *,
+    paths: TrainingPaths,
+    hours: float,
+    seeds: List[int],
+    games_per_arena: int,
+    thinking_time_ms: Optional[int],
+    promote_registry: bool,
+    dry_run: bool,
+    verbose: bool,
+) -> Dict[str, Any]:
+    """Execute one nightly run end-to-end. Returns the updated latest state."""
+    paths.ensure_dirs()
+    run_id = _new_run_id()
+    started = time.monotonic()
+    deadline = started + hours * 3600.0
+
+    state = state_store.load_latest(paths)
+    champion = state_store.load_champion(paths)
+    _ensure_cold_start(state, champion)
+    state["run_id"] = run_id
+
+    conn = ratings_db.connect(paths.ratings_db)
+    latest_db = ratings_db.latest_ratings(conn)
+    elo = _seed_elo_tracker(latest_db)
+    tracker = _seed_trueskill_tracker(state, latest_db)
+
+    if dry_run:
+        print(f"[nightly] DRY RUN run_id={run_id} hours={hours} seeds={seeds} "
+              f"games_per_arena={games_per_arena} promote_registry={promote_registry}")
+        print(f"[nightly] champion params: {json.dumps(state['champion_params'], indent=2)[:400]}...")
+        return state
+
+    games_this_run = 0
+    gens_this_run = 0
+    rolling_gen_s: Optional[float] = None
+    gen_deadline = started + hours * 3600.0 * _GENERATION_BUDGET_FRACTION
+    start_generation = int(state.get("generation", 0))
+
+    # --- Self-play generation loop (time-budgeted, atomic per-generation) -----
+    while True:
+        now = time.monotonic()
+        est = (rolling_gen_s or 0.0) * _GEN_ESTIMATE_SAFETY
+        if gens_this_run >= 1 and now + est >= gen_deadline:
+            break
+        if gens_this_run == 0 and now >= gen_deadline:
+            # Always attempt at least one generation unless already out of budget.
+            if now >= deadline:
+                break
+
+        generation = start_generation + gens_this_run + 1
+        rng = random.Random(generation * 997 + 42)
+        seed = generation * 7919
+        try:
+            gen_res = sc.run_generation(
+                state, paths,
+                generation=generation,
+                games_per_arena=games_per_arena,
+                seed=seed,
+                rng=rng,
+                tracker=tracker,
+                thinking_time_ms=thinking_time_ms,
+                verbose=verbose,
+            )
+        except Exception as exc:  # noqa: BLE001 — preserve partial progress
+            _record_error(paths, state, generation, exc)
+            raise
+
+        games_this_run += gen_res.games_run
+        gens_this_run += 1
+        rolling_gen_s = gen_res.elapsed_s if rolling_gen_s is None else (
+            0.5 * rolling_gen_s + 0.5 * gen_res.elapsed_s
+        )
+
+        # Persist *after every generation* (partial-state durability).
+        state["generation"] = generation
+        state["total_games"] = int(state.get("total_games", 0)) + gen_res.games_run
+        state["games_today"] = games_this_run
+        persist_tracker(tracker, state)
+        champ_rating = gen_res.champion_rating
+        state["trueskill_mu"] = champ_rating["mu"]
+        state["trueskill_sigma"] = champ_rating["sigma"]
+        state_store.save_latest(paths, state)
+        state_store.append_jsonl(paths.history_jsonl, {
+            "generation": generation,
+            "run_id": run_id,
+            "timestamp": _utc_now().isoformat(),
+            "games": gen_res.games_run,
+            "challengers": gen_res.challengers,
+            "champion_mu": champ_rating["mu"],
+            "champion_sigma": champ_rating["sigma"],
+            "champion_conservative": champ_rating["conservative"],
+            "champion_games_played": champ_rating["games_played"],
+            "total_snapshot_rows": gen_res.snapshot_rows,
+            "run_dir": gen_res.run_dir,
+        })
+        if verbose:
+            print(f"[nightly] gen {generation}: {gen_res.games_run} games, "
+                  f"mu={champ_rating['mu']:.2f} sigma={champ_rating['sigma']:.2f}, "
+                  f"{gen_res.elapsed_s:.1f}s")
+
+    # --- Candidate generation + evaluation -----------------------------------
+    promoted = False
+    eval_result: Optional[sc.EvaluationResult] = None
+    candidate_cfg, refit = sc.build_candidate(state)
+    if candidate_cfg is not None and time.monotonic() < deadline:
+        eval_rng = random.Random(start_generation * 31 + 7)
+        eval_result = sc.evaluate_candidate(
+            state, candidate_cfg, paths,
+            generation=state["generation"],
+            seeds=seeds,
+            games_per_arena=games_per_arena,
+            rng=eval_rng,
+            thinking_time_ms=thinking_time_ms,
+            verbose=verbose,
+        )
+        _replay_games_through_elo(elo, eval_result.games)
+        for record in eval_result.games:
+            scores = record.get("agent_scores", {})
+            if scores:
+                tracker.update_game(scores)
+        games_this_run += eval_result.total_games
+        state["total_games"] = int(state.get("total_games", 0)) + eval_result.total_games
+
+        if eval_result.decision.promote and eval_result.decision.champion == sc.CANDIDATE_ID:
+            promoted = _promote(
+                state, champion, candidate_cfg, refit, eval_result, paths,
+                tracker=tracker, elo=elo, promote_registry=promote_registry,
+            )
+
+    # --- Replay this run's generation games through Elo -----------------------
+    # (Generation TrueSkill is already updated in-loop; Elo was seeded from the DB
+    # so it also needs this run's generation games, replayed from games.jsonl.)
+    _replay_this_run_generation_elo(elo, state, run_id, gens_this_run, start_generation, paths)
+
+    # --- Ratings + human estimate + state finalisation -----------------------
+    champ_ts = tracker.get_rating(CHAMPION_ID)
+    champ_elo = elo.get_rating(CHAMPION_ID)
+    state["elo"] = float(champ_elo)
+    state["trueskill_mu"] = champ_ts["mu"]
+    state["trueskill_sigma"] = champ_ts["sigma"]
+    state["games_today"] = games_this_run
+    state["days_trained"] = int(state.get("days_trained", 0)) + 1
+    state["last_error"] = None
+
+    # Append to the never-overwritten rating timeline.
+    agent_rows = _build_agent_rows(elo, tracker)
+    ratings_db.record_run(
+        conn,
+        run_id=run_id,
+        timestamp=_utc_now().isoformat(),
+        generation=int(state["generation"]),
+        agent_rows=agent_rows,
+        run_summary=ratings_db.RunSummaryRow(
+            generation=int(state["generation"]),
+            games_today=games_this_run,
+            total_games=int(state["total_games"]),
+            champion_elo=float(champ_elo),
+            champion_mu=champ_ts["mu"],
+            champion_sigma=champ_ts["sigma"],
+            promoted=promoted,
+            days_trained=int(state["days_trained"]),
+        ),
+    )
+
+    # Human-strength estimate from the (now-updated) Elo timeline.
+    series = ratings_db.champion_elo_series(conn)
+    est = human_estimate.summarize(
+        float(champ_elo), series, target=float(state.get("human_target_elo", 1700))
+    )
+    state["estimated_games_to_target"] = est.get("games_remaining")
+    state["estimated_days_to_target"] = est.get("days_remaining")
+    state["estimate_confidence"] = est.get("confidence")
+    state["champion"] = {
+        "name": CHAMPION_ID,
+        "version": champion.get("version", state["champion"].get("version", "gen0")),
+        "config_ref": "state/champion.json",
+    }
+    # Keep champion.json's current rating fresh and persist it every run (even when
+    # no promotion happened, so a cold start always materialises the file).
+    champion.setdefault("rating", {})["elo"] = float(champ_elo)
+    champion["rating"]["trueskill_mu"] = champ_ts["mu"]
+    champion["rating"]["trueskill_sigma"] = champ_ts["sigma"]
+    champion["rating"]["conservative"] = champ_ts["conservative"]
+    state_store.save_champion(paths, champion)
+    state_store.save_latest(paths, state)
+
+    # --- Reports -------------------------------------------------------------
+    findings = diagnostics.write_diagnosis(paths, conn, state)
+    status_report.write_status(paths, conn, state, findings=findings, eval_result=eval_result)
+
+    conn.close()
+    print(f"[nightly] DONE run_id={run_id} generations={gens_this_run} "
+          f"games_this_run={games_this_run} elo={champ_elo:.1f} promoted={promoted}")
+    return state
+
+
+def _replay_this_run_generation_elo(
+    elo: EloTracker,
+    state: Dict[str, Any],
+    run_id: str,
+    gens_this_run: int,
+    start_generation: int,
+    paths: TrainingPaths,
+) -> None:
+    """Replay this run's generation games through Elo (idempotent per run)."""
+    for offset in range(gens_this_run):
+        generation = start_generation + offset + 1
+        gen_root = paths.selfplay_runs_dir / f"gen{generation:04d}"
+        if not gen_root.exists():
+            continue
+        for sub in gen_root.iterdir():
+            gp = sub / "games.jsonl"
+            if not gp.exists():
+                continue
+            with gp.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    scores = rec.get("agent_scores", {})
+                    if scores:
+                        elo.update_game(scores)
+
+
+def _build_agent_rows(elo: EloTracker, tracker: TrueSkillTracker) -> List[ratings_db.AgentRatingRow]:
+    rows: List[ratings_db.AgentRatingRow] = []
+    agents = set(tracker.agent_ids) | set(elo.ratings.keys())
+    for agent in sorted(agents):
+        ts = tracker.get_rating(agent)
+        rows.append(ratings_db.AgentRatingRow(
+            agent=agent,
+            elo=float(elo.get_rating(agent)),
+            trueskill_mu=ts["mu"],
+            trueskill_sigma=ts["sigma"],
+            conservative=ts["conservative"],
+            games_played=ts["games_played"],
+        ))
+    return rows
+
+
+def _promote(
+    state: Dict[str, Any],
+    champion: Dict[str, Any],
+    candidate_cfg: Dict[str, Any],
+    refit: Optional[Dict[str, Any]],
+    eval_result: sc.EvaluationResult,
+    paths: TrainingPaths,
+    *,
+    tracker: TrueSkillTracker,
+    elo: EloTracker,
+    promote_registry: bool,
+) -> bool:
+    """Promote the candidate to champion: update state, checkpoint, lineage.
+
+    Registry (the live web demo) is touched only when ``promote_registry`` is set.
+    """
+    generation = int(state["generation"])
+    now = _utc_now().isoformat()
+    new_version = f"gen{generation}"
+
+    # Snapshot the *outgoing* champion as a historical checkpoint (anti-cycling).
+    prev_rating = tracker.get_rating(CHAMPION_ID)
+    checkpoint = {
+        "generation": generation,
+        "id": f"ckpt_{new_version}",
+        "promoted_at": now,
+        "rating": {
+            "elo": float(elo.get_rating(CHAMPION_ID)),
+            "mu": prev_rating["mu"],
+            "sigma": prev_rating["sigma"],
+        },
+        # champion_loop format: 'params' is the full agent config dict.
+        "params": copy.deepcopy(state["champion_params"]),
+    }
+    state.setdefault("checkpoints", []).append(checkpoint)
+    state_store.write_checkpoint(paths, generation, checkpoint)
+
+    # Candidate becomes the new champion.
+    new_params = copy.deepcopy(candidate_cfg)
+    new_params.pop("name", None)
+    state["champion_params"] = new_params
+    state["last_promoted_generation"] = generation
+
+    # Reset champion uncertainty: the agent changed, so its old rating is less sure.
+    tracker.reset_agent(CHAMPION_ID, increase_sigma=True)
+
+    cand_row = next((r for r in eval_result.ranked if r["name"] == sc.CANDIDATE_ID), {})
+    reason = eval_result.decision.summary_line
+    champion["version"] = new_version
+    champion["promoted_at"] = now
+    champion["rating"] = {
+        "elo": float(elo.get_rating(CHAMPION_ID)),
+        "trueskill_mu": cand_row.get("trueskill_mu"),
+        "trueskill_sigma": cand_row.get("trueskill_sigma"),
+        "conservative": cand_row.get("trueskill_conservative"),
+    }
+    champion["params"] = new_params
+    champion["flat_config"] = sc.candidate_to_champion_config(candidate_cfg, refit)
+    champion.setdefault("lineage", []).append({
+        "version": new_version,
+        "promoted_at": now,
+        "reason": reason,
+        "refit_r2_global": (refit or {}).get("r2_global"),
+    })
+    state_store.save_champion(paths, champion)
+
+    if promote_registry:
+        _update_registry(champion, eval_result, generation)
+
+    print(f"[nightly] PROMOTED candidate -> champion {new_version}: {reason}")
+    return True
+
+
+def _update_registry(champion: Dict[str, Any], eval_result: sc.EvaluationResult, generation: int) -> None:
+    """Opt-in: push the promoted champion into data/champion_registry.json."""
+    from analytics.tournament import gauntlet
+
+    registry_path = REPO_ROOT / "data" / "champion_registry.json"
+    cand_row = next((r for r in eval_result.ranked if r["name"] == sc.CANDIDATE_ID), {})
+    cand_row = dict(cand_row)
+    cand_row["name"] = f"nightly_gen{generation}"
+    entry = gauntlet.build_registry_entry(
+        champion_row=cand_row,
+        config_path="(nightly training — params inline)",
+        params=champion.get("flat_config", {}),
+        seeds=[],
+        total_games=eval_result.total_games,
+        gauntlet_run_path="training/state/selfplay_runs",
+        comparison_opponents=["champion", "heuristic", "random", "prev_champion"],
+        promoted_from=None,
+        promotion_reason=f"Nightly training promotion gen{generation}: "
+                         + eval_result.decision.summary_line,
+        notes="Promoted automatically by training.nightly_run --promote-registry.",
+    )
+    gauntlet.update_registry(registry_path, entry, make_backup=True)
+    print(f"[nightly] registry updated (gen{generation})")
+
+
+def _record_error(paths: TrainingPaths, state: Dict[str, Any], generation: int, exc: Exception) -> None:
+    """Persist a truncated crash summary into latest.json for the failure email."""
+    tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    state["last_error"] = {
+        "generation": generation,
+        "message": f"{type(exc).__name__}: {exc}"[:500],
+        "traceback": tb[-2000:],
+        "timestamp": _utc_now().isoformat(),
+    }
+    try:
+        state_store.save_latest(paths, state)
+    except Exception:  # noqa: BLE001 — never mask the original error
+        pass
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Durable nightly Blokus MCTS training run.")
+    p.add_argument("--hours", type=float, default=5.0, help="Wall-clock budget (hours).")
+    p.add_argument("--resume", default="training/state/latest.json",
+                   help="Path to latest.json (informational; state always resumes from training/state/).")
+    p.add_argument("--seeds", type=int, nargs="+", default=[20260620, 20260621],
+                   help="Evaluation seeds (>=2 to satisfy the multi-seed gate).")
+    p.add_argument("--games-per-arena", type=int, default=12,
+                   help="Games per arena (per seed) for generations and evaluation.")
+    p.add_argument("--thinking-time-ms", type=int, default=None,
+                   help="Override every MCTS agent's thinking budget (small for smoke tests).")
+    p.add_argument("--promote-registry", action="store_true",
+                   help="Also update data/champion_registry.json on promotion (off by default).")
+    p.add_argument("--dry-run", action="store_true", help="Print the plan and exit.")
+    p.add_argument("--verbose", action="store_true")
+    return p.parse_args(argv)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = parse_args(argv)
+    paths = TrainingPaths.default()
+    try:
+        run(
+            paths=paths,
+            hours=args.hours,
+            seeds=args.seeds,
+            games_per_arena=args.games_per_arena,
+            thinking_time_ms=args.thinking_time_ms,
+            promote_registry=args.promote_registry,
+            dry_run=args.dry_run,
+            verbose=args.verbose,
+        )
+        return 0
+    except Exception:  # noqa: BLE001 — surface failure but leave atomic state intact
+        traceback.print_exc()
+        # Best-effort: still write reports so status.md/diagnosis reflect the crash.
+        try:
+            conn = ratings_db.connect(paths.ratings_db)
+            state = state_store.load_latest(paths)
+            findings = diagnostics.write_diagnosis(paths, conn, state)
+            status_report.write_status(paths, conn, state, findings=findings, eval_result=None)
+            conn.close()
+        except Exception:  # noqa: BLE001
+            pass
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

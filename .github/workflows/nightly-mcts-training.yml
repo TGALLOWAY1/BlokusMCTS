@@ -1,0 +1,128 @@
+name: nightly-mcts-training
+
+# Durable, resumable Blokus MCTS self-play training.
+#
+# Runs every 6 hours, RESUMES from the committed durable state under training/state/,
+# trains within a wall-clock budget, evaluates + (internally) promotes a candidate,
+# regenerates reports, commits the updated state back to the repo, and ALWAYS emails
+# a summary — on success and on failure. See docs/03-implementation/NIGHTLY_TRAINING.md.
+
+on:
+  schedule:
+    # Every 6 hours at :00 (00/06/12/18 UTC) — ~20h/day of training with a ~1h
+    # buffer between runs for eval, reports, commit-back, and email. The
+    # `concurrency` block below queues (does not cancel) any overlap.
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: "Wall-clock training budget in hours (keep < ~5.5 on hosted runners)."
+        required: false
+        default: "5"
+      games_per_arena:
+        description: "Games per arena per seed."
+        required: false
+        default: "12"
+
+# Never run two nightly trainings at once, and never cancel an in-flight run
+# (cancelling mid-train could corrupt a generation). A queued run waits its turn.
+concurrency:
+  group: nightly-mcts-training
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # required to commit the updated training state back to the repo
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    # GitHub-hosted runners hard-cap a job at 360 min; stay safely under it so the
+    # report/commit/email steps always get to run. For longer budgets (--hours 8+),
+    # use a self-hosted runner (see NIGHTLY_TRAINING.md) and raise this limit.
+    timeout-minutes: 350
+    steps:
+      - name: Checkout (full history for rebase-friendly commit-back)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run nightly training (resumes from training/state/)
+        id: train
+        continue-on-error: true  # reports + email must still run if training crashes
+        run: |
+          python -m training.nightly_run \
+            --hours "${{ github.event.inputs.hours || '5' }}" \
+            --games-per-arena "${{ github.event.inputs.games_per_arena || '12' }}" \
+            --resume training/state/latest.json
+
+      - name: Generate reports (always)
+        if: always()
+        run: |
+          python -m training.status_report || true
+          python -m training.diagnostics || true
+
+      - name: Optional Claude Code diagnostics augmentation
+        if: always()
+        continue-on-error: true
+        run: |
+          # Deterministic diagnostics already wrote training/reports/latest_diagnosis.md.
+          # If an Anthropic API key is configured you can add a richer narrative here
+          # (e.g. anthropics/claude-code-action). It is never required for the
+          # pipeline to function, so this step is a no-op by default.
+          echo "Deterministic diagnosis is the source of truth; Claude augmentation optional."
+
+      - name: Commit durable state back to the repo
+        if: always()
+        run: |
+          git config user.name  "mcts-nightly-bot"
+          git config user.email "actions@users.noreply.github.com"
+          # Only the durable, bounded-size artifacts (per training/.gitignore the
+          # bulky per-game selfplay_runs/ are excluded).
+          git add training/state training/status.md training/reports data/champion_snapshots.csv data/champion_registry.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No state changes to commit."
+          else
+            git commit -m "nightly training: run ${{ github.run_id }} ($(date -u +%Y-%m-%d))"
+            # Be resilient to concurrent pushes on the branch.
+            for attempt in 1 2 3 4; do
+              git pull --rebase --autostash origin "${{ github.ref_name }}" || true
+              if git push origin "HEAD:${{ github.ref_name }}"; then
+                echo "Pushed state."
+                break
+              fi
+              echo "Push attempt $attempt failed; retrying..."
+              sleep $((2 ** attempt))
+            done
+          fi
+
+      - name: Email summary (ALWAYS — success or failure)
+        if: always()
+        env:
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          TRAINING_EMAIL_TO: ${{ secrets.TRAINING_EMAIL_TO }}
+          TRAINING_EMAIL_FROM: ${{ secrets.TRAINING_EMAIL_FROM }}
+        run: |
+          if [ "${{ steps.train.outcome }}" = "failure" ]; then
+            python -m training.email_summary --failed
+          else
+            python -m training.email_summary
+          fi
+
+      - name: Fail the job if training failed
+        if: always() && steps.train.outcome == 'failure'
+        run: |
+          echo "Training step failed; see logs and the failure email."
+          exit 1

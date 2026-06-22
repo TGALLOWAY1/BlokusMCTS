@@ -95,7 +95,7 @@
 - ExplainMove panel — `frontend/src/components/ExplainMovePanel.tsx`
 - Game history browser with agent config badges and active layer indicators — `frontend/src/pages/History.tsx`
 - Recruiter-facing story page reframed as "Engine → Laboratory" narrative: 12-section structure covering engine foundation, experimentation framework, controlled findings, evaluator calibration, systems insights, and explainability. Integrates 9 Gemini-generated editorial images, throughput data table, TrueSkill vs ELO explanation, regression methodology, and research references — `frontend/src/pages/RecruiterStoryPage.tsx`
-- "Take the Tour" interactive guided experience at `/tour` (alias `/about`): a standalone, mobile-friendly, ~3-minute step tour with guided/overview modes, horizontal stage chips, progress dots + step counter, animated screen host (reduced-motion aware), keyboard + touch-swipe navigation, skip/restart, and a localStorage completion flag (`mcts-laboratory-tour-completed`). Eight screens — Rules, Complexity, Agents, Techniques, Evaluation, TrueSkill, Champion progression, and Play the Champion — built on a pure reducer (`useTourState`) with a metric adapter (`tourMetrics`) that uses live arena/champion data when available and clearly-labeled demo fallbacks otherwise. Runs without any MCTS search — `frontend/src/pages/TourPage.tsx`, `frontend/src/components/tour/`, `docs/TOUR_IMPLEMENTATION.md`
+- "Take the Tour" interactive guided experience at `/tour` (alias `/about`): a standalone, mobile-friendly, ~3-minute step tour with guided/overview modes, horizontal stage chips, progress dots + step counter, animated screen host (reduced-motion aware), keyboard + touch-swipe navigation, skip/restart, and a localStorage completion flag (`mcts-laboratory-tour-completed`). Eight screens — Rules, Complexity, Agents, Techniques, Evaluation, TrueSkill, Champion progression, and Play the Champion — built on a pure reducer (`useTourState`) with a metric adapter (`tourMetrics`) that uses live arena/champion data when available and clearly-labeled demo fallbacks otherwise. Runs without any MCTS search. Discoverable from the homepage via a "Take the Tour" link surfaced on the initial game-config modal (both deploy and research profiles) — `frontend/src/pages/TourPage.tsx`, `frontend/src/components/tour/`, `frontend/src/components/GameConfigModal.tsx`, `docs/TOUR_IMPLEMENTATION.md`
 - Play the Champion demo (Phase 6): public, portfolio-facing flow to play a full game against the registry-backed validated champion. A start-modal card (`ChampionCard`) shows champion name/version, win rate, TrueSkill, total validation games, and validation date from `GET /api/champion`; an in-game banner (`ChampionBanner`) pins that metadata plus the scoring-mode badge, a live "Champion thinking…" indicator, and lightweight per-move diagnostics (time, simulations, depth, budget tier). Gracefully handles no-validated-champion (404), backend-unavailable, illegal moves, and game-over. The frontend never hardcodes a champion config path — it forwards the registry-resolved `agentConfig` from the API into the Pyodide worker — `frontend/src/components/ChampionCard.tsx`, `frontend/src/components/ChampionBanner.tsx`, `frontend/src/hooks/useChampion.ts`, `frontend/src/utils/championConfig.ts`, `frontend/src/components/GameConfigModal.tsx`, `frontend/src/pages/Play.tsx`, `docs/05-frontend/PLAY_THE_CHAMPION_DEMO.md`
 - Persistent critical controls: hint/pass/save stay visible across AI turns (disabled when it isn't your turn) so the layout never shifts and no critical action is hidden — `frontend/src/pages/Play.tsx`, `frontend/src/__tests__/HeaderPersistence.test.tsx`
 
@@ -143,8 +143,25 @@
 - Frontier video generation for per-turn board snapshots — `scripts/generate_frontier_video.py`
 - Legal-move-count plot generation from per-turn board snapshots — `scripts/plot_legal_move_counts.py`
 
+## Nightly Training Pipeline
+
+- Durable, resumable nightly self-play training orchestrator (time-budgeted; resumes from on-disk state every run, never starts over) — `training/nightly_run.py`
+- Durable state layout under `training/state/` (`latest.json`, `champion.json`, `ratings.sqlite`, `history.jsonl`, `checkpoints/`, `selfplay_runs/`, `reports/`) reconstructable in full from disk — `training/__init__.py`, `training/state_store.py`
+- Atomic state persistence (tmp + `os.replace`) + append-only JSONL history for partial-progress durability — `training/state_store.py`
+- Append-only SQLite rating timeline (Elo + TrueSkill per agent per run; never overwritten) with cross-run rating seeding — `training/ratings_db.py`
+- Candidate generation via Layer-6 evaluator-weight re-fit on accumulated self-play snapshots; rotating-opponent evaluation battery (vs champion, random, heuristic, previous + historical champions) under the 4-agent arena rule; conservative 6-gate promotion (reuses `analytics/tournament/gauntlet.py`) — `training/selfplay_core.py`
+- Elo-improvement-oriented per-generation challenger mix: heuristic + recent checkpoint + MCTS variant, with a `WEAK_OPPONENT_PROB`=0.2 sprinkle of `random` to anchor the bottom of the rating ladder and broaden the snapshot corpus — `scripts/champion_loop.py` (`select_challengers`)
+- Internal-only champion promotion (updates `training/state/`; opt-in `--promote-registry` to also update the deployed `data/champion_registry.json`) — `training/nightly_run.py`
+- Human-strength Elo estimation (1200/1500/1700 anchors) with moving-average trend, uncertainty band, and no-fabricated-confidence rule — `training/human_estimate.py`
+- Nightly status report (`training/status.md`: Summary / Daily Progress / Baseline Results / Human Strength Estimate / Training Trends / Risks) — `training/status_report.py`
+- Deterministic diagnostics (regression, stagnation, rating instability, refit health, promotion drought) → `training/reports/latest_diagnosis.md` (always written) — `training/diagnostics.py`
+- SMTP email digest from repo secrets, for both success and failure (graceful skip when unconfigured) — `training/email_summary.py`
+- GitHub Actions training workflow: cron `0 */6 * * *` (every 6 hours, ~4 runs/day) + manual dispatch, concurrency guard (queues rather than cancels), commit-back of durable state, always-send email — `.github/workflows/nightly-mcts-training.yml`
+- Pipeline guide (architecture, operations, self-hosted runner fallback, storage growth) — `docs/03-implementation/NIGHTLY_TRAINING.md`
+
 ## Testing
 
+- Durable nightly training pipeline tests: state store/atomicity, append-only ratings DB, human-estimate math, status rendering, diagnostics, email, and resume/failure end-to-end — `tests/test_training_*.py`
 - Layer-specific test suites (Layers 3, 5, 6, 7, 8, 9) — `tests/test_layer*.py`
 - Core engine tests: legality, game over, pass, piece shapes, bitboard — `tests/`
 - Integration tests: audit invariants, agent timeout, telemetry — `tests/`

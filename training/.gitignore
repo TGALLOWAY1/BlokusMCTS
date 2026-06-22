@@ -1,0 +1,21 @@
+# Bulky per-game arena outputs are reproducible intermediate artifacts. The
+# durable, never-lost training record lives in latest.json, champion.json,
+# ratings.sqlite, history.jsonl, checkpoints/, and the reports — those ARE
+# committed. Per-game games.jsonl/snapshots under selfplay_runs/ would explode
+# the repo if committed nightly, so they are ignored by default. See
+# docs/03-implementation/NIGHTLY_TRAINING.md for how to retain them (Git LFS / S3).
+state/selfplay_runs/*
+!state/selfplay_runs/.gitkeep
+
+# The repo-level .gitignore ignores any "checkpoints/" dir, but the training
+# champion checkpoints are durable state (the historical-champions pool + a
+# permanent record) and MUST be committed. Re-include them here.
+!state/checkpoints/
+!state/checkpoints/**
+
+# SQLite write-ahead-log sidecars (transient; the .sqlite file is the record).
+state/ratings.sqlite-wal
+state/ratings.sqlite-shm
+
+# Atomic-write temp files (should never persist, but never commit them).
+*.tmp
