@@ -96,12 +96,27 @@ def init_schema(conn: sqlite3.Connection) -> None:
 
 
 def connect(path: Path | str) -> sqlite3.Connection:
-    """Open (creating dirs/file) the ratings DB with WAL + schema initialised."""
+    """Open (creating dirs/file) the ratings DB with schema initialised.
+
+    Durability over concurrency: the nightly pipeline has a single writer, so we
+    deliberately use SQLite's rollback journal (``journal_mode=DELETE``) rather
+    than WAL. WAL kept committed inserts in a ``ratings.sqlite-wal`` sidecar that
+    is **gitignored** — so whenever a CI job was killed before the connection
+    closed and checkpointed, every ``record_run`` since the last checkpoint was
+    lost and the committed ``ratings.sqlite`` froze at an old run. With the
+    rollback journal, each committed transaction lands in the single
+    ``ratings.sqlite`` file that is committed to git, so the timeline survives a
+    killed job. Opening an existing WAL database with this pragma checkpoints and
+    converts it in place.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    # Convert any pre-existing WAL database back to the single-file rollback
+    # journal (checkpoints outstanding WAL frames into the main file first).
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute("PRAGMA synchronous=FULL")
     init_schema(conn)
     return conn
 
@@ -204,17 +219,21 @@ def champion_elo_series(
     """
     rows = conn.execute(
         """
-        SELECT timestamp, champion_elo AS elo, total_games, generation
+        SELECT run_id, timestamp, champion_elo AS elo, total_games, generation,
+               promoted, games_today
         FROM run_summary
         ORDER BY timestamp ASC, id ASC
         """
     ).fetchall()
     return [
         {
+            "run_id": row["run_id"],
             "timestamp": row["timestamp"],
             "elo": float(row["elo"]),
             "total_games": int(row["total_games"]),
             "generation": int(row["generation"]),
+            "promoted": bool(row["promoted"]),
+            "games_today": int(row["games_today"]),
         }
         for row in rows
     ]

@@ -12,7 +12,10 @@ from training import state_store
 
 
 def _series(elos):
-    return [{"elo": e, "total_games": (i + 1) * 100} for i, e in enumerate(elos)]
+    return [
+        {"elo": e, "total_games": (i + 1) * 100, "run_id": f"run{i + 1}"}
+        for i, e in enumerate(elos)
+    ]
 
 
 def test_detect_regression_fires_on_drop():
@@ -32,6 +35,51 @@ def test_detect_stagnation_fires_on_flat():
 def test_detect_stagnation_quiet_when_moving():
     findings = diagnostics.detect_stagnation(_series([1500, 1510, 1520, 1530, 1540, 1550, 1560]))
     assert findings == []
+
+
+def test_detect_stale_elo_fires_on_identical_values():
+    # Exactly identical Elo across 3 runs = the repeated-Elo bug signature.
+    findings = diagnostics.detect_stale_elo(_series([1174.56, 1174.56, 1174.56]))
+    assert any(f.code == "stale_elo" for f in findings)
+
+
+def test_detect_stale_elo_quiet_on_tiny_jitter():
+    # A genuinely live-but-flat agent still jitters; that must NOT trip the alarm.
+    findings = diagnostics.detect_stale_elo(_series([1174.5, 1174.7, 1174.4]))
+    assert findings == []
+
+
+def test_detect_stale_elo_quiet_with_too_few_runs():
+    assert diagnostics.detect_stale_elo(_series([1200.0, 1200.0])) == []
+
+
+def test_detect_metrics_not_updated_fires_when_run_missing():
+    series = _series([1000.0, 1010.0])  # latest run_id == "run2"
+    findings = diagnostics.detect_metrics_not_updated(series, {"run_id": "run3"})
+    assert any(f.code == "metrics_not_updated" for f in findings)
+
+
+def test_detect_metrics_not_updated_quiet_when_recorded():
+    series = _series([1000.0, 1010.0])
+    assert diagnostics.detect_metrics_not_updated(series, {"run_id": "run2"}) == []
+
+
+def test_collect_findings_flags_stale_elo_end_to_end(tmp_path):
+    """A DB with three byte-identical champion Elos must surface a stale_elo warn."""
+    paths = TrainingPaths.under(tmp_path)
+    paths.ensure_dirs()
+    conn = ratings_db.connect(paths.ratings_db)
+    for i in range(3):
+        ratings_db.record_run(
+            conn, run_id=f"run{i + 1}", timestamp=f"2026-06-2{i}T04:00:00Z",
+            generation=i + 1,
+            agent_rows=[ratings_db.AgentRatingRow("champion", 1174.56, 28.0, 2.3, 23.0, 10)],
+            run_summary=ratings_db.RunSummaryRow(i + 1, 10, 10 * (i + 1), 1174.56, 28.0, 2.3, False, 1),
+        )
+    state = state_store.default_latest_state()
+    state["run_id"] = "run3"
+    findings = diagnostics.collect_findings(conn, state)
+    assert any(f.code == "stale_elo" for f in findings)
 
 
 def test_detect_promotion_drought():

@@ -23,7 +23,9 @@ def _install_fast_mocks(monkeypatch, paths):
 
     def fake_run_generation(state, p, *, generation, games_per_arena, seed, rng,
                             tracker, thinking_time_ms=None, verbose=False):
-        # Write a minimal games.jsonl where the orchestrator expects it.
+        # Mirror production: games.jsonl lives directly in the returned run_dir
+        # (run_experiment returns the leaf dir that contains games.jsonl), so the
+        # orchestrator's per-generation Elo replay finds the games.
         gen_dir = p.selfplay_runs_dir / f"gen{generation:04d}" / "run0"
         gen_dir.mkdir(parents=True, exist_ok=True)
         game = {"agent_scores": {"champion": 50, "heuristic": 30, "random": 20, "mcts_low_c": 10}}
@@ -35,7 +37,7 @@ def _install_fast_mocks(monkeypatch, paths):
             snapshot_rows=state["total_snapshot_rows"],
             champion_rating=tracker.get_rating("champion"),
             challengers=["heuristic", "random", "mcts_low_c"],
-            run_dir=str(gen_dir.parent),
+            run_dir=str(gen_dir),  # leaf dir containing games.jsonl (as in prod)
             elapsed_s=99999.0,  # forces exactly one generation per run
         )
 
@@ -87,6 +89,34 @@ def test_rating_timeline_is_append_only(tmp_path, monkeypatch):
         "SELECT COUNT(*) FROM rating_history WHERE agent='champion'"
     ).fetchone()[0]
     assert champ_rows == 2
+
+
+def test_fresh_elo_recorded_every_run(tmp_path, monkeypatch):
+    """The repeated-Elo regression guard: each run must persist a fresh Elo.
+
+    With the champion winning every mocked game, its Elo must rise run-over-run
+    and the latest recorded DB Elo must match latest.json — never freeze at the
+    first run's value while generation/games advance.
+    """
+    paths = TrainingPaths.under(tmp_path)
+    _install_fast_mocks(monkeypatch, paths)
+
+    state1 = _run_once(paths)
+    elo1 = state1["elo"]
+    state2 = _run_once(paths)
+    elo2 = state2["elo"]
+
+    # Champion keeps winning => Elo strictly increases, not frozen.
+    assert elo2 > elo1
+
+    conn = ratings_db.connect(paths.ratings_db)
+    series = ratings_db.champion_elo_series(conn)
+    assert len(series) == 2
+    assert series[-1]["elo"] == elo2                     # DB matches state
+    assert series[-1]["elo"] != series[0]["elo"]         # not stale
+    # latest.json's persisted Elo equals the latest recorded DB Elo.
+    reloaded = state_store.load_latest(paths)
+    assert reloaded["elo"] == series[-1]["elo"]
 
 
 def test_state_fully_reconstructed_from_disk(tmp_path, monkeypatch):
