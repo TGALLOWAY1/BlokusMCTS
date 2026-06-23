@@ -27,6 +27,10 @@ _STAGNATION_ELO_BAND = 3.0
 _INSTABILITY_SIGMA_RISE = 1.5
 _PROMOTION_DROUGHT_RUNS = 10
 _REFIT_MIN_ROWS = 200  # mirrors champion_loop.MIN_ROWS_FOR_REFIT
+# Elo deltas smaller than this are treated as "identical" (guards against the
+# repeated-Elo failure mode where the same value is reported every run).
+_ELO_IDENTICAL_EPS = 1e-6
+_STALE_ELO_RUNS = 3  # consecutive identical measurements that trip the warning
 
 
 @dataclass(frozen=True)
@@ -110,6 +114,56 @@ def detect_refit_health(state: Dict[str, Any]) -> List[Finding]:
     return []
 
 
+def detect_stale_elo(
+    elo_series: List[Dict[str, Any]], *, runs: int = _STALE_ELO_RUNS
+) -> List[Finding]:
+    """Flag when champion Elo is *byte-for-byte identical* across recent runs.
+
+    This is the direct guard against the "every email reports the same Elo" bug:
+    a genuinely flat-but-live agent still jitters by fractions of a point, so an
+    Elo that does not move at all across ``runs`` consecutive measurements almost
+    always means the value is stale (not recalculated / not persisted) rather than
+    truly unchanged.
+    """
+    pts = elo_series[-runs:]
+    if len(pts) < runs:
+        return []
+    values = [float(p["elo"]) for p in pts]
+    if max(values) - min(values) <= _ELO_IDENTICAL_EPS:
+        return [Finding(
+            "warn", "stale_elo",
+            f"Champion Elo has been identical ({values[-1]:.1f}) for the last "
+            f"{runs} runs — Elo may be stale (not recalculated or not persisted), "
+            "not genuinely unchanged.",
+            f"last {runs} elo values: {[round(v, 3) for v in values]}",
+        )]
+    return []
+
+
+def detect_metrics_not_updated(
+    elo_series: List[Dict[str, Any]], state: Dict[str, Any]
+) -> List[Finding]:
+    """Flag when the current run_id is absent from the recorded timeline.
+
+    If the in-memory ``state`` advanced (it carries a fresh ``run_id``) but no
+    timeline row exists for it, the metrics file was not updated this cycle — the
+    email would otherwise report an old run's Elo as if it were new.
+    """
+    run_id = state.get("run_id")
+    if not run_id or not elo_series:
+        return []
+    recorded = {p.get("run_id") for p in elo_series}
+    if run_id not in recorded:
+        return [Finding(
+            "critical", "metrics_not_updated",
+            f"No rating timeline row was recorded for the current run `{run_id}` — "
+            "the metrics DB was not updated this cycle, so any reported Elo is from "
+            "an earlier run.",
+            f"latest recorded run: {elo_series[-1].get('run_id')}",
+        )]
+    return []
+
+
 def detect_promotion_drought(
     last_promoted_gen: Any, current_gen: int, *, threshold: int = _PROMOTION_DROUGHT_RUNS
 ) -> List[Finding]:
@@ -145,6 +199,8 @@ def collect_findings(conn: sqlite3.Connection, state: Dict[str, Any]) -> List[Fi
     findings: List[Finding] = []
     findings += detect_regression(elo_series)
     findings += detect_stagnation(elo_series)
+    findings += detect_stale_elo(elo_series)
+    findings += detect_metrics_not_updated(elo_series, state)
     findings += detect_rating_instability(rating_rows)
     findings += detect_refit_health(state)
     findings += detect_promotion_drought(

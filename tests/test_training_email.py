@@ -1,4 +1,11 @@
-"""Tests for the email digest — subject/body for success+failure, fake transport."""
+"""Tests for the email digest.
+
+Covers the regression that motivated the rewrite (every email reporting the same
+Elo) plus the new guarantees: the headline Elo / deltas come from the latest
+recorded run, the ELO-trend table is rendered, missing/stale metrics produce an
+honest "no fresh ELO" email instead of a misleading success, and the SMTP
+transport stays injectable.
+"""
 
 from __future__ import annotations
 
@@ -10,65 +17,188 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from training import email_summary as es
 
 
-def _success_state():
-    return {
-        "run_id": "20260621T0300Z",
-        "generation": 41,
-        "total_games": 184250,
-        "games_today": 1820,
-        "elo": 1420.0,
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+def _state(run_id="run4", generation=4, **over):
+    base = {
+        "run_id": run_id,
+        "generation": generation,
+        "total_games": 2000,
+        "games_today": 500,
+        "elo": 1042.7,
         "trueskill_mu": 28.1,
         "trueskill_sigma": 2.3,
-        "champion": {"name": "champion", "version": "gen41"},
-        "human_target_elo": 1500,
+        "champion": {"name": "champion", "version": f"gen{generation}"},
+        "human_target_elo": 1700,
         "estimated_days_to_target": 9,
         "estimate_confidence": "low",
         "last_error": None,
-        "last_promoted_generation": 41,
-    }
-
-
-def _failure_state():
-    return {
-        "run_id": "20260621T0300Z",
-        "generation": 41,
-        "total_games": 184250,
-        "champion": {"name": "champion", "version": "gen40"},
-        "last_error": {
-            "generation": 41,
-            "message": "RuntimeError: arena exploded",
-            "traceback": "Traceback...\nRuntimeError: arena exploded",
+        "last_promoted_generation": None,
+        "last_eval": {
+            "run_id": run_id, "total_games": 240, "n_seeds": 2, "seeds": [1, 2],
+            "promoted": False,
+            "baselines": [
+                {"agent": "candidate", "win_rate": 0.55, "games": 120},
+                {"agent": "heuristic", "win_rate": 0.71, "games": 120},
+            ],
         },
     }
+    base.update(over)
+    return base
 
 
-def test_subject_success():
-    subj = es.build_subject(_success_state(), promoted=True, failed=False)
-    assert "SUCCESS" in subj and "1420" in subj and "PROMOTED" in subj
+def _summary_row(run_id, ts, gen, elo, *, promoted=False, games_today=500, total=2000):
+    return {
+        "id": gen, "run_id": run_id, "timestamp": ts, "generation": gen,
+        "games_today": games_today, "total_games": total, "champion_elo": elo,
+        "champion_mu": 28.0, "champion_sigma": 2.3, "promoted": promoted,
+        "days_trained": gen,
+    }
 
 
-def test_subject_failure():
-    subj = es.build_subject(_failure_state(), promoted=False, failed=True)
-    assert "FAILED" in subj
+def _history():
+    """Four runs with a rising, then jiggling, Elo — oldest first."""
+    return [
+        _summary_row("run1", "2026-06-20T04:00:00Z", 1, 1000.0),
+        _summary_row("run2", "2026-06-21T04:00:00Z", 2, 1018.4),
+        _summary_row("run3", "2026-06-22T04:00:00Z", 3, 1030.3),
+        _summary_row("run4", "2026-06-23T04:00:00Z", 4, 1042.7),
+    ]
 
 
-def test_body_success_has_key_fields():
-    body = es.build_body(
-        _success_state(), failed=False, promoted=True,
-        baselines=[{"agent": "heuristic", "win_rate": 0.71}],
-    )
-    assert "Status: SUCCESS" in body
-    assert "Total Games: 184,250" in body
-    assert "heuristic: 71%" in body
-    assert "Human Estimate" in body
+# ---------------------------------------------------------------------------
+# RunView — deltas + freshness
+# ---------------------------------------------------------------------------
+
+def test_view_picks_latest_run_not_first():
+    view = es.build_run_view(_history(), _state())
+    assert view.current["run_id"] == "run4"
+    assert view.current_elo == 1042.7
+    assert view.fresh is True
+
+
+def test_delta_previous_is_correct():
+    view = es.build_run_view(_history(), _state())
+    assert round(view.elo_delta_previous, 1) == 12.4  # 1042.7 - 1030.3
+
+
+def test_delta_best_is_vs_prior_best():
+    view = es.build_run_view(_history(), _state())
+    # run4 is a new all-time high; prior best was run3 (1030.3).
+    assert round(view.elo_delta_best, 1) == 12.4
+    assert float(view.best["champion_elo"]) == 1042.7
+
+
+def test_delta_best_negative_when_regressed():
+    hist = _history()
+    hist.append(_summary_row("run5", "2026-06-24T04:00:00Z", 5, 1020.0))
+    view = es.build_run_view(hist, _state(run_id="run5", generation=5, elo=1020.0))
+    assert view.elo_delta_previous < 0  # 1020.0 - 1042.7
+    assert view.elo_delta_best < 0      # below the 1042.7 prior best
+
+
+def test_empty_history_is_not_fresh():
+    view = es.build_run_view([], _state())
+    assert view.fresh is False
+    assert "empty or missing" in view.stale_reason
+
+
+def test_run_id_mismatch_is_not_fresh():
+    # state advanced to run5 but the timeline's latest is still run4.
+    view = es.build_run_view(_history(), _state(run_id="run5", generation=5))
+    assert view.fresh is False
+    assert "not updated" in view.stale_reason
+
+
+# ---------------------------------------------------------------------------
+# Subject
+# ---------------------------------------------------------------------------
+
+def test_subject_success_shows_elo_and_delta():
+    view = es.build_run_view(_history(), _state())
+    subj = es.build_subject(_state(), view, failed=False)
+    assert subj == "MCTS Nightly Training Report — ELO 1042.7 (+12.4)"
+
+
+def test_subject_regression_shows_negative_delta():
+    hist = _history()
+    hist.append(_summary_row("run5", "2026-06-24T04:00:00Z", 5, 1030.3))
+    view = es.build_run_view(hist, _state(run_id="run5", generation=5))
+    subj = es.build_subject(_state(run_id="run5"), view, failed=False)
+    assert subj.startswith("MCTS Nightly Training Report — ELO 1030.3 (-12.4)")
+
+
+def test_subject_failed_says_no_new_elo():
+    subj = es.build_subject(_state(), None, failed=True)
+    assert subj == "MCTS Nightly Training Failed — No New ELO Calculated"
+
+
+def test_subject_stale_says_no_new_elo():
+    view = es.build_run_view([], _state())  # not fresh
+    subj = es.build_subject(_state(), view, failed=False)
+    assert subj == "MCTS Nightly Training Failed — No New ELO Calculated"
+
+
+# ---------------------------------------------------------------------------
+# Body
+# ---------------------------------------------------------------------------
+
+def test_body_has_trend_table_and_all_runs():
+    view = es.build_run_view(_history(), _state())
+    body = es.build_body(_state(), view, failed=False)
+    assert "## ELO Trend" in body
+    assert "Δ Previous" in body
+    # Every run id should appear in the trend table.
+    for rid in ("run1", "run2", "run3", "run4"):
+        assert rid in body
+    # Headline current Elo present.
+    assert "Current ELO: 1042.7" in body
+    assert "Change vs previous run: +12.4" in body
+
+
+def test_body_match_breakdown_uses_last_eval():
+    view = es.build_run_view(_history(), _state())
+    body = es.build_body(_state(), view, failed=False)
+    assert "## Match Breakdown" in body
+    assert "heuristic" in body and "71.0%" in body
+
+
+def test_body_stale_says_no_fresh_elo():
+    view = es.build_run_view([], _state())
+    body = es.build_body(_state(), view, failed=False)
+    assert "No fresh ELO was calculated for this run." in body
 
 
 def test_body_failure_has_crash_summary():
-    body = es.build_body(_failure_state(), failed=True)
+    state = _state(last_error={
+        "generation": 4,
+        "message": "RuntimeError: arena exploded",
+        "traceback": "Traceback...\nRuntimeError: arena exploded",
+    })
+    view = es.build_run_view(_history(), state)
+    body = es.build_body(state, view, failed=True)
     assert "Status: FAILED" in body
     assert "arena exploded" in body
     assert "resumes" in body
 
+
+def test_body_diagnostics_surface_findings():
+    class _F:
+        severity = "warn"
+        code = "stale_elo"
+        message = "Champion Elo has been identical for the last 3 runs."
+
+    view = es.build_run_view(_history(), _state())
+    body = es.build_body(_state(), view, failed=False, findings=[_F()])
+    assert "stale_elo" in body
+    assert "## Diagnostics" in body
+
+
+# ---------------------------------------------------------------------------
+# Transport
+# ---------------------------------------------------------------------------
 
 def test_send_email_uses_injected_transport():
     sent = {}
@@ -101,3 +231,40 @@ def test_smtp_config_from_env_complete(monkeypatch):
     monkeypatch.setenv("TRAINING_EMAIL_FROM", "from@test")
     cfg = es.SmtpConfig.from_env()
     assert cfg is not None and cfg.port == 587
+
+
+# ---------------------------------------------------------------------------
+# End-to-end compose against a real on-disk DB (the regression guard)
+# ---------------------------------------------------------------------------
+
+def test_compose_reads_latest_recorded_elo(tmp_path):
+    """Two recorded runs with different Elo → email reflects the *latest*, with a delta."""
+    from training import TrainingPaths, ratings_db, state_store
+
+    paths = TrainingPaths.under(tmp_path)
+    paths.ensure_dirs()
+
+    conn = ratings_db.connect(paths.ratings_db)
+    rows = lambda elo: [ratings_db.AgentRatingRow("champion", elo, 28.0, 2.3, 23.0, 50)]
+    ratings_db.record_run(
+        conn, run_id="runA", timestamp="2026-06-22T04:00:00Z", generation=1,
+        agent_rows=rows(1000.0),
+        run_summary=ratings_db.RunSummaryRow(1, 50, 50, 1000.0, 28.0, 2.3, False, 1),
+    )
+    ratings_db.record_run(
+        conn, run_id="runB", timestamp="2026-06-23T04:00:00Z", generation=2,
+        agent_rows=rows(1025.0),
+        run_summary=ratings_db.RunSummaryRow(2, 50, 100, 1025.0, 28.0, 2.3, False, 2),
+    )
+    conn.close()
+
+    state = state_store.default_latest_state()
+    state["run_id"] = "runB"
+    state["generation"] = 2
+    state["elo"] = 1025.0
+    state_store.save_latest(paths, state)
+
+    composed = es.compose(paths)
+    assert composed["subject"] == "MCTS Nightly Training Report — ELO 1025.0 (+25.0)"
+    assert "Current ELO: 1025.0" in composed["body"]
+    assert composed["view"].fresh is True

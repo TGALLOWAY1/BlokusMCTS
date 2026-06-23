@@ -52,8 +52,11 @@ Reports also live at `training/status.md` and `training/reports/latest_diagnosis
    serializer of its own — this is how it persists across runs).
 3. **Time-budgeted generation loop:** run champion-vs-challenger self-play
    generations until the wall-clock budget (`--hours × 0.7`) is spent, writing
-   state atomically and appending to `history.jsonl` **after each generation**
-   (so a crash never loses completed generations). Each generation grows the
+   state atomically, **recomputing a fresh Elo and appending a `ratings.sqlite`
+   timeline row + a `history.jsonl` line after each generation** (so a job that
+   is killed mid-loop — the common case on hosted runners — still persists every
+   completed generation's Elo, instead of freezing the committed Elo at the last
+   run that happened to reach finalisation). Each generation grows the
    shared snapshot corpus `data/champion_snapshots.csv`. Each generation's
    3-challenger lineup is Elo-improvement oriented (see :func:`select_challengers`
    in `scripts/champion_loop.py`): slot 0 is always `heuristic`; slot 1 is a
@@ -69,8 +72,20 @@ Reports also live at `training/status.md` and `training/reports/latest_diagnosis
 6. **Promote (internal):** on a pass, write a checkpoint, update `champion.json`
    (+ lineage), and reset champion σ. The deployed `data/champion_registry.json`
    is **not** touched unless `--promote-registry` is passed.
-7. Append the run to the rating timeline, compute the human-strength estimate, and
-   write `status.md` + `latest_diagnosis.md`.
+7. After evaluation, fold the eval games into Elo, persist `state["last_eval"]`
+   (baseline win-rates for the email's Match Breakdown), append one final
+   post-eval timeline row (only when eval ran, capturing the promotion flag),
+   compute the human-strength estimate, and write `status.md` +
+   `latest_diagnosis.md`.
+
+> **Durability note — why Elo is recorded per generation.** `ratings.sqlite` uses
+> SQLite's single-file rollback journal (`journal_mode=DELETE`), **not** WAL. WAL
+> kept committed inserts in a `ratings.sqlite-wal` sidecar that is git-ignored, so
+> when a CI job was killed before the connection checkpointed, every `record_run`
+> since the last checkpoint was lost and the committed timeline froze at an old
+> run — the original cause of "every nightly email reports the same Elo". Recording
+> a fresh Elo per generation (above) plus the rollback journal means the committed
+> `ratings.sqlite` always holds the latest measurement.
 
 ### CLI
 
@@ -87,7 +102,18 @@ python -m training.nightly_run --hours 5 --promote-registry
 # Email digest (used by CI; prints body, sends only if SMTP env present)
 python -m training.email_summary            # success
 python -m training.email_summary --failed   # failure
+python -m training.email_summary --dry-run  # preview subject+body, never send
 ```
+
+The email reads the headline Elo, Δ-vs-previous, Δ-vs-best, and the ELO-trend
+table directly from the `ratings.sqlite` timeline (not a single cached scalar), so:
+
+- **Fresh run:** `MCTS Nightly Training Report — ELO 1042.7 (+12.4)`
+- **Regression:** `MCTS Nightly Training Report — ELO 1030.3 (-3.1)`
+- **No fresh Elo / failure:** `MCTS Nightly Training Failed — No New ELO Calculated`,
+  with the body stating *why* (empty timeline, the current `run_id` is absent from
+  the recorded timeline, evaluation failed, etc.). The email never silently echoes
+  a stale Elo as a success.
 
 ## GitHub Actions (`.github/workflows/nightly-mcts-training.yml`)
 
@@ -151,10 +177,15 @@ summaries are **never deleted** — the repo is a permanent record of progress.
 ## Tests
 
 `tests/test_training_*.py` cover: path resolution + atomic writes, append-only
-ratings DB, human-estimate math (including the no-fabricated-confidence rule),
-status rendering, diagnostics detectors, email subject/body (success + failure,
-fake transport, missing-env skip), `selfplay_core` eval-battery construction, and
-an end-to-end **resume proof** + failure-preservation test (arena mocked).
+ratings DB (incl. the **single-file/no-WAL durability guard** and per-generation
+accumulation), human-estimate math (including the no-fabricated-confidence rule),
+status rendering, diagnostics detectors (incl. **`stale_elo`** and
+**`metrics_not_updated`**), email subject/body (fresh-Elo delta vs previous/best,
+ELO-trend table, the **"no fresh ELO" stale guardrail**, failure crash summary,
+fake transport, missing-env skip, and an end-to-end `compose()` against a real
+DB), `selfplay_core` eval-battery construction, and an end-to-end **resume proof**
+(incl. the **fresh-Elo-every-run** regression guard) + failure-preservation test
+(arena mocked).
 
 ```bash
 python -m pytest tests/test_training_*.py -q

@@ -84,6 +84,45 @@ def test_champion_elo_series_oldest_first(tmp_path):
     assert [p["total_games"] for p in series] == [10, 20]
 
 
+def test_not_in_wal_mode_so_single_file_is_durable(tmp_path):
+    """The committed ``ratings.sqlite`` must hold every write with NO -wal sidecar.
+
+    Regression guard: WAL mode kept committed inserts in a gitignored
+    ``ratings.sqlite-wal`` file that was lost when a CI job was killed before
+    checkpoint, freezing the committed timeline at an old run.
+    """
+    db = tmp_path / "r.sqlite"
+    conn = rdb.connect(db)
+    mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+    assert str(mode).lower() != "wal"
+    rdb.record_run(
+        conn, run_id="run1", timestamp="2026-06-20T03:00:00Z", generation=1,
+        agent_rows=_agent_rows(), run_summary=_summary(),
+    )
+    # The write is durable in the single file even without closing the conn and
+    # even if the -wal sidecar (if any) is removed mid-flight.
+    for sidecar in (db.with_name(db.name + "-wal"), db.with_name(db.name + "-shm")):
+        if sidecar.exists():
+            sidecar.unlink()
+    conn2 = rdb.connect(db)
+    assert rdb.run_count(conn2) == 1
+
+
+def test_records_accumulate_per_generation(tmp_path):
+    """Recording one row per generation grows the timeline (durability model)."""
+    conn = rdb.connect(tmp_path / "r.sqlite")
+    for gen in range(1, 6):
+        rdb.record_run(
+            conn, run_id="nightly1", timestamp=f"2026-06-20T0{gen}:00:00Z",
+            generation=gen, agent_rows=_agent_rows(1000.0 + gen, gen * 12),
+            run_summary=_summary(gen, gen * 12, 1000.0 + gen),
+        )
+    assert rdb.run_count(conn) == 5
+    series = rdb.champion_elo_series(conn)
+    assert [round(p["elo"], 0) for p in series] == [1001, 1002, 1003, 1004, 1005]
+    assert series[-1]["run_id"] == "nightly1"
+
+
 def test_persists_across_reconnect(tmp_path):
     db = tmp_path / "r.sqlite"
     conn = rdb.connect(db)

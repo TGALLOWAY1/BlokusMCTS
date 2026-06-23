@@ -202,21 +202,50 @@ def run(
             0.5 * rolling_gen_s + 0.5 * gen_res.elapsed_s
         )
 
+        # Recompute a FRESH Elo from this generation's games and persist it +
+        # a durable DB timeline row *every generation*. This is the crux of the
+        # "repeated Elo" fix: previously Elo and the ratings DB were only written
+        # in the post-loop finalisation block, which a time-killed CI job rarely
+        # reached — so latest.json's `elo` and the committed DB froze at the first
+        # run's value while generation/total_games kept advancing. Now each
+        # atomically-persisted generation also carries a fresh, recomputed Elo.
+        _replay_run_dir_games(elo, gen_res.run_dir)
+        champ_elo_gen = float(elo.get_rating(CHAMPION_ID))
+
         # Persist *after every generation* (partial-state durability).
         state["generation"] = generation
         state["total_games"] = int(state.get("total_games", 0)) + gen_res.games_run
         state["games_today"] = games_this_run
+        state["elo"] = champ_elo_gen
         persist_tracker(tracker, state)
         champ_rating = gen_res.champion_rating
         state["trueskill_mu"] = champ_rating["mu"]
         state["trueskill_sigma"] = champ_rating["sigma"]
         state_store.save_latest(paths, state)
+        ratings_db.record_run(
+            conn,
+            run_id=run_id,
+            timestamp=_utc_now().isoformat(),
+            generation=generation,
+            agent_rows=_build_agent_rows(elo, tracker),
+            run_summary=ratings_db.RunSummaryRow(
+                generation=generation,
+                games_today=games_this_run,
+                total_games=int(state["total_games"]),
+                champion_elo=champ_elo_gen,
+                champion_mu=champ_rating["mu"],
+                champion_sigma=champ_rating["sigma"],
+                promoted=False,
+                days_trained=int(state.get("days_trained", 0)) + 1,
+            ),
+        )
         state_store.append_jsonl(paths.history_jsonl, {
             "generation": generation,
             "run_id": run_id,
             "timestamp": _utc_now().isoformat(),
             "games": gen_res.games_run,
             "challengers": gen_res.challengers,
+            "champion_elo": champ_elo_gen,
             "champion_mu": champ_rating["mu"],
             "champion_sigma": champ_rating["sigma"],
             "champion_conservative": champ_rating["conservative"],
@@ -226,8 +255,8 @@ def run(
         })
         if verbose:
             print(f"[nightly] gen {generation}: {gen_res.games_run} games, "
-                  f"mu={champ_rating['mu']:.2f} sigma={champ_rating['sigma']:.2f}, "
-                  f"{gen_res.elapsed_s:.1f}s")
+                  f"elo={champ_elo_gen:.1f} mu={champ_rating['mu']:.2f} "
+                  f"sigma={champ_rating['sigma']:.2f}, {gen_res.elapsed_s:.1f}s")
 
     # --- Candidate generation + evaluation -----------------------------------
     promoted = False
@@ -258,10 +287,9 @@ def run(
                 tracker=tracker, elo=elo, promote_registry=promote_registry,
             )
 
-    # --- Replay this run's generation games through Elo -----------------------
-    # (Generation TrueSkill is already updated in-loop; Elo was seeded from the DB
-    # so it also needs this run's generation games, replayed from games.jsonl.)
-    _replay_this_run_generation_elo(elo, state, run_id, gens_this_run, start_generation, paths)
+    # NOTE: generation Elo is now replayed and recorded incrementally inside the
+    # generation loop above (durable per-generation), so we do NOT re-replay the
+    # whole run's generation games here — that would double-count them.
 
     # --- Ratings + human estimate + state finalisation -----------------------
     champ_ts = tracker.get_rating(CHAMPION_ID)
@@ -273,25 +301,33 @@ def run(
     state["days_trained"] = int(state.get("days_trained", 0)) + 1
     state["last_error"] = None
 
-    # Append to the never-overwritten rating timeline.
-    agent_rows = _build_agent_rows(elo, tracker)
-    ratings_db.record_run(
-        conn,
-        run_id=run_id,
-        timestamp=_utc_now().isoformat(),
-        generation=int(state["generation"]),
-        agent_rows=agent_rows,
-        run_summary=ratings_db.RunSummaryRow(
+    # Persist this run's evaluation snapshot so the (separate-process) email can
+    # render the Match Breakdown without re-running anything.
+    state["last_eval"] = _build_last_eval(eval_result, seeds, promoted, run_id)
+
+    # Append a final post-evaluation timeline row *only when evaluation actually
+    # ran* (it folds the champion-vs-candidate eval games into Elo and records the
+    # promotion flag). When no eval ran, the per-generation rows above are already
+    # the durable record and we avoid a duplicate.
+    if eval_result is not None and eval_result.total_games > 0:
+        agent_rows = _build_agent_rows(elo, tracker)
+        ratings_db.record_run(
+            conn,
+            run_id=run_id,
+            timestamp=_utc_now().isoformat(),
             generation=int(state["generation"]),
-            games_today=games_this_run,
-            total_games=int(state["total_games"]),
-            champion_elo=float(champ_elo),
-            champion_mu=champ_ts["mu"],
-            champion_sigma=champ_ts["sigma"],
-            promoted=promoted,
-            days_trained=int(state["days_trained"]),
-        ),
-    )
+            agent_rows=agent_rows,
+            run_summary=ratings_db.RunSummaryRow(
+                generation=int(state["generation"]),
+                games_today=games_this_run,
+                total_games=int(state["total_games"]),
+                champion_elo=float(champ_elo),
+                champion_mu=champ_ts["mu"],
+                champion_sigma=champ_ts["sigma"],
+                promoted=promoted,
+                days_trained=int(state["days_trained"]),
+            ),
+        )
 
     # Human-strength estimate from the (now-updated) Elo timeline.
     series = ratings_db.champion_elo_series(conn)
@@ -325,36 +361,64 @@ def run(
     return state
 
 
-def _replay_this_run_generation_elo(
-    elo: EloTracker,
-    state: Dict[str, Any],
-    run_id: str,
-    gens_this_run: int,
-    start_generation: int,
-    paths: TrainingPaths,
-) -> None:
-    """Replay this run's generation games through Elo (idempotent per run)."""
-    for offset in range(gens_this_run):
-        generation = start_generation + offset + 1
-        gen_root = paths.selfplay_runs_dir / f"gen{generation:04d}"
-        if not gen_root.exists():
-            continue
-        for sub in gen_root.iterdir():
-            gp = sub / "games.jsonl"
-            if not gp.exists():
+def _replay_run_dir_games(elo: EloTracker, run_dir: str) -> None:
+    """Replay every game in one arena ``run_dir``'s games.jsonl through Elo.
+
+    Called once per generation (on that generation's fresh run_dir), so each
+    game is counted exactly once across the whole run.
+    """
+    from pathlib import Path
+
+    gp = Path(run_dir) / "games.jsonl"
+    if not gp.exists():
+        return
+    with gp.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
                 continue
-            with gp.open("r", encoding="utf-8") as handle:
-                for line in handle:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    scores = rec.get("agent_scores", {})
-                    if scores:
-                        elo.update_game(scores)
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            scores = rec.get("agent_scores", {})
+            if scores:
+                elo.update_game(scores)
+
+
+def _build_last_eval(
+    eval_result: Optional[sc.EvaluationResult],
+    seeds: List[int],
+    promoted: bool,
+    run_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Summarise the candidate evaluation for the email's Match Breakdown.
+
+    Returns ``None`` when no evaluation ran this cycle (e.g. the evaluator could
+    not re-fit yet or the time budget was exhausted) so the email can say so
+    plainly instead of implying a fresh head-to-head happened.
+    """
+    if eval_result is None:
+        return None
+    pooled = getattr(eval_result, "pooled_summary", {}) or {}
+    win_stats = pooled.get("win_stats", {})
+    baselines: List[Dict[str, Any]] = []
+    for name in ("candidate", "champion", "heuristic", "random", "prev_champion"):
+        ws = win_stats.get(name)
+        if ws:
+            baselines.append({
+                "agent": name,
+                "win_rate": float(ws.get("win_rate", 0.0)),
+                "games": int(ws.get("games_played", 0)),
+            })
+    return {
+        "run_id": run_id,
+        "total_games": int(eval_result.total_games),
+        "n_seeds": int(eval_result.n_seeds),
+        "seeds": list(seeds),
+        "promoted": bool(promoted),
+        "baselines": baselines,
+    }
 
 
 def _build_agent_rows(elo: EloTracker, tracker: TrueSkillTracker) -> List[ratings_db.AgentRatingRow]:

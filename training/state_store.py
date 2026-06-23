@@ -133,6 +133,7 @@ def default_latest_state() -> Dict[str, Any]:
         "estimated_days_to_target": None,
         "estimate_confidence": "none",
         "last_promoted_generation": None,
+        "last_eval": None,  # latest candidate-eval summary (baselines for the email)
         "last_error": None,
         "updated_at": _utc_now_iso(),
     }
