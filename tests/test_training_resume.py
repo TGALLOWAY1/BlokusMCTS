@@ -76,6 +76,23 @@ def test_two_runs_accumulate(tmp_path, monkeypatch):
     assert state2["days_trained"] == 2               # day counter advanced
 
 
+def test_per_game_elo_timeline_accumulates(tmp_path, monkeypatch):
+    """Per-game Elo rows are recorded through the orchestrator and continue across
+    runs (the fine-grained trajectory the email plots)."""
+    paths = TrainingPaths.under(tmp_path)
+    _install_fast_mocks(monkeypatch, paths)
+    _run_once(paths)  # one generation -> one mocked game -> one game_elo row
+    _run_once(paths)
+
+    conn = ratings_db.connect(paths.ratings_db)
+    # Two runs x one game each, numbered monotonically across runs.
+    assert ratings_db.max_game_number(conn) == 2
+    series = ratings_db.champion_game_elo_series(conn)
+    assert [p["game_number"] for p in series] == [1, 2]
+    # Champion wins every mocked game, so its per-game Elo is non-decreasing.
+    assert series[1]["elo"] >= series[0]["elo"]
+
+
 def test_rating_timeline_is_append_only(tmp_path, monkeypatch):
     paths = TrainingPaths.under(tmp_path)
     _install_fast_mocks(monkeypatch, paths)

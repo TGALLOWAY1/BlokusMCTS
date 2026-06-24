@@ -70,6 +70,9 @@ jobs:
         run: |
           python -m training.status_report || true
           python -m training.diagnostics || true
+          # Render the champion per-game Elo trajectory PNG so it is committed with
+          # the rest of the report artifacts and ready for the email to attach.
+          python -m training.elo_plot || true
 
       - name: Optional Claude Code diagnostics augmentation
         if: always()

@@ -145,17 +145,34 @@ def test_subject_stale_says_no_new_elo():
 # Body
 # ---------------------------------------------------------------------------
 
-def test_body_has_trend_table_and_all_runs():
+def test_body_has_trend_section_and_recent_generations():
     view = es.build_run_view(_history(), _state())
     body = es.build_body(_state(), view, failed=False)
     assert "## ELO Trend" in body
-    assert "Δ Previous" in body
-    # Every run id should appear in the trend table.
-    for rid in ("run1", "run2", "run3", "run4"):
-        assert rid in body
+    # The verbose per-run table is gone; a compact recent-generations digest stays.
+    assert "Recent generations" in body
+    # Newest generations appear as bullets with deltas.
+    assert "- gen 4: 1042.7 (+12.4)" in body
+    assert "- gen 3: 1030.3" in body
     # Headline current Elo present.
     assert "Current ELO: 1042.7" in body
     assert "Change vs previous run: +12.4" in body
+
+
+def test_body_plot_callout_when_attached():
+    view = es.build_run_view(_history(), _state())
+    body = es.build_body(_state(), view, failed=False, plot_attached=True,
+                         plot_game_count=288)
+    assert "elo_trend.png" in body
+    assert "288 per-game ratings" in body
+
+
+def test_body_plot_fallback_note_when_no_plot():
+    view = es.build_run_view(_history(), _state())
+    body = es.build_body(_state(), view, failed=False, plot_attached=False)
+    assert "No plot was generated" in body
+    # The recent-generations digest still gives the trend in text.
+    assert "Recent generations" in body
 
 
 def test_body_match_breakdown_uses_last_eval():
@@ -213,6 +230,52 @@ def test_send_email_uses_injected_transport():
     assert sent["to"] == "to@test"
     assert sent["subject"] == "Hi"
     assert "Body here" in sent["body"]
+
+
+def test_build_message_text_only_without_plot():
+    msg = es.build_message("Subj", "Body here", email_from="f@t", email_to="t@t")
+    # No plot -> single-part text/plain, get_content works.
+    assert msg.get_content_type() == "text/plain"
+    assert "Body here" in msg.get_content()
+
+
+def test_build_message_embeds_and_attaches_plot(tmp_path):
+    png = tmp_path / "elo_trend.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\nFAKEDATA")  # build_message only reads bytes
+    msg = es.build_message(
+        "Subj", "Body here", email_from="f@t", email_to="t@t", plot_path=png
+    )
+    types = [p.get_content_type() for p in msg.walk()]
+    assert "multipart/mixed" in types
+    assert "text/plain" in types       # plain-text fallback always present
+    assert "text/html" in types        # inline HTML alternative
+    assert types.count("image/png") == 2  # one inline (cid) + one attachment
+    # The inline image carries the cid the HTML references.
+    cids = [p.get("Content-ID") for p in msg.walk() if p.get("Content-ID")]
+    assert any("elo-plot" in (c or "") for c in cids)
+    filenames = [p.get_filename() for p in msg.walk() if p.get_filename()]
+    assert "elo_trend.png" in filenames
+
+
+def test_build_message_missing_plot_file_is_text_only(tmp_path):
+    msg = es.build_message(
+        "Subj", "Body", email_from="f@t", email_to="t@t",
+        plot_path=tmp_path / "does_not_exist.png",
+    )
+    assert msg.get_content_type() == "text/plain"
+
+
+def test_send_email_passes_plot_through(tmp_path):
+    png = tmp_path / "p.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\nX")
+    captured = {}
+
+    def fake_send(config, msg):
+        captured["types"] = [p.get_content_type() for p in msg.walk()]
+
+    cfg = es.SmtpConfig("smtp.test", 587, "u", "p", "to@test", "from@test")
+    es.send_email("S", "B", config=cfg, plot_path=png, send_fn=fake_send)
+    assert "image/png" in captured["types"]
 
 
 def test_smtp_config_missing_env_returns_none(monkeypatch):

@@ -117,11 +117,31 @@ def _seed_trueskill_tracker(
     return tracker
 
 
-def _replay_games_through_elo(elo: EloTracker, games: List[Dict[str, Any]]) -> None:
+def _replay_games_through_elo(
+    elo: EloTracker,
+    games: List[Dict[str, Any]],
+    *,
+    capture_agent: Optional[str] = None,
+    start_game_number: int = 0,
+) -> List[tuple]:
+    """Replay an in-memory list of game records through Elo.
+
+    When ``capture_agent`` is set, returns an ordered ``[(game_number, elo), ...]``
+    list — that agent's Elo recomputed after each game — so the caller can persist
+    a per-game trajectory. ``game_number`` is 1-based, continuing from
+    ``start_game_number`` (the cumulative count across the whole history).
+    """
+    samples: List[tuple] = []
+    n = start_game_number
     for record in games:
         agent_scores = record.get("agent_scores", {})
-        if agent_scores:
-            elo.update_game(agent_scores)
+        if not agent_scores:
+            continue
+        elo.update_game(agent_scores)
+        if capture_agent is not None:
+            n += 1
+            samples.append((n, float(elo.get_rating(capture_agent))))
+    return samples
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +174,9 @@ def run(
     latest_db = ratings_db.latest_ratings(conn)
     elo = _seed_elo_tracker(latest_db)
     tracker = _seed_trueskill_tracker(state, latest_db)
+    # Cumulative champion game index for the per-game Elo trajectory (the plot's
+    # x-axis). Continues across runs so the curve is one monotonic timeline.
+    champ_game_no = ratings_db.max_game_number(conn, agent=CHAMPION_ID)
 
     if dry_run:
         print(f"[nightly] DRY RUN run_id={run_id} hours={hours} seeds={seeds} "
@@ -209,7 +232,12 @@ def run(
         # reached — so latest.json's `elo` and the committed DB froze at the first
         # run's value while generation/total_games kept advancing. Now each
         # atomically-persisted generation also carries a fresh, recomputed Elo.
-        _replay_run_dir_games(elo, gen_res.run_dir)
+        game_samples = _replay_run_dir_games(
+            elo, gen_res.run_dir,
+            capture_agent=CHAMPION_ID, start_game_number=champ_game_no,
+        )
+        if game_samples:
+            champ_game_no = game_samples[-1][0]
         champ_elo_gen = float(elo.get_rating(CHAMPION_ID))
 
         # Persist *after every generation* (partial-state durability).
@@ -238,6 +266,15 @@ def run(
                 promoted=False,
                 days_trained=int(state.get("days_trained", 0)) + 1,
             ),
+        )
+        # Durable per-game Elo trajectory (one row per game) for the email plot.
+        ratings_db.record_game_elos(
+            conn,
+            run_id=run_id,
+            timestamp=_utc_now().isoformat(),
+            generation=generation,
+            samples=game_samples,
+            agent=CHAMPION_ID,
         )
         state_store.append_jsonl(paths.history_jsonl, {
             "generation": generation,
@@ -273,7 +310,20 @@ def run(
             thinking_time_ms=thinking_time_ms,
             verbose=verbose,
         )
-        _replay_games_through_elo(elo, eval_result.games)
+        eval_samples = _replay_games_through_elo(
+            elo, eval_result.games,
+            capture_agent=CHAMPION_ID, start_game_number=champ_game_no,
+        )
+        if eval_samples:
+            champ_game_no = eval_samples[-1][0]
+            ratings_db.record_game_elos(
+                conn,
+                run_id=run_id,
+                timestamp=_utc_now().isoformat(),
+                generation=int(state["generation"]),
+                samples=eval_samples,
+                agent=CHAMPION_ID,
+            )
         for record in eval_result.games:
             scores = record.get("agent_scores", {})
             if scores:
@@ -361,29 +411,38 @@ def run(
     return state
 
 
-def _replay_run_dir_games(elo: EloTracker, run_dir: str) -> None:
+def _replay_run_dir_games(
+    elo: EloTracker,
+    run_dir: str,
+    *,
+    capture_agent: Optional[str] = None,
+    start_game_number: int = 0,
+) -> List[tuple]:
     """Replay every game in one arena ``run_dir``'s games.jsonl through Elo.
 
     Called once per generation (on that generation's fresh run_dir), so each
-    game is counted exactly once across the whole run.
+    game is counted exactly once across the whole run. When ``capture_agent`` is
+    set, returns the per-game ``[(game_number, elo), ...]`` trajectory for that
+    agent (see :func:`_replay_games_through_elo`).
     """
     from pathlib import Path
 
     gp = Path(run_dir) / "games.jsonl"
     if not gp.exists():
-        return
+        return []
+    records: List[Dict[str, Any]] = []
     with gp.open("r", encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
             if not line:
                 continue
             try:
-                rec = json.loads(line)
+                records.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-            scores = rec.get("agent_scores", {})
-            if scores:
-                elo.update_game(scores)
+    return _replay_games_through_elo(
+        elo, records, capture_agent=capture_agent, start_game_number=start_game_number
+    )
 
 
 def _build_last_eval(
