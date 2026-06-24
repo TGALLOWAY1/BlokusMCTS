@@ -59,6 +59,8 @@ def render_status(data: Dict[str, Any]) -> str:
     window30 = data.get("window30", [])
     findings = data.get("findings", [])
     baselines = data.get("baselines", [])
+    learning = data.get("learning") or {}
+    promotion_failure = data.get("promotion_failure")
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     champ = state.get("champion", {})
@@ -103,6 +105,48 @@ def render_status(data: Dict[str, Any]) -> str:
         lines.append("_No candidate evaluation ran this cycle (insufficient snapshot data "
                      "for a re-fit, or out of time budget)._")
     lines.append("")
+
+    # --- Learning Method -----------------------------------------------------
+    lines += ["## Learning Method", ""]
+    method = learning.get("learning_method")
+    if method:
+        pretty = "Temporal Difference (TD)" if method == "temporal_difference" else "Linear Regression"
+        lines.append(f"- **Method:** {pretty}")
+        if learning.get("feature_set_version"):
+            lines.append(f"- **Feature set:** `{learning['feature_set_version']}`")
+        if learning.get("training_rows") is not None:
+            lines.append(f"- **Training rows:** {_fmt(learning.get('training_rows'), ',')}")
+        if method == "temporal_difference":
+            lines.append(f"- **TD loss:** {_fmt(learning.get('td_loss'), '.5f')}")
+            lines.append(f"- **Mean abs TD error:** {_fmt(learning.get('mean_abs_td_error'), '.5f')}")
+            rbp = learning.get("rows_by_phase") or {}
+            if rbp:
+                rbp_str = ", ".join(f"{k}={rbp.get(k)}" for k in ("early", "mid", "late") if k in rbp)
+                lines.append(f"- **Rows by phase:** {rbp_str}")
+        else:
+            lines.append(f"- **Global R²:** {_fmt(learning.get('r2_global'), '.4f')}")
+        promoted = bool((data.get("state", {}).get("last_eval") or {}).get("promoted"))
+        lines.append(f"- **Promotion result:** {'✅ promoted' if promoted else '❌ not promoted (champion retained)'}")
+    else:
+        lines.append("_No candidate was learned this cycle (insufficient data, or out of "
+                     "time budget). Champion retained._")
+    lines.append("")
+
+    if promotion_failure:
+        lines += ["### Why the candidate did not improve", ""]
+        lines += [
+            f"- **Failed gate:** `{promotion_failure.get('failed_gate') or 'n/a'}`",
+            f"- **Runner-up:** `{promotion_failure.get('runner_up') or 'n/a'}`",
+            f"- **Head-to-head win rate:** candidate "
+            f"{promotion_failure.get('candidate_win_rate', 0.0) * 100:.1f}% vs champion "
+            f"{promotion_failure.get('champion_win_rate', 0.0) * 100:.1f}%",
+            f"- **TrueSkill μ margin:** {_fmt(promotion_failure.get('trueskill_mu_margin'), '+.3f')}",
+            f"- **Games:** {_fmt(promotion_failure.get('n_games'), ',')} · "
+            f"**Seeds:** {promotion_failure.get('seeds')}",
+        ]
+        if promotion_failure.get("summary"):
+            lines.append(f"- _{promotion_failure['summary']}_")
+        lines.append("")
 
     # --- Human Strength Estimate --------------------------------------------
     lines += [
@@ -162,6 +206,7 @@ def write_status(
         series,
         target=float(state.get("human_target_elo", 1700)),
     )
+    last_eval = state.get("last_eval") or {}
     data = {
         "state": state,
         "human_estimate": est,
@@ -170,6 +215,8 @@ def write_status(
         "window30": ratings_db.recent_window(conn, limit=30),
         "findings": findings or [],
         "baselines": _baseline_rows(eval_result),
+        "learning": last_eval.get("learning"),
+        "promotion_failure": last_eval.get("promotion_failure"),
     }
     markdown = render_status(data)
 
