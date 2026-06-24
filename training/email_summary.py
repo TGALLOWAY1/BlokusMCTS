@@ -204,6 +204,47 @@ def _elo_recent_summary(history: List[Dict[str, Any]], *, limit: int = 6) -> Lis
     return lines
 
 
+def _learning_lines(last_eval: Optional[Dict[str, Any]]) -> List[str]:
+    """Render the learning-method block (regression vs temporal difference)."""
+    if not last_eval:
+        return ["_No candidate was learned this cycle. Champion retained._"]
+    learning = last_eval.get("learning") or {}
+    method = learning.get("learning_method")
+    if not method:
+        return ["_Learning method not recorded for this run._"]
+    pretty = "Temporal Difference (TD)" if method == "temporal_difference" else "Linear Regression"
+    out = [f"- Method: **{pretty}**"]
+    if learning.get("feature_set_version"):
+        out.append(f"- Feature set: `{learning['feature_set_version']}`")
+    if learning.get("training_rows") is not None:
+        out.append(f"- Training rows used: {_fmt(learning.get('training_rows'), ',')}")
+    if method == "temporal_difference":
+        out.append(f"- TD loss: {_fmt(learning.get('td_loss'), '.5f')}")
+        out.append(f"- Mean abs TD error: {_fmt(learning.get('mean_abs_td_error'), '.5f')}")
+        rbp = learning.get("rows_by_phase") or {}
+        if rbp:
+            out.append("- Rows by phase: "
+                       + ", ".join(f"{k}={rbp.get(k)}" for k in ("early", "mid", "late") if k in rbp))
+    else:
+        out.append(f"- Global R²: {_fmt(learning.get('r2_global'), '.4f')}")
+    promoted = bool(last_eval.get("promoted"))
+    out.append(f"- Result: {'✅ candidate promoted' if promoted else '❌ not improved — champion retained'}")
+
+    failure = last_eval.get("promotion_failure")
+    if failure and not promoted:
+        out += [
+            "",
+            "**Why it did not improve:**",
+            f"- Failed gate: `{failure.get('failed_gate') or 'n/a'}`",
+            f"- Runner-up: `{failure.get('runner_up') or 'n/a'}`",
+            f"- Head-to-head: candidate {failure.get('candidate_win_rate', 0.0) * 100:.1f}% "
+            f"vs champion {failure.get('champion_win_rate', 0.0) * 100:.1f}%",
+            f"- TrueSkill μ margin: {_fmt(failure.get('trueskill_mu_margin'), '+.3f')}",
+            f"- Games: {_fmt(failure.get('n_games'), ',')}, seeds: {failure.get('seeds')}",
+        ]
+    return out
+
+
 def _match_breakdown(last_eval: Optional[Dict[str, Any]]) -> List[str]:
     if not last_eval:
         return [
@@ -383,6 +424,11 @@ def build_body(
         lines += _elo_recent_summary(view.history)
     else:
         lines.append("_No recorded runs yet._")
+    lines.append("")
+
+    # --- Learning Method -----------------------------------------------------
+    lines += ["## Learning Method", ""]
+    lines += _learning_lines(last_eval)
     lines.append("")
 
     # --- Match Breakdown -----------------------------------------------------

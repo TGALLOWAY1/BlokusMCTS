@@ -158,6 +158,8 @@ def run(
     promote_registry: bool,
     dry_run: bool,
     verbose: bool,
+    learning_mode: str = "regression",
+    td_weights_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Execute one nightly run end-to-end. Returns the updated latest state."""
     paths.ensure_dirs()
@@ -298,7 +300,14 @@ def run(
     # --- Candidate generation + evaluation -----------------------------------
     promoted = False
     eval_result: Optional[sc.EvaluationResult] = None
-    candidate_cfg, refit = sc.build_candidate(state)
+    candidate_cfg, refit = sc.build_candidate(
+        state, learning_mode=learning_mode, td_weights_path=td_weights_path
+    )
+    # TD mode falls back to regression if no TD artifact is available yet, so a
+    # cold start (no trajectories collected) still produces a candidate.
+    if candidate_cfg is None and learning_mode == "td":
+        print("[nightly] TD candidate unavailable; falling back to regression candidate.")
+        candidate_cfg, refit = sc.build_regression_candidate(state)
     if candidate_cfg is not None and time.monotonic() < deadline:
         eval_rng = random.Random(start_generation * 31 + 7)
         eval_result = sc.evaluate_candidate(
@@ -353,7 +362,10 @@ def run(
 
     # Persist this run's evaluation snapshot so the (separate-process) email can
     # render the Match Breakdown without re-running anything.
-    state["last_eval"] = _build_last_eval(eval_result, seeds, promoted, run_id)
+    state["last_eval"] = _build_last_eval(
+        eval_result, seeds, promoted, run_id,
+        refit=refit, candidate_cfg=candidate_cfg, learning_mode=learning_mode,
+    )
 
     # Append a final post-evaluation timeline row *only when evaluation actually
     # ran* (it folds the champion-vs-candidate eval games into Elo and records the
@@ -450,12 +462,18 @@ def _build_last_eval(
     seeds: List[int],
     promoted: bool,
     run_id: str,
+    *,
+    refit: Optional[Dict[str, Any]] = None,
+    candidate_cfg: Optional[Dict[str, Any]] = None,
+    learning_mode: str = "regression",
 ) -> Optional[Dict[str, Any]]:
     """Summarise the candidate evaluation for the email's Match Breakdown.
 
     Returns ``None`` when no evaluation ran this cycle (e.g. the evaluator could
     not re-fit yet or the time budget was exhausted) so the email can say so
-    plainly instead of implying a fresh head-to-head happened.
+    plainly instead of implying a fresh head-to-head happened. When an evaluation
+    *did* run, also carries the learning method + TD metrics so the email and
+    status report can distinguish regression from temporal-difference learning.
     """
     if eval_result is None:
         return None
@@ -470,6 +488,46 @@ def _build_last_eval(
                 "win_rate": float(ws.get("win_rate", 0.0)),
                 "games": int(ws.get("games_played", 0)),
             })
+
+    meta = sc.candidate_metadata(candidate_cfg) if candidate_cfg else {}
+    refit = refit or {}
+    learning = {
+        "learning_method": meta.get("learning_method")
+        or refit.get("learning_method")
+        or ("temporal_difference" if learning_mode == "td" else "regression"),
+        "feature_set_version": meta.get("feature_set_version")
+        or refit.get("feature_set_version"),
+        "training_rows": meta.get("training_rows") or refit.get("rows_used"),
+        "td_loss": meta.get("td_loss") if meta.get("td_loss") is not None else refit.get("td_loss"),
+        "mean_abs_td_error": refit.get("mean_abs_td_error"),
+        "td_loss_by_phase": refit.get("td_loss_by_phase"),
+        "rows_by_phase": refit.get("rows_by_phase"),
+        "r2_global": refit.get("r2_global"),
+    }
+
+    # Promotion-failure detail (runner-up, head-to-head, margin) for the report.
+    decision = eval_result.decision
+    cand_row = next((r for r in eval_result.ranked if r.get("name") == sc.CANDIDATE_ID), {})
+    failure: Optional[Dict[str, Any]] = None
+    if not (getattr(decision, "promote", False) and getattr(decision, "champion", None) == sc.CANDIDATE_ID):
+        runner_up = eval_result.ranked[0].get("name") if eval_result.ranked else None
+        cand_ws = win_stats.get(sc.CANDIDATE_ID, {})
+        champ_ws = win_stats.get("champion", {})
+        failed_criteria = [c.get("name") for c in getattr(decision, "criteria", []) or []
+                           if not c.get("passed")]
+        failure = {
+            "failed_gate": failed_criteria[0] if failed_criteria else None,
+            "failed_gates": failed_criteria,
+            "summary": getattr(decision, "summary_line", None),
+            "runner_up": runner_up,
+            "candidate_win_rate": float(cand_ws.get("win_rate", 0.0)),
+            "champion_win_rate": float(champ_ws.get("win_rate", 0.0)),
+            "trueskill_mu_margin": cand_row.get("trueskill_mu_margin"),
+            "candidate_mu": cand_row.get("trueskill_mu"),
+            "n_games": int(eval_result.total_games),
+            "seeds": list(seeds),
+        }
+
     return {
         "run_id": run_id,
         "total_games": int(eval_result.total_games),
@@ -477,6 +535,8 @@ def _build_last_eval(
         "seeds": list(seeds),
         "promoted": bool(promoted),
         "baselines": baselines,
+        "learning": learning,
+        "promotion_failure": failure,
     }
 
 
@@ -533,8 +593,11 @@ def _promote(
     state.setdefault("checkpoints", []).append(checkpoint)
     state_store.write_checkpoint(paths, generation, checkpoint)
 
-    # Candidate becomes the new champion.
-    new_params = copy.deepcopy(candidate_cfg)
+    # Candidate becomes the new champion. Strip candidate-metadata keys so the
+    # persisted champion params stay a clean engine config; keep the metadata for
+    # lineage below.
+    cand_meta = sc.candidate_metadata(candidate_cfg)
+    new_params = sc.strip_candidate_meta(candidate_cfg)
     new_params.pop("name", None)
     state["champion_params"] = new_params
     state["last_promoted_generation"] = generation
@@ -559,6 +622,13 @@ def _promote(
         "promoted_at": now,
         "reason": reason,
         "refit_r2_global": (refit or {}).get("r2_global"),
+        "learning_method": cand_meta.get("learning_method")
+        or (refit or {}).get("learning_method") or "regression",
+        "feature_set_version": cand_meta.get("feature_set_version")
+        or (refit or {}).get("feature_set_version"),
+        "training_rows": cand_meta.get("training_rows") or (refit or {}).get("rows_used"),
+        "td_loss": cand_meta.get("td_loss") if cand_meta.get("td_loss") is not None
+        else (refit or {}).get("td_loss"),
     })
     state_store.save_champion(paths, champion)
 
@@ -626,6 +696,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                    help="Override every MCTS agent's thinking budget (small for smoke tests).")
     p.add_argument("--promote-registry", action="store_true",
                    help="Also update data/champion_registry.json on promotion (off by default).")
+    p.add_argument("--learning-mode", choices=["regression", "td"], default="regression",
+                   help="Candidate evaluator learning mode: 'regression' (default) or "
+                        "'td' (temporal-difference). TD falls back to regression if no "
+                        "TD weights artifact exists yet.")
+    p.add_argument("--td-weights-path", default=None,
+                   help="Path to the TD weights JSON (default: training/state/td_evaluator_weights.json).")
     p.add_argument("--dry-run", action="store_true", help="Print the plan and exit.")
     p.add_argument("--verbose", action="store_true")
     return p.parse_args(argv)
@@ -644,6 +720,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             promote_registry=args.promote_registry,
             dry_run=args.dry_run,
             verbose=args.verbose,
+            learning_mode=args.learning_mode,
+            td_weights_path=args.td_weights_path,
         )
         return 0
     except Exception:  # noqa: BLE001 — surface failure but leave atomic state intact
