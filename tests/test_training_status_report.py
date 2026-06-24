@@ -68,6 +68,37 @@ def test_render_status_has_all_six_sections():
         assert section in md
 
 
+def test_render_status_has_strength_and_experiment_sections():
+    data = _data()
+    data["strength"] = {
+        "current_elo": 1420.0, "current_mu": 28.1, "current_sigma": 2.3,
+        "best_elo": 1450.0, "best_mu": 29.0, "runs": 10, "promotions": 3,
+        "promotion_frequency": 0.3, "improvement_rate": 4.2,
+    }
+    data["experiment"] = {
+        "experiment_id": "exp_abc", "date": "2026-06-24T00:00:00Z",
+        "baseline": "regression", "candidate": "td",
+        "candidate_win_rate": 0.55, "baseline_win_rate": 0.48,
+        "candidate_avg_rank": 1.9, "baseline_avg_rank": 2.1,
+        "trueskill_mu_delta": 0.6, "total_games": 200,
+        "recommendation": "ADOPT candidate",
+    }
+    md = status_report.render_status(data)
+    assert "## Strength" in md
+    assert "## Experiments" in md
+    assert "Best historical Elo" in md
+    assert "1450" in md                  # best historical elo
+    assert "ADOPT candidate" in md       # experiment recommendation
+    assert "30.0%" in md                 # promotion frequency
+
+
+def test_render_status_experiment_absent_message():
+    data = _data()
+    data["experiment"] = None
+    md = status_report.render_status(data)
+    assert "No candidate comparison experiment has been run yet" in md
+
+
 def test_render_status_includes_key_numbers():
     md = status_report.render_status(_data())
     assert "1420" in md          # Elo

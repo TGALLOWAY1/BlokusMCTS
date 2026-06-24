@@ -61,6 +61,9 @@ def render_status(data: Dict[str, Any]) -> str:
     baselines = data.get("baselines", [])
     learning = data.get("learning") or {}
     promotion_failure = data.get("promotion_failure")
+    strength = data.get("strength") or {}
+    experiment = data.get("experiment")
+    loss_trend = data.get("loss_trend") or {}
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     champ = state.get("champion", {})
@@ -125,6 +128,13 @@ def render_status(data: Dict[str, Any]) -> str:
                 lines.append(f"- **Rows by phase:** {rbp_str}")
         else:
             lines.append(f"- **Global R²:** {_fmt(learning.get('r2_global'), '.4f')}")
+        if loss_trend.get("delta") is not None:
+            arrow = "↓ improving" if loss_trend["delta"] < 0 else (
+                "↑ worsening" if loss_trend["delta"] > 0 else "→ flat")
+            lines.append(f"- **Loss trend:** {_fmt(loss_trend.get('delta'), '+.5f')} "
+                         f"over {loss_trend.get('n', 0)} runs ({arrow})")
+        if learning.get("weight_drift_l2") is not None:
+            lines.append(f"- **Weight drift (L2):** {_fmt(learning.get('weight_drift_l2'), '.4f')}")
         promoted = bool((data.get("state", {}).get("last_eval") or {}).get("promoted"))
         lines.append(f"- **Promotion result:** {'✅ promoted' if promoted else '❌ not promoted (champion retained)'}")
     else:
@@ -147,6 +157,41 @@ def render_status(data: Dict[str, Any]) -> str:
         if promotion_failure.get("summary"):
             lines.append(f"- _{promotion_failure['summary']}_")
         lines.append("")
+
+    # --- Strength ------------------------------------------------------------
+    lines += ["## Strength", ""]
+    lines += [
+        f"- **Current champion Elo:** {_fmt(strength.get('current_elo'), '.0f')}",
+        f"- **Current champion TrueSkill:** {_fmt(strength.get('current_mu'), '.2f')} ± "
+        f"{_fmt(strength.get('current_sigma'), '.2f')}",
+        f"- **Best historical Elo:** {_fmt(strength.get('best_elo'), '.0f')}",
+        f"- **Best historical TrueSkill μ:** {_fmt(strength.get('best_mu'), '.2f')}",
+        f"- **Promotion frequency:** {_fmt(strength.get('promotion_frequency'), '.1%')} "
+        f"({strength.get('promotions', 0)}/{strength.get('runs', 0)} runs)",
+        f"- **Estimated improvement rate:** {_fmt(strength.get('improvement_rate'), '+.2f')} "
+        "Elo/run",
+        "",
+    ]
+
+    # --- Experiments ---------------------------------------------------------
+    lines += ["## Experiments", ""]
+    if experiment:
+        lines += [
+            f"- **Most recent comparison:** `{experiment.get('candidate')}` vs "
+            f"`{experiment.get('baseline')}` (`{experiment.get('experiment_id')}`, "
+            f"{experiment.get('date', '')[:10]})",
+            f"- **Win rate:** candidate {experiment.get('candidate_win_rate', 0.0) * 100:.1f}% "
+            f"vs baseline {experiment.get('baseline_win_rate', 0.0) * 100:.1f}%",
+            f"- **Average rank:** candidate {_fmt(experiment.get('candidate_avg_rank'), '.2f')} "
+            f"vs baseline {_fmt(experiment.get('baseline_avg_rank'), '.2f')}",
+            f"- **TrueSkill Δμ:** {_fmt(experiment.get('trueskill_mu_delta'), '+.3f')} · "
+            f"**Total games:** {_fmt(experiment.get('total_games'), ',')}",
+            f"- **Recommendation:** {experiment.get('recommendation', 'n/a')}",
+            "",
+        ]
+    else:
+        lines += ["_No candidate comparison experiment has been run yet "
+                  "(`python -m training.experiments.compare`)._", ""]
 
     # --- Human Strength Estimate --------------------------------------------
     lines += [
@@ -191,6 +236,84 @@ def render_status(data: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _strength_summary(
+    conn: sqlite3.Connection, state: Dict[str, Any], series: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Champion strength over time from the durable rating timeline."""
+    best_elo = max((p["elo"] for p in series), default=None)
+    runs = len(series)
+    promotions = sum(1 for p in series if p.get("promoted"))
+    improvement_rate = None
+    if runs >= 2:
+        improvement_rate = (series[-1]["elo"] - series[0]["elo"]) / (runs - 1)
+    best_mu = None
+    try:
+        row = conn.execute(
+            "SELECT MAX(trueskill_mu) AS m FROM rating_history WHERE agent='champion'"
+        ).fetchone()
+        if row and row["m"] is not None:
+            best_mu = float(row["m"])
+    except sqlite3.Error:
+        pass
+    return {
+        "current_elo": state.get("elo"),
+        "current_mu": state.get("trueskill_mu"),
+        "current_sigma": state.get("trueskill_sigma"),
+        "best_elo": best_elo,
+        "best_mu": best_mu,
+        "runs": runs,
+        "promotions": promotions,
+        "promotion_frequency": (promotions / runs) if runs else None,
+        "improvement_rate": improvement_rate,
+    }
+
+
+def _loss_trend() -> Dict[str, Any]:
+    """TD-loss trend from the durable learning history (if any)."""
+    from training import REPO_ROOT
+    from training import learning_diagnostics as ld
+
+    hist = ld.load_learning_history(REPO_ROOT / ld.DEFAULT_HISTORY)
+    losses = [float(h["td_loss"]) for h in hist if h.get("td_loss") is not None]
+    if len(losses) < 2:
+        return {"delta": None, "n": len(losses)}
+    return {"delta": losses[-1] - losses[0], "n": len(losses),
+            "latest": losses[-1], "first": losses[0]}
+
+
+def _latest_experiment() -> Optional[Dict[str, Any]]:
+    """Most recent experiment comparison result.json, if one exists."""
+    import json
+
+    from training import REPO_ROOT
+
+    exp_root = REPO_ROOT / "training" / "reports" / "experiments"
+    if not exp_root.exists():
+        return None
+    candidates = sorted(exp_root.glob("*/result.json"),
+                        key=lambda p: p.stat().st_mtime, reverse=True)
+    if not candidates:
+        return None
+    try:
+        data = json.loads(candidates[0].read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    h2h = data.get("head_to_head") or {}
+    return {
+        "experiment_id": data.get("experiment_id"),
+        "date": data.get("date"),
+        "baseline": h2h.get("baseline") or data.get("baseline"),
+        "candidate": h2h.get("candidate") or data.get("candidate"),
+        "candidate_win_rate": h2h.get("candidate_win_rate", 0.0),
+        "baseline_win_rate": h2h.get("baseline_win_rate", 0.0),
+        "candidate_avg_rank": h2h.get("candidate_avg_rank"),
+        "baseline_avg_rank": h2h.get("baseline_avg_rank"),
+        "trueskill_mu_delta": h2h.get("trueskill_mu_delta"),
+        "total_games": data.get("total_games"),
+        "recommendation": h2h.get("recommendation", "n/a"),
+    }
+
+
 def write_status(
     paths: TrainingPaths,
     conn: sqlite3.Connection,
@@ -217,6 +340,9 @@ def write_status(
         "baselines": _baseline_rows(eval_result),
         "learning": last_eval.get("learning"),
         "promotion_failure": last_eval.get("promotion_failure"),
+        "strength": _strength_summary(conn, state, series),
+        "loss_trend": _loss_trend(),
+        "experiment": _latest_experiment(),
     }
     markdown = render_status(data)
 

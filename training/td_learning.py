@@ -177,6 +177,25 @@ class TDResult:
     td_loss_by_phase: Dict[str, float]
     mean_abs_td_error: float
     source_rows: int
+    # Layer-4 diagnostics (defaults keep older callers / tests working).
+    target_variance: float = 0.0
+    prediction_variance: float = 0.0
+    target_variance_by_phase: Dict[str, float] = field(default_factory=dict)
+    prediction_variance_by_phase: Dict[str, float] = field(default_factory=dict)
+    feature_variance: Dict[str, float] = field(default_factory=dict)
+
+    def diagnostics(self) -> Dict[str, Any]:
+        """Compact training-metrics bundle for the learning-diagnostics store."""
+        return {
+            "td_loss": self.td_loss,
+            "td_loss_by_phase": dict(self.td_loss_by_phase),
+            "mean_abs_td_error": self.mean_abs_td_error,
+            "rows_by_phase": dict(self.rows_by_phase),
+            "target_variance": self.target_variance,
+            "prediction_variance": self.prediction_variance,
+            "target_variance_by_phase": dict(self.target_variance_by_phase),
+            "prediction_variance_by_phase": dict(self.prediction_variance_by_phase),
+        }
 
 
 def _row_phase(row: Dict[str, Any]) -> str:
@@ -188,80 +207,135 @@ def _row_phase(row: Dict[str, Any]) -> str:
     return "late"
 
 
+def _row_next_phase(row: Dict[str, Any], cur_phase: str) -> str:
+    """Phase of the bootstrap target s_{t+1}.
+
+    Prefers the explicit ``next_phase`` column (written by the collector / filled
+    in by :func:`training.trajectory_store.annotate_next_phase`). Falls back to the
+    current phase when absent — reproducing the pre-fix single-phase behaviour for
+    legacy rows that were never annotated.
+    """
+    nxt = str(row.get("next_phase") or "").strip()
+    return nxt if nxt in PHASES else cur_phase
+
+
+@dataclass
+class _Sample:
+    """One pre-extracted TD transition ready for the update loop."""
+
+    cur_phase: str
+    next_phase: str
+    s: np.ndarray
+    s_next: np.ndarray
+    terminal: bool
+    tv: float
+
+
 def train_td(rows: List[Dict[str, Any]], config: TDConfig) -> TDResult:
-    """Run TD(0) training over loaded trajectory rows. Pure (no I/O)."""
+    """Run TD(0) training over loaded trajectory rows. Pure (no I/O).
+
+    **Phase-correct bootstrapping.** Each transition's TD target is
+    ``γ · V(s_{t+1})`` evaluated with the *next* state's phase model, which may
+    differ from the current state's phase model when the transition crosses a
+    phase boundary. All three phase models are therefore held simultaneously and
+    updated in an interleaved loop (a phase with insufficient rows keeps its prior
+    weights but can still serve as a bootstrap target for its neighbours).
+    """
     rng = _random.Random(config.seed)
     lo, hi = config.clip_td_error
 
-    # Bucket rows by phase, pre-extracting vectors and targets.
-    by_phase: Dict[str, List[Tuple[np.ndarray, np.ndarray, bool, float]]] = {
-        p: [] for p in PHASES
-    }
+    # Pre-extract every transition, tagged with current + next phase.
+    samples_by_phase: Dict[str, List[_Sample]] = {p: [] for p in PHASES}
     for row in rows:
-        phase = _row_phase(row)
+        cur_phase = _row_phase(row)
+        nxt_phase = _row_next_phase(row, cur_phase)
         s = np.asarray(trajectory_store.state_vector(row), dtype=float)
         s_next = np.asarray(trajectory_store.next_state_vector(row), dtype=float)
         terminal = bool(int(row.get("terminal", 0)))
         tv = terminal_value(row, config) if terminal else 0.0
-        by_phase[phase].append((s, s_next, terminal, tv))
+        samples_by_phase[cur_phase].append(
+            _Sample(cur_phase, nxt_phase, s, s_next, terminal, tv)
+        )
 
-    phase_models: Dict[str, PhaseModel] = {}
-    trained: Dict[str, bool] = {}
-    rows_by_phase: Dict[str, int] = {}
+    rows_by_phase = {p: len(samples_by_phase[p]) for p in PHASES}
+    trained = {p: rows_by_phase[p] >= config.min_rows_per_phase for p in PHASES}
+
+    # Initialise ALL phase models up front so cross-phase bootstrap targets always
+    # have a model to query (prior weights for under-trained phases).
+    phase_models: Dict[str, PhaseModel] = {
+        p: PhaseModel(weights=_initial_weights(), bias=0.0) for p in PHASES
+    }
+
+    # Global training pool: only transitions whose *current* phase is trainable get
+    # their model updated; their bootstrap may still read an under-trained model.
+    train_pool: List[_Sample] = [
+        smp for p in PHASES if trained[p] for smp in samples_by_phase[p]
+    ]
+
+    def _target(smp: _Sample) -> float:
+        if smp.terminal:
+            return smp.tv
+        return config.gamma * phase_models[smp.next_phase].value(smp.s_next)
+
+    for _epoch in range(config.epochs):
+        order = list(range(len(train_pool)))
+        rng.shuffle(order)
+        for idx in order:
+            smp = train_pool[idx]
+            model = phase_models[smp.cur_phase]
+            v_s = model.value(smp.s)
+            error = _target(smp) - v_s
+            if error < lo:
+                error = lo
+            elif error > hi:
+                error = hi
+            # Semi-gradient TD update with L2 on weights only.
+            model.weights += config.alpha * (error * smp.s) - config.alpha * config.l2 * model.weights
+            model.bias += config.alpha * error
+
+    # Per-phase final-pass metrics (using the phase-correct bootstrap).
     loss_by_phase: Dict[str, float] = {}
-
     all_abs_errors: List[float] = []
     all_sq_errors: List[float] = []
-
+    all_targets: List[float] = []
+    all_preds: List[float] = []
+    target_var_by_phase: Dict[str, float] = {}
+    pred_var_by_phase: Dict[str, float] = {}
     for phase in PHASES:
-        samples = by_phase[phase]
-        rows_by_phase[phase] = len(samples)
-        model = PhaseModel(weights=_initial_weights(), bias=0.0)
-
-        if len(samples) < config.min_rows_per_phase:
-            # Insufficient data: keep the prior (initialised) weights, mark untrained.
-            phase_models[phase] = model
-            trained[phase] = False
+        samples = samples_by_phase[phase]
+        if not trained[phase] or not samples:
             loss_by_phase[phase] = 0.0
+            target_var_by_phase[phase] = 0.0
+            pred_var_by_phase[phase] = 0.0
             continue
-
-        for _epoch in range(config.epochs):
-            order = list(range(len(samples)))
-            rng.shuffle(order)
-            for idx in order:
-                s, s_next, terminal, tv = samples[idx]
-                v_s = model.value(s)
-                if terminal:
-                    target = tv
-                else:
-                    target = config.gamma * model.value(s_next)
-                error = target - v_s
-                if error < lo:
-                    error = lo
-                elif error > hi:
-                    error = hi
-                # Semi-gradient TD update with L2 on weights only.
-                model.weights += config.alpha * (error * s) - config.alpha * config.l2 * model.weights
-                model.bias += config.alpha * error
-
-        # Final-pass metrics on this phase.
         sq = 0.0
-        ab = 0.0
-        for s, s_next, terminal, tv in samples:
-            v_s = model.value(s)
-            target = tv if terminal else config.gamma * model.value(s_next)
-            err = target - v_s
+        targets: List[float] = []
+        preds: List[float] = []
+        for smp in samples:
+            pred = phase_models[phase].value(smp.s)
+            tgt = _target(smp)
+            err = tgt - pred
             sq += err * err
-            ab += abs(err)
             all_sq_errors.append(err * err)
             all_abs_errors.append(abs(err))
-        n = max(len(samples), 1)
-        loss_by_phase[phase] = sq / n
-        phase_models[phase] = model
-        trained[phase] = True
+            targets.append(tgt)
+            preds.append(pred)
+        loss_by_phase[phase] = sq / max(len(samples), 1)
+        target_var_by_phase[phase] = float(np.var(targets))
+        pred_var_by_phase[phase] = float(np.var(preds))
+        all_targets.extend(targets)
+        all_preds.extend(preds)
 
     td_loss = float(np.mean(all_sq_errors)) if all_sq_errors else 0.0
     mean_abs = float(np.mean(all_abs_errors)) if all_abs_errors else 0.0
+
+    # Per-feature variance over the *current-state* vectors of all training rows —
+    # near-zero variance means a feature carries no learnable signal in this corpus.
+    feature_variance: Dict[str, float] = {}
+    if train_pool:
+        mat = np.vstack([smp.s for smp in train_pool])
+        var = np.var(mat, axis=0)
+        feature_variance = {name: float(var[i]) for i, name in enumerate(RICH_FEATURE_NAMES)}
 
     return TDResult(
         phase_models=phase_models,
@@ -271,6 +345,11 @@ def train_td(rows: List[Dict[str, Any]], config: TDConfig) -> TDResult:
         td_loss_by_phase=loss_by_phase,
         mean_abs_td_error=mean_abs,
         source_rows=len(rows),
+        target_variance=float(np.var(all_targets)) if all_targets else 0.0,
+        prediction_variance=float(np.var(all_preds)) if all_preds else 0.0,
+        target_variance_by_phase=target_var_by_phase,
+        prediction_variance_by_phase=pred_var_by_phase,
+        feature_variance=feature_variance,
     )
 
 
@@ -338,6 +417,10 @@ def build_artifact(result: TDResult, config: TDConfig) -> Dict[str, Any]:
             "td_loss_by_phase": result.td_loss_by_phase,
             "mean_abs_td_error": result.mean_abs_td_error,
             "rows_by_phase": result.rows_by_phase,
+            "target_variance": result.target_variance,
+            "prediction_variance": result.prediction_variance,
+            "target_variance_by_phase": result.target_variance_by_phase,
+            "prediction_variance_by_phase": result.prediction_variance_by_phase,
         },
         "config": config.to_dict(),
     }
@@ -358,6 +441,9 @@ def train_from_file(
     """Load trajectories and train. Returns ``(result, rows)``."""
     rows = trajectory_store.load_trajectories(input_path)
     rows = trajectory_store.sort_trajectories(rows)
+    # Fill in next_phase for any rows that predate the column so cross-phase
+    # bootstrap targets resolve to the correct phase model.
+    rows = trajectory_store.annotate_next_phase(rows)
     result = train_td(rows, config)
     return result, rows
 

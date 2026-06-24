@@ -87,6 +87,39 @@ def test_sort_trajectories_orders_by_game_player_ply():
     assert keys == sorted(keys)
 
 
+def test_annotate_next_phase_fills_from_following_row():
+    # Legacy-style rows with no next_phase. After sort+annotate, each non-terminal
+    # row's next_phase = the following same-player row's phase (cross-boundary aware).
+    rows = [
+        {"game_id": "g0", "player_id": 1, "ply": 0, "phase": "early", "terminal": 0},
+        {"game_id": "g0", "player_id": 1, "ply": 4, "phase": "mid", "terminal": 0},
+        {"game_id": "g0", "player_id": 1, "ply": 8, "phase": "late", "terminal": 1},
+    ]
+    out = ts.annotate_next_phase(ts.sort_trajectories(rows))
+    assert out[0]["next_phase"] == "mid"   # early → mid boundary captured
+    assert out[1]["next_phase"] == "late"  # mid → late boundary captured
+    assert out[2]["next_phase"] == "late"  # terminal keeps own phase (unused)
+
+
+def test_annotate_next_phase_preserves_explicit_value():
+    rows = [{"game_id": "g0", "player_id": 1, "ply": 0, "phase": "early",
+             "terminal": 0, "next_phase": "late"}]
+    out = ts.annotate_next_phase(rows)
+    assert out[0]["next_phase"] == "late"  # explicit value untouched
+
+
+def test_annotate_next_phase_handles_trajectory_boundary():
+    # Last row of player 1 is non-terminal but has no successor in the same
+    # trajectory → falls back to its own phase rather than bleeding into player 2.
+    rows = [
+        {"game_id": "g0", "player_id": 1, "ply": 0, "phase": "mid", "terminal": 0},
+        {"game_id": "g0", "player_id": 2, "ply": 0, "phase": "early", "terminal": 0},
+    ]
+    out = ts.annotate_next_phase(ts.sort_trajectories(rows))
+    p1 = next(r for r in out if r["player_id"] == 1)
+    assert p1["next_phase"] == "mid"
+
+
 def test_compute_ranks_handles_ties():
     ranks = compute_ranks({1: 50, 2: 50, 3: 30, 4: 10})
     assert ranks[1] == 1 and ranks[2] == 1  # tie for first

@@ -45,6 +45,7 @@ TRAJECTORY_META_COLUMNS: List[str] = [
     "ply",
     "player_id",
     "phase",
+    "next_phase",
     "board_occupancy",
     "current_player",
     "reward",
@@ -103,6 +104,11 @@ class TrajectoryRow:
     agent_version: str
     created_at: str
     feature_set_version: str = FEATURE_SET_VERSION
+    # Phase of the *next* state (the bootstrap target's phase). Stored explicitly
+    # so TD updates can evaluate V(s_{t+1}) with the correct phase weights even
+    # when a transition crosses a phase boundary. Empty string means "unknown";
+    # the trainer then falls back to the current phase.
+    next_phase: str = ""
 
     def to_csv_dict(self) -> Dict[str, Any]:
         row: Dict[str, Any] = {
@@ -112,6 +118,7 @@ class TrajectoryRow:
             "ply": int(self.ply),
             "player_id": int(self.player_id),
             "phase": self.phase,
+            "next_phase": self.next_phase or self.phase,
             "board_occupancy": float(self.board_occupancy),
             "current_player": int(self.current_player),
             "reward": float(self.reward),
@@ -212,3 +219,47 @@ def state_vector(row: Dict[str, Any]) -> List[float]:
 def next_state_vector(row: Dict[str, Any]) -> List[float]:
     """Extract the ordered next-state feature vector from a loaded row."""
     return [float(row.get(f"{NEXT_PREFIX}{n}", 0.0)) for n in RICH_FEATURE_NAMES]
+
+
+_VALID_PHASES = ("early", "mid", "late")
+
+
+def annotate_next_phase(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Fill in each row's ``next_phase`` (the phase of its bootstrap target).
+
+    Backwards-compatible: trajectory CSVs written before the ``next_phase`` column
+    existed have no value, so we reconstruct it from the trajectory structure.
+    For a non-terminal transition the next state *is* the player's following
+    decision point, so ``next_phase`` = that following row's ``phase``. Terminal
+    transitions bootstrap from the terminal label (not a value estimate), so their
+    ``next_phase`` is left as the row's own phase — it is never consumed.
+
+    The input is assumed sorted by ``(game_id, player_id, ply)`` (use
+    :func:`sort_trajectories` first). Rows already carrying a valid ``next_phase``
+    are left untouched, so freshly-collected data is a no-op pass.
+
+    Returns the same list (mutated in place) for chaining.
+    """
+    n = len(rows)
+    for i, row in enumerate(rows):
+        existing = str(row.get("next_phase") or "").strip()
+        if existing in _VALID_PHASES:
+            continue
+        cur_phase = str(row.get("phase") or "early")
+        if int(row.get("terminal", 0)):
+            row["next_phase"] = cur_phase
+            continue
+        nxt = rows[i + 1] if i + 1 < n else None
+        same_trajectory = (
+            nxt is not None
+            and str(nxt.get("game_id", "")) == str(row.get("game_id", ""))
+            and int(nxt.get("player_id", -1)) == int(row.get("player_id", -2))
+        )
+        if same_trajectory:
+            cand = str(nxt.get("phase") or cur_phase)
+            row["next_phase"] = cand if cand in _VALID_PHASES else cur_phase
+        else:
+            # No recoverable successor row (e.g. truncated data): fall back to the
+            # current phase, reproducing the pre-fix single-phase behaviour.
+            row["next_phase"] = cur_phase
+    return list(rows)
