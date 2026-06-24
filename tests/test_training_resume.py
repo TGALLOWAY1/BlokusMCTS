@@ -42,8 +42,10 @@ def _install_fast_mocks(monkeypatch, paths):
         )
 
     monkeypatch.setattr(sc, "run_generation", fake_run_generation)
-    # No candidate -> skip the (heavy) evaluation battery entirely.
-    monkeypatch.setattr(sc, "build_candidate", lambda state: (None, None))
+    # No candidate -> skip the (heavy) evaluation battery entirely. Accept the
+    # learning-mode kwargs the orchestrator now passes (regression vs td).
+    monkeypatch.setattr(sc, "build_candidate", lambda state, **kwargs: (None, None))
+    monkeypatch.setattr(sc, "build_regression_candidate", lambda state: (None, None))
 
 
 def _run_once(paths):
