@@ -429,9 +429,19 @@ def extract_rich_features(
 
     # --- Score / race --------------------------------------------------------
     my_score = scores[player.value]
-    others = [scores[p.value] for p in _PLAYERS if p != player]
-    leader_score = max(others) if others else 0
-    next_score = max(others) if others else 0
+    others = sorted((scores[p.value] for p in _PLAYERS if p != player), reverse=True)
+    leader_score = others[0] if others else 0
+    # "Next player" = the opponent adjacent to me in the score ranking (the player
+    # just above me, or the runner-up if I am leading) — distinct from the leader.
+    higher = [s for s in others if s > my_score]
+    if higher:
+        next_score = min(higher)  # closest opponent ranked above me
+    elif len(others) >= 2:
+        next_score = others[1]  # I'm leading ⇒ gap to the second-best opponent
+    elif others:
+        next_score = others[0]
+    else:
+        next_score = 0
     feats["score_margin_vs_leader"] = float(np.tanh((my_score - leader_score) / 20.0))
     feats["score_margin_vs_next_player"] = float(np.tanh((my_score - next_score) / 20.0))
     rank = 1 + sum(1 for s in others if s > my_score)
