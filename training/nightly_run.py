@@ -367,6 +367,13 @@ def run(
         refit=refit, candidate_cfg=candidate_cfg, learning_mode=learning_mode,
     )
 
+    # Durable learning history: pair this run's training loss with the candidate's
+    # measured strength so the loss→strength correlation can be computed over time
+    # (the headline "is optimising TD loss meaningful?" diagnostic). Best-effort.
+    _record_learning_history(
+        paths, run_id, eval_result, refit, candidate_cfg, learning_mode, promoted
+    )
+
     # Append a final post-evaluation timeline row *only when evaluation actually
     # ran* (it folds the champion-vs-candidate eval games into Elo and records the
     # promotion flag). When no eval ran, the per-generation rows above are already
@@ -538,6 +545,48 @@ def _build_last_eval(
         "learning": learning,
         "promotion_failure": failure,
     }
+
+
+def _record_learning_history(
+    paths: TrainingPaths,
+    run_id: str,
+    eval_result: Optional[sc.EvaluationResult],
+    refit: Optional[Dict[str, Any]],
+    candidate_cfg: Optional[Dict[str, Any]],
+    learning_mode: str,
+    promoted: bool,
+) -> None:
+    """Append one training→strength observation to learning_history.jsonl.
+
+    Never raises: observability must not jeopardise a training run.
+    """
+    if eval_result is None or candidate_cfg is None:
+        return
+    try:
+        from training import learning_diagnostics as ld
+
+        meta = sc.candidate_metadata(candidate_cfg)
+        refit = refit or {}
+        method = meta.get("learning_method") or refit.get("learning_method") or (
+            "temporal_difference" if learning_mode == "td" else "regression")
+        td_loss = meta.get("td_loss")
+        if td_loss is None:
+            td_loss = refit.get("td_loss")
+        cand_row = next(
+            (r for r in eval_result.ranked if r.get("name") == sc.CANDIDATE_ID), {}
+        )
+        ld.record_learning_event(
+            paths.state_dir / "learning_history.jsonl",
+            run_id=run_id,
+            learning_method=method,
+            td_loss=td_loss,
+            candidate_trueskill_mu=cand_row.get("trueskill_mu"),
+            candidate_elo=None,
+            promoted=promoted,
+            training_rows=meta.get("training_rows") or refit.get("rows_used"),
+        )
+    except Exception:  # noqa: BLE001 — observability is best-effort
+        pass
 
 
 def _build_agent_rows(elo: EloTracker, tracker: TrueSkillTracker) -> List[ratings_db.AgentRatingRow]:

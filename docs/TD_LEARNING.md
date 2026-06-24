@@ -56,8 +56,11 @@ b     += α · error
 ```
 
 Reward is sparse (0 on every non-terminal step); all signal enters through the
-terminal value. The bootstrap `V(s_{t+1})` uses the current phase's weights
-(a deliberate simplification — see §8).
+terminal value. The bootstrap `V(s_{t+1})` is evaluated with the **next state's**
+phase model, which may differ from the current state's when a transition crosses
+a phase boundary (`next_phase` is stored per row; all three phase models are held
+simultaneously and updated in an interleaved loop). This corrected a prior
+simplification where the current phase's weights were used regardless.
 
 ### Agent-compatible projection
 
@@ -212,9 +215,9 @@ coverage is thin.
 
 ## 8. Known limitations
 
-- **Bootstrap uses the current phase's weights** for `V(s_{t+1})` even when the
-  next state crosses a phase boundary (next-state phase is not stored). A small
-  approximation; TD(λ) / storing next-state phase would remove it.
+- **Phase-boundary bootstrap — FIXED (2026-06).** `V(s_{t+1})` now uses the next
+  state's phase model (`next_phase` stored per row, derived for legacy rows by
+  `trajectory_store.annotate_next_phase`). See `docs/TD_AUDIT.md`.
 - **Only eight weights reach the live agent.** The rich features improve the
   *conditioning* of those eight projected weights but the agent still evaluates
   with eight fast features (rich features are too slow for per-rollout use).

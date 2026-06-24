@@ -59,26 +59,48 @@ _PLAYERS: List[Player] = list(Player)
 
 _PIECE_SIZES: Optional[Dict[int, int]] = None
 _TOTAL_PIECE_AREA: int = 0
+_PIECE_COUNT_BY_SIZE: Dict[int, int] = {}
+_TOTAL_PIECE_COUNT: int = 0
 # "Key" / high-value pentominoes that are awkward to place if left late.
 _AWKWARD_PIECE_IDS = (17, 19, 20)
 
 
 def _piece_sizes() -> Dict[int, int]:
-    global _PIECE_SIZES, _TOTAL_PIECE_AREA
+    global _PIECE_SIZES, _TOTAL_PIECE_AREA, _PIECE_COUNT_BY_SIZE, _TOTAL_PIECE_COUNT
     if _PIECE_SIZES is None:
         from engine.pieces import PieceGenerator
 
         sizes: Dict[int, int] = {}
+        counts: Dict[int, int] = {}
         for piece in PieceGenerator.get_all_pieces():
             sizes[piece.id] = piece.size
+            counts[piece.size] = counts.get(piece.size, 0) + 1
         _PIECE_SIZES = sizes
-        _TOTAL_PIECE_AREA = int(sum(sizes.values()))  # 89 squares
+        _TOTAL_PIECE_AREA = int(sum(sizes.values()))
+        _PIECE_COUNT_BY_SIZE = counts
+        _TOTAL_PIECE_COUNT = len(sizes)
     return _PIECE_SIZES
 
 
 def total_piece_area() -> int:
     _piece_sizes()
     return _TOTAL_PIECE_AREA
+
+
+def _count_of_size(size: int) -> int:
+    """How many distinct pieces of a given cell-count exist in the piece set.
+
+    Derived from the engine's actual piece generator (this engine ships a
+    non-standard set: 1/1/2/6/11 pieces of sizes 1–5), so feature normalisation
+    divisors stay correct if the piece set ever changes.
+    """
+    _piece_sizes()
+    return max(_PIECE_COUNT_BY_SIZE.get(size, 0), 1)
+
+
+def total_piece_count() -> int:
+    _piece_sizes()
+    return max(_TOTAL_PIECE_COUNT, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +366,7 @@ def extract_rich_features(
     feats["legal_move_count_small_pieces"] = min(small / _MAX_LEGAL_MOVES, 1.0)
     feats["legal_move_count_medium_pieces"] = min(medium / _MAX_LEGAL_MOVES, 1.0)
     feats["legal_move_count_large_pieces"] = min(large / _MAX_LEGAL_MOVES, 1.0)
-    feats["playable_piece_count"] = len(playable_ids) / 21.0
+    feats["playable_piece_count"] = len(playable_ids) / total_piece_count()
     feats["total_playable_piece_area"] = playable_area / max(total_area, 1)
     feats["avg_legal_move_area"] = avg_area / 5.0
     feats["max_legal_move_area"] = max_area / 5.0
@@ -379,12 +401,12 @@ def extract_rich_features(
         sz = sizes.get(pid, 0)
         if sz in rem_by_size:
             rem_by_size[sz] += 1
-    feats["remaining_piece_count"] = len(remaining_ids) / 21.0
-    feats["remaining_singletons"] = rem_by_size[1] / 1.0  # at most 1 monomino
-    feats["remaining_dominoes"] = rem_by_size[2] / 1.0
-    feats["remaining_trominoes"] = rem_by_size[3] / 2.0
-    feats["remaining_tetrominoes"] = rem_by_size[4] / 5.0
-    feats["remaining_pentominoes"] = rem_by_size[5] / 12.0
+    feats["remaining_piece_count"] = len(remaining_ids) / total_piece_count()
+    feats["remaining_singletons"] = rem_by_size[1] / _count_of_size(1)
+    feats["remaining_dominoes"] = rem_by_size[2] / _count_of_size(2)
+    feats["remaining_trominoes"] = rem_by_size[3] / _count_of_size(3)
+    feats["remaining_tetrominoes"] = rem_by_size[4] / _count_of_size(4)
+    feats["remaining_pentominoes"] = rem_by_size[5] / _count_of_size(5)
     awkward = sum(5 if pid in _AWKWARD_PIECE_IDS else (sizes.get(pid, 0))
                   for pid in remaining_ids)
     feats["awkward_piece_penalty"] = min(awkward / max(total_area, 1), 1.0)
@@ -446,7 +468,7 @@ def extract_rich_features(
     feats["score_margin_vs_next_player"] = float(np.tanh((my_score - next_score) / 20.0))
     rank = 1 + sum(1 for s in others if s > my_score)
     feats["rank_so_far"] = (4 - rank) / 3.0  # 1st⇒1.0, 4th⇒0.0
-    feats["completion_ratio"] = (21 - len(remaining_ids)) / 21.0
+    feats["completion_ratio"] = (total_piece_count() - len(remaining_ids)) / total_piece_count()
     rem_area = sum(sizes.get(pid, 0) for pid in remaining_ids)
     feats["remaining_area"] = rem_area / max(total_area, 1)
 

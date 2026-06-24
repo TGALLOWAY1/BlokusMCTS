@@ -224,6 +224,11 @@ def trajectory_to_rows(
         for i, dp in enumerate(points):
             is_terminal = i == len(points) - 1
             next_feats = terminal_feats if is_terminal else points[i + 1].features
+            # Phase of the bootstrap target: the next decision point's phase for a
+            # non-terminal transition (which may differ from dp.phase across a
+            # phase boundary), or the row's own phase for a terminal transition
+            # (unused — terminal rows bootstrap from the label, not V(s')).
+            next_phase = dp.phase if is_terminal else points[i + 1].phase
             rows.append(
                 TrajectoryRow(
                     run_id=run_id,
@@ -232,6 +237,7 @@ def trajectory_to_rows(
                     ply=dp.ply,
                     player_id=pid,
                     phase=dp.phase,
+                    next_phase=next_phase,
                     board_occupancy=dp.board_occupancy,
                     current_player=dp.current_player,
                     state_features=dp.features,

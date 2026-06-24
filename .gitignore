@@ -83,3 +83,6 @@ frontier_output/
 *.swp
 *.swo
 *~
+
+# Experiment harness per-run arena outputs (heavy games.jsonl); keep manifest/report/result only
+training/reports/experiments/*/runs/

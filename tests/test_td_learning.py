@@ -22,7 +22,7 @@ def _zero_feat():
 
 
 def _row(*, occ=0.1, terminal=False, final_rank=1, final_score=80,
-         margin_to_next=5.0, state=None, nxt=None):
+         margin_to_next=5.0, state=None, nxt=None, next_phase=None):
     sf = state or _zero_feat()
     nf = nxt or _zero_feat()
     row = {
@@ -32,6 +32,8 @@ def _row(*, occ=0.1, terminal=False, final_rank=1, final_score=80,
         "final_score": final_score,
         "score_margin_to_next": margin_to_next,
     }
+    if next_phase is not None:
+        row["next_phase"] = next_phase
     for i, name in enumerate(RICH_FEATURE_NAMES):
         row[f"f_{name}"] = sf[name]
         row[f"nf_{name}"] = nf[name]
@@ -153,6 +155,48 @@ def test_phases_update_independently():
     # The early model did not touch feature fb (no early rows used it; prior 0, no L2).
     assert math.isclose(early.weights[fb], 0.0, abs_tol=1e-9)
     assert math.isclose(late.weights[fa], 0.0, abs_tol=1e-9)
+
+
+def test_next_phase_resolution_prefers_explicit_column():
+    assert td._row_next_phase({"next_phase": "late"}, "early") == "late"
+    assert td._row_next_phase({"next_phase": ""}, "mid") == "mid"  # fallback
+    assert td._row_next_phase({"next_phase": "bogus"}, "early") == "early"
+    assert td._row_next_phase({}, "late") == "late"  # legacy row → current phase
+
+
+def test_bootstrap_uses_next_state_phase_model():
+    # A non-terminal early-phase transition whose NEXT state lives in the mid phase
+    # must bootstrap from the *mid* model, not the early model. We make the mid
+    # model value a marker feature highly, then check the early model learns a
+    # positive weight on its own state feature because its bootstrap target (the
+    # mid model's value of the next state) is positive.
+    cfg = td.TDConfig(min_rows_per_phase=1, epochs=60, alpha=0.05, l2=0.0,
+                      gamma=0.99, clip_td_error=(-10, 10),
+                      blend_rank_weight=1.0, blend_score_weight=0.0, blend_margin_weight=0.0)
+    fi, fj = 25, 26  # non-SE indices ⇒ zero prior
+    mid_state = _zero_feat(); mid_state[RICH_FEATURE_NAMES[fi]] = 1.0
+    mid_rows = [_row(occ=0.4, terminal=True, final_rank=1, state=mid_state)] * 30
+
+    early_state = _zero_feat(); early_state[RICH_FEATURE_NAMES[fj]] = 1.0
+    nxt = _zero_feat(); nxt[RICH_FEATURE_NAMES[fi]] = 1.0
+    early_rows = [_row(occ=0.1, terminal=False, state=early_state, nxt=nxt,
+                       next_phase="mid")] * 30
+
+    result = td.train_td(mid_rows + early_rows, cfg)
+    # Mid model values the marker feature positively (terminal rank-1 target).
+    assert result.phase_models["mid"].weights[fi] > 0
+    # Early model picked up the positive bootstrap target from the MID model.
+    assert result.phase_models["early"].weights[fj] > 0
+
+
+def test_legacy_rows_without_next_phase_fall_back_to_current_phase():
+    # No next_phase column (legacy CSV) + non-terminal rows must still train
+    # without crashing, using the current-phase model for the bootstrap.
+    cfg = td.TDConfig(min_rows_per_phase=1, epochs=5, alpha=0.05, gamma=0.9)
+    rows = [_row(occ=0.1, terminal=False) for _ in range(10)]
+    rows.append(_row(occ=0.1, terminal=True, final_rank=1))
+    result = td.train_td(rows, cfg)  # must not raise
+    assert result.trained_phases["early"] is True
 
 
 def test_insufficient_rows_keeps_prior_and_marks_untrained():
