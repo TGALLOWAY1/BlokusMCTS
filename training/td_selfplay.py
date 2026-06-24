@@ -301,3 +301,80 @@ def collect_trajectories(
             print(f"[td_selfplay] game {g+1}/{num_games}: {written} rows "
                   f"(scores={traj.final_scores})", flush=True)
     return total
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def _default_agents() -> List[Dict[str, Any]]:
+    """A self-play roster of MCTS champion vs varied opponents.
+
+    Uses the champion_loop base champion for the focal seat and a mix of
+    heuristic / variant opponents so trajectories cover diverse states. Falls
+    back gracefully if the champion config import is unavailable.
+    """
+    try:
+        from scripts.champion_loop import BASE_CHAMPION_PARAMS
+        import copy as _copy
+
+        champ = _copy.deepcopy(BASE_CHAMPION_PARAMS)
+        champ["name"] = "champion"
+        return [
+            champ,
+            {"name": "heuristic", "type": "heuristic"},
+            {"name": "random", "type": "random"},
+            {"name": "heuristic2", "type": "heuristic"},
+        ]
+    except Exception:
+        return [
+            {"name": "heuristic", "type": "heuristic"},
+            {"name": "random", "type": "random"},
+            {"name": "heuristic2", "type": "heuristic"},
+            {"name": "random2", "type": "random"},
+        ]
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    import argparse
+
+    from training.trajectory_store import DEFAULT_TRAJECTORY_CSV
+
+    p = argparse.ArgumentParser(
+        description="Collect TD self-play trajectories into data/td_trajectories.csv."
+    )
+    p.add_argument("--num-games", type=int, default=20)
+    p.add_argument("--seed", type=int, default=2026)
+    p.add_argument("--run-id", default="tdcollect")
+    p.add_argument("--agent-version", default="champion")
+    p.add_argument("--output", default=str(DEFAULT_TRAJECTORY_CSV))
+    p.add_argument("--thinking-time-ms", type=int, default=None,
+                   help="Override every MCTS agent's thinking budget (small ⇒ fast collection).")
+    p.add_argument("--capture-every-ply", action="store_true",
+                   help="Capture every player at every ply (denser, slower).")
+    p.add_argument("--verbose", action="store_true")
+    args = p.parse_args(argv)
+
+    agents = _default_agents()
+    if args.thinking_time_ms is not None:
+        for a in agents:
+            if a.get("type", "mcts") == "mcts":
+                a["thinking_time_ms"] = int(args.thinking_time_ms)
+
+    total = collect_trajectories(
+        agents,
+        run_id=args.run_id,
+        num_games=args.num_games,
+        seed=args.seed,
+        agent_version=args.agent_version,
+        output_path=args.output,
+        capture_every_ply=args.capture_every_ply,
+        verbose=args.verbose,
+    )
+    print(f"[td_selfplay] wrote {total} rows to {args.output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
