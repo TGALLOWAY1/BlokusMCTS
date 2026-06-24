@@ -123,6 +123,48 @@ def test_records_accumulate_per_generation(tmp_path):
     assert series[-1]["run_id"] == "nightly1"
 
 
+def test_record_game_elos_and_series(tmp_path):
+    conn = rdb.connect(tmp_path / "r.sqlite")
+    assert rdb.max_game_number(conn) == 0
+    rdb.record_game_elos(
+        conn, run_id="run1", timestamp="2026-06-20T03:00:00Z", generation=1,
+        samples=[(1, 1200.0), (2, 1212.5), (3, 1205.0)],
+    )
+    assert rdb.max_game_number(conn) == 3
+    series = rdb.champion_game_elo_series(conn)
+    assert [p["game_number"] for p in series] == [1, 2, 3]
+    assert [round(p["elo"], 1) for p in series] == [1200.0, 1212.5, 1205.0]
+    assert all(p["generation"] == 1 for p in series)
+
+
+def test_record_game_elos_empty_is_noop(tmp_path):
+    conn = rdb.connect(tmp_path / "r.sqlite")
+    rdb.record_game_elos(
+        conn, run_id="run1", timestamp="t", generation=1, samples=[],
+    )
+    assert rdb.max_game_number(conn) == 0
+    assert rdb.champion_game_elo_series(conn) == []
+
+
+def test_game_elo_series_continues_across_runs_and_limit(tmp_path):
+    conn = rdb.connect(tmp_path / "r.sqlite")
+    rdb.record_game_elos(
+        conn, run_id="run1", timestamp="t1", generation=1,
+        samples=[(1, 1200.0), (2, 1205.0)],
+    )
+    # Second run continues numbering from the durable max (mirrors nightly_run).
+    start = rdb.max_game_number(conn)
+    rdb.record_game_elos(
+        conn, run_id="run2", timestamp="t2", generation=2,
+        samples=[(start + 1, 1210.0), (start + 2, 1215.0)],
+    )
+    series = rdb.champion_game_elo_series(conn)
+    assert [p["game_number"] for p in series] == [1, 2, 3, 4]
+    # limit keeps the most-recent N, still oldest-first.
+    tail = rdb.champion_game_elo_series(conn, limit=2)
+    assert [p["game_number"] for p in tail] == [3, 4]
+
+
 def test_persists_across_reconnect(tmp_path):
     db = tmp_path / "r.sqlite"
     conn = rdb.connect(db)

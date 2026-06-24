@@ -87,6 +87,15 @@ Reports also live at `training/status.md` and `training/reports/latest_diagnosis
 > a fresh Elo per generation (above) plus the rollback journal means the committed
 > `ratings.sqlite` always holds the latest measurement.
 
+> **Per-game Elo trajectory.** Alongside the per-generation `run_summary` row, each
+> generation also appends one `game_elo` row **per individual game** — the
+> champion's Elo recomputed after that game, numbered with a monotonic
+> `game_number` that continues across runs. This fine-grained series (generation
+> self-play *and* candidate-eval games) is what the email plots, so a flat or
+> drifting distribution is visible at game-level resolution rather than one coarse
+> point per generation. See `record_game_elos` / `champion_game_elo_series` in
+> `training/ratings_db.py`.
+
 ### CLI
 
 ```bash
@@ -105,8 +114,14 @@ python -m training.email_summary --failed   # failure
 python -m training.email_summary --dry-run  # preview subject+body, never send
 ```
 
-The email reads the headline Elo, Δ-vs-previous, Δ-vs-best, and the ELO-trend
-table directly from the `ratings.sqlite` timeline (not a single cached scalar), so:
+The email reads the headline Elo, Δ-vs-previous, Δ-vs-best, and the ELO Trend
+directly from the `ratings.sqlite` timeline (not a single cached scalar). The
+ELO Trend section is led by the **per-game Elo plot** (`training/reports/elo_trend.png`,
+rendered by `training/elo_plot.py`): the champion's Elo recomputed after every
+individual game, with a least-squares trend line so it's obvious whether the
+distribution is moving in the right direction. The PNG is embedded inline in HTML
+mail clients and attached as a file; a compact recent-generations digest is the
+plain-text fallback (the old per-run table was removed). So:
 
 - **Fresh run:** `MCTS Nightly Training Report — ELO 1042.7 (+12.4)`
 - **Regression:** `MCTS Nightly Training Report — ELO 1030.3 (-3.1)`
@@ -177,15 +192,19 @@ summaries are **never deleted** — the repo is a permanent record of progress.
 ## Tests
 
 `tests/test_training_*.py` cover: path resolution + atomic writes, append-only
-ratings DB (incl. the **single-file/no-WAL durability guard** and per-generation
-accumulation), human-estimate math (including the no-fabricated-confidence rule),
+ratings DB (incl. the **single-file/no-WAL durability guard**, per-generation
+accumulation, and the **per-game `game_elo` timeline** with cross-run numbering),
+human-estimate math (including the no-fabricated-confidence rule),
 status rendering, diagnostics detectors (incl. **`stale_elo`** and
 **`metrics_not_updated`**), email subject/body (fresh-Elo delta vs previous/best,
-ELO-trend table, the **"no fresh ELO" stale guardrail**, failure crash summary,
+the ELO Trend section + **per-game plot embed/attach** and recent-generations
+digest, the **"no fresh ELO" stale guardrail**, failure crash summary,
 fake transport, missing-env skip, and an end-to-end `compose()` against a real
-DB), `selfplay_core` eval-battery construction, and an end-to-end **resume proof**
-(incl. the **fresh-Elo-every-run** regression guard) + failure-preservation test
-(arena mocked).
+DB), the **Elo-trajectory plot** (`test_training_elo_plot.py`: per-game render,
+per-generation fallback, empty/missing-matplotlib safety), `selfplay_core`
+eval-battery construction, and an end-to-end **resume proof** (incl. the
+**fresh-Elo-every-run** and **per-game-Elo-accumulation** regression guards) +
+failure-preservation test (arena mocked).
 
 ```bash
 python -m pytest tests/test_training_*.py -q

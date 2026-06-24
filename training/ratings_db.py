@@ -7,6 +7,10 @@ tables:
 * ``rating_history`` — one row per agent per nightly run (Elo + TrueSkill).
 * ``run_summary``    — one row per nightly run summarising champion progress
   (fast queries for trends + human-strength estimation).
+* ``game_elo``       — one row **per individual game** holding the champion's
+  Elo recomputed after that game. This is the fine-grained trajectory the
+  nightly email plots so you can see whether the rating distribution is actually
+  drifting upward, rather than only seeing one coarse point per generation.
 
 History is **append-only**: ``record_run`` only ``INSERT``s. There is no UPDATE or
 DELETE path. If GitHub Actions is destroyed and recreated, this file (committed to
@@ -21,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -83,6 +87,18 @@ CREATE TABLE IF NOT EXISTS run_summary (
     days_trained    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_run_summary_ts ON run_summary(timestamp);
+
+CREATE TABLE IF NOT EXISTS game_elo (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id      TEXT    NOT NULL,
+    timestamp   TEXT    NOT NULL,
+    generation  INTEGER NOT NULL,
+    game_number INTEGER NOT NULL,  -- cumulative game index across all history
+    agent       TEXT    NOT NULL,
+    elo         REAL    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_game_elo_agent_num ON game_elo(agent, game_number);
+CREATE INDEX IF NOT EXISTS idx_game_elo_run       ON game_elo(run_id);
 """
 
 
@@ -179,6 +195,91 @@ def record_run(
                 int(run_summary.days_trained),
             ),
         )
+
+
+def record_game_elos(
+    conn: sqlite3.Connection,
+    *,
+    run_id: str,
+    timestamp: str,
+    generation: int,
+    samples: List[tuple],
+    agent: str = "champion",
+) -> None:
+    """Append one row per individual game with ``agent``'s Elo after that game.
+
+    ``samples`` is an ordered ``[(game_number, elo), ...]`` list — the champion's
+    running Elo recomputed after each game in this generation. Append-only and a
+    no-op for an empty list. ``game_number`` is the cumulative index across the
+    whole history (see :func:`max_game_number`) so the plotted x-axis is monotonic
+    across runs.
+    """
+    if not samples:
+        return
+    with conn:  # transaction
+        conn.executemany(
+            """
+            INSERT INTO game_elo
+                (run_id, timestamp, generation, game_number, agent, elo)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (run_id, timestamp, int(generation), int(gn), agent, float(elo))
+                for gn, elo in samples
+            ],
+        )
+
+
+def max_game_number(conn: sqlite3.Connection, *, agent: str = "champion") -> int:
+    """Highest cumulative ``game_number`` recorded for ``agent`` (0 if none).
+
+    Used to continue per-game numbering across runs so the per-game Elo plot has a
+    single, monotonically-increasing x-axis over the whole training history.
+    """
+    row = conn.execute(
+        "SELECT MAX(game_number) FROM game_elo WHERE agent = ?", (agent,)
+    ).fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
+
+
+def champion_game_elo_series(
+    conn: sqlite3.Connection, *, agent: str = "champion", limit: Optional[int] = None
+) -> List[Dict[str, Any]]:
+    """Per-game Elo trajectory for ``agent``, oldest-first.
+
+    With ``limit`` set, returns the most-recent ``limit`` games (still oldest-first)
+    so the email plot can bound how many points it renders without losing the head
+    of the series to ordering.
+    """
+    if limit:
+        rows = conn.execute(
+            """
+            SELECT game_number, elo, generation, run_id, timestamp
+            FROM game_elo WHERE agent = ?
+            ORDER BY game_number DESC, id DESC LIMIT ?
+            """,
+            (agent, int(limit)),
+        ).fetchall()
+        rows = list(reversed(rows))
+    else:
+        rows = conn.execute(
+            """
+            SELECT game_number, elo, generation, run_id, timestamp
+            FROM game_elo WHERE agent = ?
+            ORDER BY game_number ASC, id ASC
+            """,
+            (agent,),
+        ).fetchall()
+    return [
+        {
+            "game_number": int(r["game_number"]),
+            "elo": float(r["elo"]),
+            "generation": int(r["generation"]),
+            "run_id": r["run_id"],
+            "timestamp": r["timestamp"],
+        }
+        for r in rows
+    ]
 
 
 def latest_ratings(conn: sqlite3.Connection) -> Dict[str, Dict[str, Any]]:

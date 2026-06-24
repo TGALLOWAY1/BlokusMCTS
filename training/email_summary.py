@@ -22,11 +22,13 @@ Three guarantees:
 from __future__ import annotations
 
 import argparse
+import html as _html
 import os
 import smtplib
 import sys
 from dataclasses import dataclass
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -182,30 +184,23 @@ def build_subject(
 # Body sections
 # ---------------------------------------------------------------------------
 
-def _elo_trend_table(history: List[Dict[str, Any]], *, limit: int = 8) -> List[str]:
-    """Render the ELO progression table (most recent ``limit`` measurements)."""
+def _elo_recent_summary(history: List[Dict[str, Any]], *, limit: int = 6) -> List[str]:
+    """Compact per-generation Elo bullets (newest last) — the plain-text fallback.
+
+    The full visualisation is the attached/inline plot; this is just a short,
+    readable digest of the most recent generations for text-only mail clients,
+    deliberately *not* the old wall-of-numbers table.
+    """
     rows = history[-limit:]
-    lines = [
-        "| Run | Date | Gen | Games | ELO | Δ Previous | Δ Best | Status |",
-        "|---|---|---:|---:|---:|---:|---:|---|",
-    ]
+    lines: List[str] = []
     for i, r in enumerate(rows):
         # Global index in the full history so deltas reference the true series.
         gi = len(history) - len(rows) + i
         elo = float(r["champion_elo"])
         d_prev = (elo - float(history[gi - 1]["champion_elo"])) if gi >= 1 else None
-        prior = history[:gi]
-        best_prior = max((float(p["champion_elo"]) for p in prior), default=None)
-        d_best = (elo - best_prior) if best_prior is not None else None
-        date = str(r.get("timestamp", ""))[:10]
-        run = str(r.get("run_id", ""))[:16]
-        status = "promoted" if r.get("promoted") else "completed"
-        lines.append(
-            f"| {run} | {date} | {r.get('generation')} | "
-            f"{_fmt(r.get('games_today'), ',', dash='—')} | {elo:.1f} | "
-            f"{_fmt(d_prev, '+.1f', dash='—')} | {_fmt(d_best, '+.1f', dash='—')} | "
-            f"{status} |"
-        )
+        flag = "  ⬆ promoted" if r.get("promoted") else ""
+        delta = f" ({d_prev:+.1f})" if d_prev is not None else " (baseline)"
+        lines.append(f"- gen {r.get('generation')}: {elo:.1f}{delta}{flag}")
     return lines
 
 
@@ -284,8 +279,16 @@ def build_body(
     promoted: bool = False,
     findings: Optional[List[Any]] = None,
     paths: Optional[TrainingPaths] = None,
+    plot_attached: bool = False,
+    plot_game_count: Optional[int] = None,
 ) -> str:
-    """Render the full markdown email body."""
+    """Render the full markdown email body.
+
+    ``plot_attached`` toggles the "see the attached Elo plot" callout; the plot
+    itself (per-game trajectory) is the headline visualisation and replaces the old
+    Elo-progression table. ``plot_game_count`` is the number of per-game points
+    behind the plot (for the callout text).
+    """
     if view is None:
         view = build_run_view([], state)
     if paths is None:
@@ -349,8 +352,35 @@ def build_body(
 
     # --- ELO Trend -----------------------------------------------------------
     lines += ["## ELO Trend", ""]
+    if plot_attached:
+        if plot_game_count:
+            detail = (
+                f"The champion's Elo is now recomputed after every individual game — "
+                f"the plot draws all {plot_game_count:,} per-game ratings as one "
+                "trajectory with a trend line, so whether the distribution is moving "
+                "in the right direction is obvious at a glance."
+            )
+        else:
+            detail = (
+                "It plots one point per generation for now; once the next runs record "
+                "per-game ratings, the curve fills in after every individual game so "
+                "the trend is visible at a glance."
+            )
+        lines += [
+            "📈 **See the attached `elo_trend.png`** (shown inline above in HTML mail "
+            f"clients). {detail}",
+            "",
+        ]
+    else:
+        lines += [
+            "_(No plot was generated this cycle — matplotlib unavailable or the "
+            "per-game timeline is empty. The recent generations below summarise the "
+            "trend.)_",
+            "",
+        ]
     if view.history:
-        lines += _elo_trend_table(view.history)
+        lines += ["Recent generations (newest last):", ""]
+        lines += _elo_recent_summary(view.history)
     else:
         lines.append("_No recorded runs yet._")
     lines.append("")
@@ -388,19 +418,93 @@ def build_body(
 # Send
 # ---------------------------------------------------------------------------
 
+_PLOT_CID = "elo-plot"
+
+
+def _html_body(text_body: str, *, plot_inline: bool) -> str:
+    """Wrap the plain-text body in minimal HTML, embedding the plot inline on top.
+
+    Kept deliberately simple (a leading ``<img>`` + the escaped text in a ``<pre>``)
+    so it renders consistently across mail clients without a markdown dependency.
+    """
+    img = (
+        f'<img src="cid:{_PLOT_CID}" alt="Champion Elo trajectory" '
+        'style="max-width:100%;height:auto;margin-bottom:16px;" />'
+        if plot_inline else ""
+    )
+    escaped = _html.escape(text_body)
+    return (
+        "<!DOCTYPE html><html><body "
+        'style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
+        f"{img}"
+        '<pre style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
+        'white-space:pre-wrap;font-size:13px;line-height:1.45;">'
+        f"{escaped}</pre></body></html>"
+    )
+
+
+def build_message(
+    subject: str,
+    body: str,
+    *,
+    email_from: str,
+    email_to: str,
+    plot_path: Optional[Path | str] = None,
+) -> EmailMessage:
+    """Assemble the email, embedding the Elo plot inline and as an attachment.
+
+    Structure when a plot is present::
+
+        multipart/mixed
+        ├── multipart/alternative
+        │   ├── text/plain                (the markdown body)
+        │   └── multipart/related
+        │       ├── text/html             (escaped body + inline <img>)
+        │       └── image/png             (inline, cid:elo-plot)
+        └── image/png                     (downloadable attachment)
+
+    The plain-text part is always present, so text-only clients still get the full
+    report. Any failure attaching the image degrades to text-only rather than
+    raising.
+    """
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = email_from
+    msg["To"] = email_to
+    msg.set_content(body)  # plain-text fallback (always)
+
+    png = Path(plot_path) if plot_path else None
+    if png and png.exists():
+        try:
+            img = png.read_bytes()
+            msg.add_alternative(_html_body(body, plot_inline=True), subtype="html")
+            # The HTML part is the last payload; embed the image inside it (cid).
+            msg.get_payload()[1].add_related(
+                img, maintype="image", subtype="png", cid=f"<{_PLOT_CID}>"
+            )
+            # Also attach as a normal file so text-only clients can open it.
+            msg.add_attachment(
+                img, maintype="image", subtype="png", filename="elo_trend.png"
+            )
+        except Exception as exc:  # noqa: BLE001 — never fail the email over the plot
+            print(f"[email] Could not attach plot ({type(exc).__name__}: {exc}); "
+                  "sending text-only.")
+    return msg
+
+
 def send_email(
     subject: str,
     body: str,
     *,
     config: SmtpConfig,
+    plot_path: Optional[Path | str] = None,
     send_fn: Optional[Callable[[SmtpConfig, EmailMessage], None]] = None,
 ) -> None:
     """Send the digest. ``send_fn`` is injectable so tests never open a socket."""
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = config.email_from
-    msg["To"] = config.email_to
-    msg.set_content(body)
+    msg = build_message(
+        subject, body,
+        email_from=config.email_from, email_to=config.email_to, plot_path=plot_path,
+    )
     (send_fn or _smtp_send)(config, msg)
 
 
@@ -437,15 +541,40 @@ def compose(
     try:
         history = ratings_db.recent_window(conn, limit=30)
         findings = diagnostics.collect_findings(conn, state)
+        plot_path, plot_game_count = _render_plot(conn, paths, state)
     finally:
         conn.close()
 
     view = build_run_view(history, state)
     subject = build_subject(state, view, failed=failed)
     body = build_body(
-        state, view, failed=failed, promoted=promoted, findings=findings, paths=paths
+        state, view, failed=failed, promoted=promoted, findings=findings, paths=paths,
+        plot_attached=plot_path is not None, plot_game_count=plot_game_count,
     )
-    return {"subject": subject, "body": body, "view": view, "state": state}
+    return {
+        "subject": subject, "body": body, "view": view, "state": state,
+        "plot_path": plot_path,
+    }
+
+
+def _render_plot(conn, paths: TrainingPaths, state: Dict[str, Any]):
+    """Render the Elo trajectory PNG; return ``(path_or_None, game_count)``.
+
+    Failure is non-fatal — a missing plot just means the email ships text-only.
+    """
+    try:
+        from training import elo_plot
+
+        paths.reports_dir.mkdir(parents=True, exist_ok=True)
+        out = elo_plot.render_elo_plot(
+            conn, paths.reports_dir / "elo_trend.png",
+            target_elo=float(state.get("human_target_elo", 1700) or 0) or None,
+        )
+        count = ratings_db.max_game_number(conn) if out is not None else None
+        return (out, count)
+    except Exception as exc:  # noqa: BLE001 — plotting must never break the email
+        print(f"[email] Plot render skipped ({type(exc).__name__}: {exc}).")
+        return (None, None)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -458,12 +587,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     composed = compose(failed=args.failed)
     subject, body = composed["subject"], composed["body"]
+    plot_path = composed.get("plot_path")
 
     print("=" * 70)
     print(f"Subject: {subject}")
     print("-" * 70)
     print(body)
     print("=" * 70)
+    print(f"[email] Plot: {plot_path if plot_path else 'none (text-only)'}")
 
     if args.dry_run:
         return 0
@@ -472,7 +603,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if config is None:
         return 0  # graceful skip; body already printed
     try:
-        send_email(subject, body, config=config)
+        send_email(subject, body, config=config, plot_path=plot_path)
         print(f"[email] Sent to {config.email_to}")
     except Exception as exc:  # noqa: BLE001 — never fail the workflow on email
         print(f"[email] Send failed: {type(exc).__name__}: {exc}")
