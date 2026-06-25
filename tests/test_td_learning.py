@@ -68,6 +68,28 @@ def test_terminal_value_bounded():
         assert -1.5 <= v <= 1.5
 
 
+def test_score_normalisation_calibrated_center_and_spread():
+    # Default centre/spread are the calibrated empirical values, not the old (40, 20).
+    assert td.DEFAULT_SCORE_CENTER == 82.0
+    assert td.DEFAULT_SCORE_SPREAD == 19.0
+    # A score at the centre maps to ~0 (no longer saturated near +1 as it was at 40).
+    assert math.isclose(td.normalized_final_score(82.0), 0.0, abs_tol=1e-9)
+    assert td.normalized_final_score(40.0) < -0.9  # well below centre ⇒ strongly negative
+    # Configurable: passing the old constants reproduces the pre-calibration value.
+    old = math.tanh((83.0 - 40.0) / 20.0)
+    assert math.isclose(td.normalized_final_score(83.0, 40.0, 20.0), old, rel_tol=1e-9)
+    # TDConfig threads the values through terminal_value.
+    cfg = td.TDConfig(blend_rank_weight=0.0, blend_score_weight=1.0, blend_margin_weight=0.0,
+                      score_center=80.0, score_spread=10.0)
+    row = _row(final_rank=1, final_score=80, margin_to_next=0.0, terminal=True)
+    assert math.isclose(td.terminal_value(row, cfg), 0.0, abs_tol=1e-9)
+
+
+def test_score_spread_guard_against_zero():
+    # A degenerate spread must not divide-by-zero.
+    assert math.isfinite(td.normalized_final_score(50.0, 82.0, 0.0))
+
+
 # ---------------------------------------------------------------------------
 # TD update mechanics (use PhaseModel directly for a controlled example)
 # ---------------------------------------------------------------------------

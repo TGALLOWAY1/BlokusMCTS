@@ -20,16 +20,25 @@ based.
 
 ### Run the candidate comparison harness on a real corpus
 - **Priority:** Critical
+- **Status:** **UNBLOCKED — dependencies now satisfied; powered run still owed.**
 - **Expected Strength Gain:** None directly — it is the *measurement* that unblocks
   every other decision.
 - **Complexity:** Low (infra already built in `training/experiments/`)
 - **Risk:** Low
 - **Dependencies:** a real `data/td_trajectories.csv` + trained
-  `td_evaluator_weights.json`
+  `td_evaluator_weights.json` — **both now committed** (corpus: 24 games / 96
+  trajectories / 1,611 rows, diagnostics ✅ healthy, ranks balanced — no rank skew
+  at this size).
 - **Suggested Timing:** Immediately. Nothing below should start until this runs.
 - **Reason:** As of Phase 2 there was no committed trajectory corpus, so TD had
   never been validated against regression. `python -m training.experiments.compare`
   produces win/rank/TrueSkill/Elo with confidence intervals and a recommendation.
+- **Done (2026-06-25):** the harness was validated end-to-end on the committed
+  corpus (smoke: 5 four-agent arenas, 1 seed × 1 game each — produces valid pooled
+  metrics + recommendation). **Still owed:** a statistically powered run
+  (≥100 games × ≥10 seeds, hours of compute) to get a real TD-vs-regression
+  verdict. The smoke is underpowered and its recommendation is "INCONCLUSIVE" by
+  construction.
 
 ### Larger, less-biased trajectory corpus
 - **Priority:** High
@@ -43,13 +52,22 @@ based.
 
 ### Calibrate label normalisation
 - **Priority:** Medium
+- **Status:** **Score centre/spread DONE (2026-06-25); rank map still open.**
 - **Expected Strength Gain:** Small.
 - **Complexity:** Low · **Risk:** Low
 - **Dependencies:** trajectory diagnostics (score/rank distributions) — done
 - **Suggested Timing:** After the first comparison run.
-- **Reason:** `normalized_final_score = tanh((score−40)/20)` hardcodes a neutral
+- **Reason:** `normalized_final_score = tanh((score−40)/20)` hardcoded a neutral
   score of 40 and the rank map `{1:1.0,2:0.5,3:-0.25,4:-1.0}` is arbitrary. Derive
   the centre/spread and rank values from observed distributions.
+- **Done:** the committed corpus has terminal-score mean ≈ 82 (median 83, std 19),
+  so the old centre of 40 saturated the score component — 75% of terminal rows
+  mapped to |v| > 0.9 (mean 0.89). `score_center`/`score_spread` are now
+  `TDConfig` fields (CLI `--score-center`/`--score-spread`), defaulting to the
+  calibrated `(82, 19)`. The score component now spans [−0.98, +0.97] (mean ≈ 0,
+  18% saturated) and blended terminal value separates ranks cleanly
+  (1→0.82, 2→0.22, 3→−0.26, 4→−0.89). Weights retrained. **Still open:** derive
+  the rank-value map from observed win-equity rather than the hand-picked values.
 
 ### Prune dead / duplicate rich features
 - **Priority:** Medium

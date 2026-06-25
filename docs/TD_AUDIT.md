@@ -182,12 +182,15 @@ training; it is projected down to 8 before it can affect play.
 ### Label generation (`td_selfplay.margin_labels`, `td_learning.terminal_value`)
 - **Working:** rank/score/margin blend is bounded and configurable. Competition
   ranking handles ties.
-- **Assumption (possibly incorrect):** `normalized_final_score = tanh((score −
-  40)/20)` hardcodes a "neutral" score of 40 and a spread of 20. With total area
-  88 and 4 players, the mean per-player score is ~`occupied/4`; 40 is plausible
-  for the winner but pessimistic as a global centre. This biases the score
-  component of the terminal value. Low-risk but worth calibrating from real
-  score distributions (the trajectory diagnostics now expose them).
+- **Assumption (possibly incorrect) — RESOLVED 2026-06-25:** `normalized_final_score
+  = tanh((score − 40)/20)` hardcoded a "neutral" score of 40 and a spread of 20.
+  Against the committed corpus the real terminal-score mean is **~82** (median 83,
+  std 19), so the centre of 40 saturated the score component: **75%** of terminal
+  rows mapped to `|v| > 0.9` (mean 0.89), collapsing it to ≈ +1. `score_center` /
+  `score_spread` are now `TDConfig` fields defaulting to the calibrated `(82, 19)`;
+  the score component now spans `[−0.98, +0.97]` (≈18% saturated) and the blended
+  terminal value separates ranks (1→0.82, 2→0.22, 3→−0.26, 4→−0.89). The rank-value
+  map `{1:1.0, 2:0.5, 3:-0.25, 4:-1.0}` is still hand-picked (open in `tasks/TODO.md`).
 - **Assumption:** rank values `{1:1.0, 2:0.5, 3:-0.25, 4:-1.0}` are arbitrary.
   Reasonable, but unvalidated against actual win equity.
 
