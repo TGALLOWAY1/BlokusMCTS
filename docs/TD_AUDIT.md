@@ -332,11 +332,17 @@ Measured from the committed rating timeline (`training/ratings_db.champion_elo_s
 and **nothing has ever been promoted**. The swings (±~125 Elo) are consistent with
 rating noise from a fixed-strength agent, not learning.
 
-**Is TD outperforming regression?** Unknown — TD had never been run on committed
-data. The comparison harness (`training/experiments/`) is validated end-to-end but
-a statistically meaningful verdict (≥100 games × ≥10 seeds) needs hours of compute;
-at small scale it runs correctly and produces the full metric/CI/recommendation
-report. Until that run completes, the honest answer is **no evidence either way**.
+**Is TD outperforming regression?** **No (first powered evidence, 2026-06-25).**
+Run `exp_e1261b8e0c3b` (40 pooled games, 4 seeds, 50 ms/move, on the
+label-recalibrated weights) put TD **below** regression on every axis: win rate
+25% vs 39%, avg rank 2.31 vs 1.88, head-to-head 7–17, TrueSkill Δμ −10.05, Elo
+−45. Both learned candidates also trailed the plain heuristic (51.6%). The harness
+flags it "INCONCLUSIVE" only because the win-rate CIs technically overlap, but the
+direction is consistent and matches this audit's central prediction: with the rich
+value squeezed through the 8-feature projection, TD cannot beat regression. A
+gold-standard run (≥100 games × ≥10 seeds) would sharpen the CIs, but the verdict
+needed to act — *do not add more learning algorithms; remove the projection
+bottleneck first* — is already supported.
 
 **Is learning plateauing?** Yes, on the evidence available: 0 promotions in 19
 runs, negative Elo slope, zero promotion frequency. Either the seed champion is
