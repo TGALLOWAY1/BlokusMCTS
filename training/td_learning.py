@@ -56,6 +56,19 @@ PHASES = ("early", "mid", "late")
 # Rank → normalised value (configurable via TDConfig.rank_value_map).
 DEFAULT_RANK_VALUE_MAP: Dict[int, float] = {1: 1.0, 2: 0.5, 3: -0.25, 4: -1.0}
 
+# Final-score normalisation centre/spread (configurable via TDConfig).
+#
+# These default to values calibrated from the observed terminal-score distribution
+# in ``data/td_trajectories.csv`` rather than the original hardcoded ``(40, 20)``.
+# The old centre of 40 sat far below the real mean final score (~82, median 83),
+# so ``tanh((score-40)/20)`` saturated: ~75% of terminal rows mapped to |v|>0.9
+# and the score component of the terminal value collapsed to ≈+1, carrying almost
+# no signal. Centring on the empirical mean with the empirical spread (~19) keeps
+# the score component informative across the rank-1..rank-4 range. See
+# ``tasks/TODO.md`` ("Calibrate label normalisation") and ``docs/TD_AUDIT.md`` §3.
+DEFAULT_SCORE_CENTER: float = 82.0
+DEFAULT_SCORE_SPREAD: float = 19.0
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -76,6 +89,8 @@ class TDConfig:
     blend_score_weight: float = 0.30
     blend_margin_weight: float = 0.20
     rank_value_map: Dict[int, float] = field(default_factory=lambda: dict(DEFAULT_RANK_VALUE_MAP))
+    score_center: float = DEFAULT_SCORE_CENTER
+    score_spread: float = DEFAULT_SCORE_SPREAD
     seed: int = 12345
 
     def normalized_blend(self) -> Tuple[float, float, float]:
@@ -100,6 +115,8 @@ class TDConfig:
             "blend_score_weight": self.blend_score_weight,
             "blend_margin_weight": self.blend_margin_weight,
             "rank_value_map": {str(k): v for k, v in self.rank_value_map.items()},
+            "score_center": self.score_center,
+            "score_spread": self.score_spread,
             "seed": self.seed,
         }
 
@@ -114,9 +131,19 @@ def normalized_rank_value(rank: int, rank_map: Optional[Dict[int, float]] = None
     return float(rank_map.get(int(rank), -1.0))
 
 
-def normalized_final_score(score: float) -> float:
-    """Map a raw final score (~0..89 squares) onto [-1, 1]."""
-    return float(np.tanh((float(score) - 40.0) / 20.0))
+def normalized_final_score(
+    score: float,
+    center: float = DEFAULT_SCORE_CENTER,
+    spread: float = DEFAULT_SCORE_SPREAD,
+) -> float:
+    """Map a raw final score (~0..89 squares) onto [-1, 1].
+
+    ``center``/``spread`` default to the empirically calibrated values (see
+    :data:`DEFAULT_SCORE_CENTER`). Pass the original ``(40, 20)`` to reproduce the
+    pre-calibration behaviour.
+    """
+    spread = spread if spread > 1e-6 else 1.0
+    return float(np.tanh((float(score) - float(center)) / float(spread)))
 
 
 def normalized_score_margin(margin_to_next: float) -> float:
@@ -128,7 +155,9 @@ def terminal_value(row: Dict[str, Any], config: TDConfig) -> float:
     """Blended terminal value in roughly [-1, 1] from a trajectory row's labels."""
     w_rank, w_score, w_margin = config.normalized_blend()
     rv = normalized_rank_value(int(row.get("final_rank", 4)), config.rank_value_map)
-    sv = normalized_final_score(float(row.get("final_score", 0)))
+    sv = normalized_final_score(
+        float(row.get("final_score", 0)), config.score_center, config.score_spread
+    )
     mv = normalized_score_margin(float(row.get("score_margin_to_next", 0.0)))
     return float(w_rank * rv + w_score * sv + w_margin * mv)
 
@@ -469,6 +498,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--blend-rank-weight", type=float, default=0.50)
     p.add_argument("--blend-score-weight", type=float, default=0.30)
     p.add_argument("--blend-margin-weight", type=float, default=0.20)
+    p.add_argument("--score-center", type=float, default=DEFAULT_SCORE_CENTER,
+                   help="Centre for tanh final-score normalisation (calibrated default).")
+    p.add_argument("--score-spread", type=float, default=DEFAULT_SCORE_SPREAD,
+                   help="Spread for tanh final-score normalisation (calibrated default).")
     p.add_argument("--seed", type=int, default=12345)
     p.add_argument("--dry-run", action="store_true",
                    help="Train and print metrics but do not write the output file.")
@@ -487,6 +520,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         blend_rank_weight=args.blend_rank_weight,
         blend_score_weight=args.blend_score_weight,
         blend_margin_weight=args.blend_margin_weight,
+        score_center=args.score_center,
+        score_spread=args.score_spread,
         seed=args.seed,
     )
 

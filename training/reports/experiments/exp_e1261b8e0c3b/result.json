@@ -1,0 +1,167 @@
+{
+  "experiment_id": "exp_e1261b8e0c3b",
+  "date": "2026-06-25T03:02:41.481580+00:00",
+  "baseline": "regression",
+  "candidate": "td",
+  "total_games": 40,
+  "n_seeds": 4,
+  "competitors": [
+    "champion",
+    "heuristic",
+    "random",
+    "regression",
+    "td"
+  ],
+  "per_agent": {
+    "champion": {
+      "name": "champion",
+      "games": 32,
+      "wins": 3,
+      "losses": 29,
+      "draws": 0,
+      "win_rate": 0.09375,
+      "win_rate_ci": [
+        0.032400962626319516,
+        0.24218499335778831
+      ],
+      "avg_rank": 2.59375,
+      "rank_distribution": {
+        "1": 3,
+        "2": 12,
+        "3": 12,
+        "4": 5
+      },
+      "avg_score": 82.15625,
+      "avg_score_margin": -13.5625,
+      "score_margin_ci": [
+        -17.50312993879356,
+        -9.62187006120644
+      ],
+      "trueskill_mu": 22.448926514622638,
+      "trueskill_sigma": 7.303892642899339,
+      "elo": 1156.58550460965
+    },
+    "heuristic": {
+      "name": "heuristic",
+      "games": 32,
+      "wins": 16,
+      "losses": 15,
+      "draws": 1,
+      "win_rate": 0.515625,
+      "win_rate_ci": [
+        0.35032779047979745,
+        0.67757274967466
+      ],
+      "avg_rank": 1.625,
+      "rank_distribution": {
+        "1": 17,
+        "2": 10,
+        "3": 5
+      },
+      "avg_score": 90.6875,
+      "avg_score_margin": -1.84375,
+      "score_margin_ci": [
+        -6.268748855248622,
+        2.5812488552486217
+      ],
+      "trueskill_mu": 48.26821793774455,
+      "trueskill_sigma": 7.540206447811189,
+      "elo": 1441.7848321766799
+    },
+    "random": {
+      "name": "random",
+      "games": 32,
+      "wins": 0,
+      "losses": 32,
+      "draws": 0,
+      "win_rate": 0.0,
+      "win_rate_ci": [
+        0.0,
+        0.1071827150573635
+      ],
+      "avg_rank": 3.875,
+      "rank_distribution": {
+        "3": 4,
+        "4": 28
+      },
+      "avg_score": 63.625,
+      "avg_score_margin": -34.375,
+      "score_margin_ci": [
+        -38.05105361240697,
+        -30.698946387593033
+      ],
+      "trueskill_mu": -11.044642364102565,
+      "trueskill_sigma": 7.409501149371053,
+      "elo": 802.8149198948211
+    },
+    "regression": {
+      "name": "regression",
+      "games": 32,
+      "wins": 12,
+      "losses": 19,
+      "draws": 1,
+      "win_rate": 0.390625,
+      "win_rate_ci": [
+        0.2421891416723403,
+        0.562507077246458
+      ],
+      "avg_rank": 1.875,
+      "rank_distribution": {
+        "1": 13,
+        "2": 10,
+        "3": 9
+      },
+      "avg_score": 90.28125,
+      "avg_score_margin": -2.3125,
+      "score_margin_ci": [
+        -7.210474379699586,
+        2.585474379699586
+      ],
+      "trueskill_mu": 38.37112383013308,
+      "trueskill_sigma": 7.444947899348857,
+      "elo": 1322.0299446301751
+    },
+    "td": {
+      "name": "td",
+      "games": 32,
+      "wins": 8,
+      "losses": 24,
+      "draws": 0,
+      "win_rate": 0.25,
+      "win_rate_ci": [
+        0.1325224398262155,
+        0.42106891770246624
+      ],
+      "avg_rank": 2.3125,
+      "rank_distribution": {
+        "1": 8,
+        "2": 10,
+        "3": 10,
+        "4": 4
+      },
+      "avg_score": 84.8125,
+      "avg_score_margin": -9.125,
+      "score_margin_ci": [
+        -14.427169291294685,
+        -3.8228307087053146
+      ],
+      "trueskill_mu": 28.320378943955124,
+      "trueskill_sigma": 7.369089675117102,
+      "elo": 1276.7847986886752
+    }
+  },
+  "head_to_head": {
+    "baseline": "regression",
+    "candidate": "td",
+    "candidate_wins": 7,
+    "baseline_wins": 17,
+    "ties": 0,
+    "candidate_win_rate": 0.25,
+    "baseline_win_rate": 0.390625,
+    "candidate_avg_rank": 2.3125,
+    "baseline_avg_rank": 1.875,
+    "trueskill_mu_delta": -10.050744886177956,
+    "elo_delta": -45.24514594149991,
+    "recommendation": "INCONCLUSIVE \u2014 differences within noise (win-rate CIs overlap); collect more games/seeds before deciding."
+  }
+}

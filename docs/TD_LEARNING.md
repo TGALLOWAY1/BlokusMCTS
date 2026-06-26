@@ -120,7 +120,7 @@ At training time these are blended into a terminal value in roughly `[-1, 1]`:
 
 ```
 normalized_rank_value:   1st = 1.0, 2nd = 0.5, 3rd = -0.25, 4th = -1.0
-normalized_final_score:  tanh((score − 40) / 20)
+normalized_final_score:  tanh((score − score_center) / score_spread)
 normalized_score_margin: tanh(score_margin_to_next / 20)
 
 terminal_value = w_rank · rank_value
@@ -130,6 +130,29 @@ terminal_value = w_rank · rank_value
 
 Default blend weights are `0.50 / 0.30 / 0.20` (normalised to sum 1) and are
 configurable via the `--blend-*-weight` flags / `TDConfig`.
+
+`score_center` / `score_spread` default to the **calibrated** `(82, 19)` (CLI
+`--score-center` / `--score-spread`). The original hardcoded `(40, 20)` sat far
+below the committed corpus's mean terminal score (~82, median 83), so the score
+component saturated — ~75% of terminal rows mapped to `|v| > 0.9`, collapsing it
+to ≈ +1. Centring on the empirical mean keeps it informative: the score component
+now spans `[−0.98, +0.97]` (≈18% saturated) and the blended terminal value
+separates ranks cleanly (1→0.82, 2→0.22, 3→−0.26, 4→−0.89). The rank-value map is
+still hand-picked — deriving it from observed win-equity is open (`tasks/TODO.md`).
+
+## Integration with the nightly approach-comparison framework
+
+TD reaches the nightly run as a first-class **approach** (PR #171): the `td`
+generator (`training/approaches/td_learning.py`) re-trains the value model from the
+trajectory corpus, writes `training/state/td_evaluator_weights.json`, and builds a
+champion clone with the TD-learned `state_eval_phase_weights`; the `hybrid` approach
+grafts those weights onto a stronger search. Both construct
+`TDConfig(min_rows_per_phase=200)` and leave every other field at its default, so the
+**calibrated** `score_center=82 / score_spread=19` are exactly what the nightly run
+trains with — no per-approach plumbing needed. Created candidates are evaluated
+against the fixed benchmark pool and only promoted through the statistical gate
+(`training/evaluation/`); see `training/README.md`. Run a single approach with
+`python -m training.nightly_run --dry-run --approaches td --games 8`.
 
 ---
 

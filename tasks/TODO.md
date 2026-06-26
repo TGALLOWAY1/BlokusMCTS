@@ -20,16 +20,47 @@ based.
 
 ### Run the candidate comparison harness on a real corpus
 - **Priority:** Critical
+- **Status:** **UNBLOCKED — dependencies now satisfied; powered run still owed.**
 - **Expected Strength Gain:** None directly — it is the *measurement* that unblocks
   every other decision.
 - **Complexity:** Low (infra already built in `training/experiments/`)
 - **Risk:** Low
 - **Dependencies:** a real `data/td_trajectories.csv` + trained
-  `td_evaluator_weights.json`
+  `td_evaluator_weights.json` — **both now committed** (corpus: 24 games / 96
+  trajectories / 1,611 rows, diagnostics ✅ healthy, ranks balanced — no rank skew
+  at this size).
 - **Suggested Timing:** Immediately. Nothing below should start until this runs.
 - **Reason:** As of Phase 2 there was no committed trajectory corpus, so TD had
   never been validated against regression. `python -m training.experiments.compare`
   produces win/rank/TrueSkill/Elo with confidence intervals and a recommendation.
+- **Done (2026-06-25):** the harness was validated end-to-end on the committed
+  corpus (smoke: 5 four-agent arenas, 1 seed × 1 game each — produces valid pooled
+  metrics + recommendation). A **first powered run** then followed on the
+  recalibrated weights — `exp_e1261b8e0c3b`, 40 pooled games, 4 seeds, 50 ms/move:
+  | Agent | Win% (95% CI) | Avg rank | TrueSkill μ | Elo |
+  |---|---|---|---|---|
+  | heuristic | 51.6% (35–68) | 1.62 | 48.3 | 1442 |
+  | regression | 39.1% (24–56) | 1.88 | 38.4 | 1322 |
+  | **td** | **25.0% (13–42)** | **2.31** | **28.3** | **1277** |
+  | champion | 9.4% (3–24) | 2.59 | 22.5 | 1157 |
+  | random | 0.0% (0–11) | 3.88 | −11.0 | 803 |
+
+  **Verdict: TD does NOT beat regression.** Head-to-head TD 7 / regression 17,
+  TrueSkill Δμ **−10.05**, Elo **−45**. The harness labels it "INCONCLUSIVE" only
+  because the win-rate CIs technically overlap, but the direction is unambiguous —
+  TD trails regression, and *both* learned candidates trail the plain heuristic.
+  Recalibrating the score labels did not close the gap. **This is the evidence the
+  audit said would un-gate the richer leaf evaluator** (§8): the limiter is the
+  45→8 projection, not the labels or the learner. **Still owed:** a gold-standard
+  run (≥100 games × ≥10 seeds) to convert the directional verdict into a
+  statistically clean one — but it is not a prerequisite for starting the leaf
+  evaluator, since the trend already points there.
+- **Superseded mechanism (2026-06-26):** TD validation is now the job of the
+  merged **approach-comparison framework** (PR #171). The canonical path is the
+  first-class `td` approach evaluated against the fixed benchmark pool +
+  statistical promotion gate: `python -m training.nightly_run --approaches td,baseline,heuristic_tune --games 100 --time-budget-minutes 45`. The standalone
+  `training/experiments/compare.py` run above (`exp_e1261b8e0c3b`) stays as
+  auxiliary/historical evidence; the harness itself is still reused under the hood.
 
 ### Larger, less-biased trajectory corpus
 - **Priority:** High
@@ -43,13 +74,26 @@ based.
 
 ### Calibrate label normalisation
 - **Priority:** Medium
+- **Status:** **Score centre/spread DONE (2026-06-25); rank map still open.**
 - **Expected Strength Gain:** Small.
 - **Complexity:** Low · **Risk:** Low
 - **Dependencies:** trajectory diagnostics (score/rank distributions) — done
 - **Suggested Timing:** After the first comparison run.
-- **Reason:** `normalized_final_score = tanh((score−40)/20)` hardcodes a neutral
+- **Reason:** `normalized_final_score = tanh((score−40)/20)` hardcoded a neutral
   score of 40 and the rank map `{1:1.0,2:0.5,3:-0.25,4:-1.0}` is arbitrary. Derive
   the centre/spread and rank values from observed distributions.
+- **Done:** the committed corpus has terminal-score mean ≈ 82 (median 83, std 19),
+  so the old centre of 40 saturated the score component — 75% of terminal rows
+  mapped to |v| > 0.9 (mean 0.89). `score_center`/`score_spread` are now
+  `TDConfig` fields (CLI `--score-center`/`--score-spread`), defaulting to the
+  calibrated `(82, 19)`. The score component now spans [−0.98, +0.97] (mean ≈ 0,
+  18% saturated) and blended terminal value separates ranks cleanly
+  (1→0.82, 2→0.22, 3→−0.26, 4→−0.89). Weights retrained. **Still open:** derive
+  the rank-value map from observed win-equity rather than the hand-picked values.
+- **Framework integration (2026-06-26):** the calibration rides through the
+  nightly `td` (and `hybrid`) approach automatically — `training/approaches/td_learning.py` builds `TDConfig(min_rows_per_phase=200)` with all other fields at
+  their defaults, so `score_center=82 / score_spread=19` are what the nightly run
+  trains with. Pinned by `tests/test_training_approaches_td_calibration.py`.
 
 ### Prune dead / duplicate rich features
 - **Priority:** Medium
@@ -85,14 +129,17 @@ based.
 
 ## MEDIUM-TERM (remove the bottleneck)
 
-### Richer leaf evaluator  ← TOP medium-term item
+### Richer leaf evaluator  ← TOP medium-term item — **NOW UN-GATED**
 - **Priority:** High
 - **Expected Strength Gain:** **High** — the change most likely to convert TD's
   richer model into stronger play.
 - **Complexity:** High · **Risk:** Medium (new eval path; must stay within MCTS
   leaf budget, not per-rollout-step)
-- **Dependencies:** comparison harness confirming the 8-feature ceiling
-- **Suggested Timing:** Immediately after validation shows TD ≈ regression.
+- **Dependencies:** comparison harness confirming the 8-feature ceiling —
+  **SATISFIED 2026-06-25** by `exp_e1261b8e0c3b` (TD 25% vs regression 39%, Δμ
+  −10; recalibrated labels did not help). The gate condition is met.
+- **Suggested Timing:** **Next.** Validation shows TD does not beat regression even
+  after label calibration, which points squarely at the 45→8 projection.
 - **Reason:** Only 8 of 45 features reach the agent; the most predictive ones do
   not. Evaluating the full rich vector at MCTS *leaves* (called far less often than
   rollout steps) lets `rank_so_far`/mobility/territory influence search. See

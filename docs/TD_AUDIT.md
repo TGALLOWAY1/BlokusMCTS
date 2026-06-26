@@ -182,12 +182,15 @@ training; it is projected down to 8 before it can affect play.
 ### Label generation (`td_selfplay.margin_labels`, `td_learning.terminal_value`)
 - **Working:** rank/score/margin blend is bounded and configurable. Competition
   ranking handles ties.
-- **Assumption (possibly incorrect):** `normalized_final_score = tanh((score −
-  40)/20)` hardcodes a "neutral" score of 40 and a spread of 20. With total area
-  88 and 4 players, the mean per-player score is ~`occupied/4`; 40 is plausible
-  for the winner but pessimistic as a global centre. This biases the score
-  component of the terminal value. Low-risk but worth calibrating from real
-  score distributions (the trajectory diagnostics now expose them).
+- **Assumption (possibly incorrect) — RESOLVED 2026-06-25:** `normalized_final_score
+  = tanh((score − 40)/20)` hardcoded a "neutral" score of 40 and a spread of 20.
+  Against the committed corpus the real terminal-score mean is **~82** (median 83,
+  std 19), so the centre of 40 saturated the score component: **75%** of terminal
+  rows mapped to `|v| > 0.9` (mean 0.89), collapsing it to ≈ +1. `score_center` /
+  `score_spread` are now `TDConfig` fields defaulting to the calibrated `(82, 19)`;
+  the score component now spans `[−0.98, +0.97]` (≈18% saturated) and the blended
+  terminal value separates ranks (1→0.82, 2→0.22, 3→−0.26, 4→−0.89). The rank-value
+  map `{1:1.0, 2:0.5, 3:-0.25, 4:-1.0}` is still hand-picked (open in `tasks/TODO.md`).
 - **Assumption:** rank values `{1:1.0, 2:0.5, 3:-0.25, 4:-1.0}` are arbitrary.
   Reasonable, but unvalidated against actual win equity.
 
@@ -329,11 +332,17 @@ Measured from the committed rating timeline (`training/ratings_db.champion_elo_s
 and **nothing has ever been promoted**. The swings (±~125 Elo) are consistent with
 rating noise from a fixed-strength agent, not learning.
 
-**Is TD outperforming regression?** Unknown — TD had never been run on committed
-data. The comparison harness (`training/experiments/`) is validated end-to-end but
-a statistically meaningful verdict (≥100 games × ≥10 seeds) needs hours of compute;
-at small scale it runs correctly and produces the full metric/CI/recommendation
-report. Until that run completes, the honest answer is **no evidence either way**.
+**Is TD outperforming regression?** **No (first powered evidence, 2026-06-25).**
+Run `exp_e1261b8e0c3b` (40 pooled games, 4 seeds, 50 ms/move, on the
+label-recalibrated weights) put TD **below** regression on every axis: win rate
+25% vs 39%, avg rank 2.31 vs 1.88, head-to-head 7–17, TrueSkill Δμ −10.05, Elo
+−45. Both learned candidates also trailed the plain heuristic (51.6%). The harness
+flags it "INCONCLUSIVE" only because the win-rate CIs technically overlap, but the
+direction is consistent and matches this audit's central prediction: with the rich
+value squeezed through the 8-feature projection, TD cannot beat regression. A
+gold-standard run (≥100 games × ≥10 seeds) would sharpen the CIs, but the verdict
+needed to act — *do not add more learning algorithms; remove the projection
+bottleneck first* — is already supported.
 
 **Is learning plateauing?** Yes, on the evidence available: 0 promotions in 19
 runs, negative Elo slope, zero promotion frequency. Either the seed champion is
@@ -345,6 +354,18 @@ The new **Strength** section in `training/status.md` now surfaces these numbers
 (current/best Elo + TrueSkill, promotion frequency, improvement rate) every run.
 
 ---
+
+## 10. Production path (post-audit, 2026-06-26)
+
+TD is no longer validated by the standalone harness in isolation: it is a
+first-class **approach** in the merged nightly approach-comparison framework (PR
+#171). The `td` and `hybrid` approaches (`training/approaches/`) re-train the value
+model and build candidates that are scored against a fixed benchmark pool and gated
+by `training/evaluation/promotion_gate.py`. The label-score calibration (§3) rides
+through automatically because those approaches use `TDConfig`'s defaults. The
+audit's headline verdict — *remove the 45→8 projection ceiling before adding more
+learning algorithms* — is unchanged; the framework is simply where that comparison
+now runs (`python -m training.nightly_run --approaches td,baseline,heuristic_tune`).
 
 _Changes made during this audit are listed in the Phase-2 deliverable summary and
 reflected in `FEATURES.md` / `tasks/TODO.md`._
