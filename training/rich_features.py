@@ -316,6 +316,72 @@ def _frontier_to_opponent_distance(board: Board, player: Player, frontier) -> fl
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Leaf-evaluator feature subsets (cost tiers)
+# ---------------------------------------------------------------------------
+#
+# extract_rich_features enumerates legal moves for ALL FOUR players (the
+# opponent-mobility features) which costs ~15-27 ms/leaf — far too slow to call
+# even once per MCTS simulation. The groups below classify features by the
+# expensive computation they require so the leaf evaluator can request only an
+# affordable subset (:func:`extract_leaf_features`).
+
+# Features that require enumerating EVERY player's legal moves (the dominant
+# cost, ~11-22 ms): the three opponent-mobility aggregates plus the score
+# leader's mobility.
+OPPONENT_MOBILITY_FEATURES: frozenset = frozenset({
+    "opponent_mobility_avg",
+    "opponent_mobility_max",
+    "opponent_mobility_min",
+    "leader_mobility_pressure",
+})
+
+# Features that require enumerating the FOCAL player's legal moves (~3-5 ms).
+FOCAL_MOBILITY_FEATURES: frozenset = frozenset({
+    "legal_move_count",
+    "legal_move_count_small_pieces",
+    "legal_move_count_medium_pieces",
+    "legal_move_count_large_pieces",
+    "playable_piece_count",
+    "total_playable_piece_area",
+    "avg_legal_move_area",
+    "max_legal_move_area",
+    "corner_quality_score",
+    "new_corner_generation_potential",
+})
+
+# Features that require the whole-board reachable-region / trapped-region BFS
+# (~0.5-1 ms).
+TERRITORY_FEATURES: frozenset = frozenset({
+    "largest_reachable_region",
+    "trapped_region_count",
+    "trapped_region_area",
+    "frontier_density",
+})
+
+# The cheap remainder (SE-8, score/rank/margin, piece inventory, frontier
+# counts, board-position): no legal-move enumeration and no territory BFS,
+# ~0.3 ms on top of the SE-8 features.
+_ALL_FEATURE_SET: frozenset = frozenset(RICH_FEATURE_NAMES)
+SCORE_LEAF_FEATURES: frozenset = (
+    _ALL_FEATURE_SET
+    - OPPONENT_MOBILITY_FEATURES
+    - FOCAL_MOBILITY_FEATURES
+    - TERRITORY_FEATURES
+)
+
+# Named cost tiers exposed to the agent via ``rich_leaf_feature_subset``.
+#   "full"            — all 45 features (~15-27 ms/leaf); usually too slow.
+#   "no_opp_mobility" — drops only the all-player opponent enumeration
+#                       (~4-6 ms/leaf); keeps focal mobility + territory.
+#   "score"           — cheap, high-signal subset (~0.3 ms/leaf); the default.
+LEAF_FEATURE_SUBSETS: Dict[str, frozenset] = {
+    "full": _ALL_FEATURE_SET,
+    "no_opp_mobility": _ALL_FEATURE_SET - OPPONENT_MOBILITY_FEATURES,
+    "score": SCORE_LEAF_FEATURES,
+}
+
+
 def extract_rich_features(
     board: Board,
     player: Player,
@@ -329,10 +395,66 @@ def extract_rich_features(
     finite float. ``cache`` (optional) shares legal-move enumeration across the
     players evaluated for one board state.
     """
+    return _extract_features_impl(
+        board, player, include=_ALL_FEATURE_SET, cache=cache, evaluator=evaluator
+    )
+
+
+def extract_leaf_features(
+    board: Board,
+    player: Player,
+    *,
+    subset: str = "score",
+    cache: Optional[FeatureCache] = None,
+    evaluator: Optional[BlokusStateEvaluator] = None,
+) -> Dict[str, float]:
+    """Return a *subset* of the rich features for cheap MCTS-leaf evaluation.
+
+    Computes only the features in ``LEAF_FEATURE_SUBSETS[subset]`` (skipping the
+    expensive legal-move enumeration / territory BFS for everything else) and
+    zeroes the rest. The included features carry **identical values** to
+    :func:`extract_rich_features` (same gated implementation), so a TD weight
+    vector trained on the full features can be applied directly — the zeroed
+    terms simply drop out of the dot product.
+
+    Args:
+        subset: One of ``"full"``, ``"no_opp_mobility"``, or ``"score"``.
+    """
+    include = LEAF_FEATURE_SUBSETS.get(subset)
+    if include is None:
+        raise ValueError(
+            f"unknown leaf feature subset '{subset}'; "
+            f"expected one of {sorted(LEAF_FEATURE_SUBSETS)}"
+        )
+    return _extract_features_impl(
+        board, player, include=include, cache=cache, evaluator=evaluator
+    )
+
+
+def _extract_features_impl(
+    board: Board,
+    player: Player,
+    *,
+    include: frozenset,
+    cache: Optional[FeatureCache] = None,
+    evaluator: Optional[BlokusStateEvaluator] = None,
+) -> Dict[str, float]:
+    """Shared extraction core for the full and leaf-subset feature paths.
+
+    Only the blocks whose features intersect ``include`` are computed; the
+    expensive focal-mobility, territory, and opponent-mobility blocks are gated
+    so a cheap subset never pays for them. Features outside ``include`` are
+    emitted as ``0.0``. When ``include`` is the full feature set this is
+    behaviourally identical to the original single-pass extraction.
+    """
     cache = cache or FeatureCache()
     evaluator = evaluator or _shared_evaluator()
     sizes = _piece_sizes()
     total_area = total_piece_area()
+
+    need_focal = bool(include & FOCAL_MOBILITY_FEATURES)
+    need_territory = bool(include & TERRITORY_FEATURES)
+    need_opp_mobility = bool(include & OPPONENT_MOBILITY_FEATURES)
 
     # --- Eight SE features (identical semantics to the live agent) -----------
     feats: Dict[str, float] = dict(evaluator.extract_features(board, player))
@@ -341,61 +463,68 @@ def extract_rich_features(
     remaining_ids = _remaining_piece_ids(pieces_used)
     frontier = board.get_frontier(player)
 
-    # --- Mobility / move-space ----------------------------------------------
-    legal_moves = cache.legal_moves(board, player)
-    n_moves = len(legal_moves)
-    small = medium = large = 0
-    areas: List[int] = []
-    playable_ids = set()
-    for mv in legal_moves:
-        pid = int(getattr(mv, "piece_id"))
-        sz = sizes.get(pid, 0)
-        areas.append(sz)
-        playable_ids.add(pid)
-        if sz <= 2:
-            small += 1
-        elif sz == 3:
-            medium += 1
-        else:
-            large += 1
-    playable_area = sum(sizes.get(pid, 0) for pid in playable_ids)
-    avg_area = (sum(areas) / len(areas)) if areas else 0.0
-    max_area = float(max(areas)) if areas else 0.0
+    # --- Mobility / move-space (gated: focal legal-move enumeration) ---------
+    n_moves = 0
+    playable_ids: set = set()
+    if need_focal:
+        legal_moves = cache.legal_moves(board, player)
+        n_moves = len(legal_moves)
+        small = medium = large = 0
+        areas: List[int] = []
+        for mv in legal_moves:
+            pid = int(getattr(mv, "piece_id"))
+            sz = sizes.get(pid, 0)
+            areas.append(sz)
+            playable_ids.add(pid)
+            if sz <= 2:
+                small += 1
+            elif sz == 3:
+                medium += 1
+            else:
+                large += 1
+        playable_area = sum(sizes.get(pid, 0) for pid in playable_ids)
+        avg_area = (sum(areas) / len(areas)) if areas else 0.0
+        max_area = float(max(areas)) if areas else 0.0
 
-    feats["legal_move_count"] = min(n_moves / _MAX_LEGAL_MOVES, 1.0)
-    feats["legal_move_count_small_pieces"] = min(small / _MAX_LEGAL_MOVES, 1.0)
-    feats["legal_move_count_medium_pieces"] = min(medium / _MAX_LEGAL_MOVES, 1.0)
-    feats["legal_move_count_large_pieces"] = min(large / _MAX_LEGAL_MOVES, 1.0)
-    feats["playable_piece_count"] = len(playable_ids) / total_piece_count()
-    feats["total_playable_piece_area"] = playable_area / max(total_area, 1)
-    feats["avg_legal_move_area"] = avg_area / 5.0
-    feats["max_legal_move_area"] = max_area / 5.0
+        feats["legal_move_count"] = min(n_moves / _MAX_LEGAL_MOVES, 1.0)
+        feats["legal_move_count_small_pieces"] = min(small / _MAX_LEGAL_MOVES, 1.0)
+        feats["legal_move_count_medium_pieces"] = min(medium / _MAX_LEGAL_MOVES, 1.0)
+        feats["legal_move_count_large_pieces"] = min(large / _MAX_LEGAL_MOVES, 1.0)
+        feats["playable_piece_count"] = len(playable_ids) / total_piece_count()
+        feats["total_playable_piece_area"] = playable_area / max(total_area, 1)
+        feats["avg_legal_move_area"] = avg_area / 5.0
+        feats["max_legal_move_area"] = max_area / 5.0
 
-    # --- Corner / frontier ---------------------------------------------------
+    # --- Corner / frontier (cheap counts always; quality gated on focal) -----
     feats["frontier_size"] = min(len(frontier) / _MAX_FRONTIER, 1.0)
     feats["corner_count"] = min(len(frontier) / _MAX_FRONTIER, 1.0)
-    # corner quality: legal placements available per anchor (anchors that lead to
-    # many moves are higher quality).
-    feats["corner_quality_score"] = (
-        min((n_moves / max(len(frontier), 1)) / 20.0, 1.0) if frontier else 0.0
-    )
-    largest_reach, trapped_count, trapped_area = _largest_reachable_region_and_trapped(
-        board, frontier
-    )
-    reachable_norm = min((largest_reach) / _MAX_REACHABLE, 1.0)
-    feats["frontier_density"] = (
-        min(len(frontier) / max(largest_reach, 1), 1.0) if largest_reach else 0.0
-    )
+    if need_focal:
+        # corner quality: legal placements available per anchor (anchors that
+        # lead to many moves are higher quality).
+        feats["corner_quality_score"] = (
+            min((n_moves / max(len(frontier), 1)) / 20.0, 1.0) if frontier else 0.0
+        )
+        # new-corner potential: distinct anchor cells reachable by current legal
+        # moves, proxied by playable-piece diversity × frontier breadth.
+        feats["new_corner_generation_potential"] = min(
+            (len(playable_ids) * len(frontier)) / 200.0, 1.0
+        )
+    if need_territory:
+        largest_reach, trapped_count, trapped_area = (
+            _largest_reachable_region_and_trapped(board, frontier)
+        )
+        feats["frontier_density"] = (
+            min(len(frontier) / max(largest_reach, 1), 1.0) if largest_reach else 0.0
+        )
+        # --- Territory and blocking -----------------------------------------
+        feats["largest_reachable_region"] = min(largest_reach / _MAX_REACHABLE, 1.0)
+        feats["trapped_region_count"] = min(trapped_count / 10.0, 1.0)
+        feats["trapped_region_area"] = min(trapped_area / _BOARD_CELLS, 1.0)
     feats["frontier_to_opponent_distance"] = _frontier_to_opponent_distance(
         board, player, frontier
     )
-    # new-corner potential: distinct anchor cells reachable by current legal moves,
-    # proxied by playable-piece diversity × frontier breadth.
-    feats["new_corner_generation_potential"] = min(
-        (len(playable_ids) * len(frontier)) / 200.0, 1.0
-    )
 
-    # --- Piece inventory -----------------------------------------------------
+    # --- Piece inventory (cheap) --------------------------------------------
     rem_by_size = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
     for pid in remaining_ids:
         sz = sizes.get(pid, 0)
@@ -413,28 +542,26 @@ def extract_rich_features(
     distinct_sizes = sum(1 for v in rem_by_size.values() if v > 0)
     feats["piece_diversity_score"] = distinct_sizes / 5.0
 
-    # --- Territory and blocking ---------------------------------------------
-    feats["largest_reachable_region"] = reachable_norm
-    feats["trapped_region_count"] = min(trapped_count / 10.0, 1.0)
-    feats["trapped_region_area"] = min(trapped_area / _BOARD_CELLS, 1.0)
+    # --- Opponent mobility (gated: all-player legal-move enumeration) --------
+    if need_opp_mobility:
+        opp_mobilities: List[int] = []
+        for opp in _PLAYERS:
+            if opp == player:
+                continue
+            opp_mobilities.append(_mobility_count(cache, board, opp))
+        if opp_mobilities:
+            feats["opponent_mobility_avg"] = min(
+                (sum(opp_mobilities) / len(opp_mobilities)) / _MAX_LEGAL_MOVES, 1.0
+            )
+            feats["opponent_mobility_max"] = min(max(opp_mobilities) / _MAX_LEGAL_MOVES, 1.0)
+            feats["opponent_mobility_min"] = min(min(opp_mobilities) / _MAX_LEGAL_MOVES, 1.0)
+        else:
+            feats["opponent_mobility_avg"] = 0.0
+            feats["opponent_mobility_max"] = 0.0
+            feats["opponent_mobility_min"] = 0.0
 
-    opp_mobilities: List[int] = []
-    for opp in _PLAYERS:
-        if opp == player:
-            continue
-        opp_mobilities.append(_mobility_count(cache, board, opp))
-    if opp_mobilities:
-        feats["opponent_mobility_avg"] = min(
-            (sum(opp_mobilities) / len(opp_mobilities)) / _MAX_LEGAL_MOVES, 1.0
-        )
-        feats["opponent_mobility_max"] = min(max(opp_mobilities) / _MAX_LEGAL_MOVES, 1.0)
-        feats["opponent_mobility_min"] = min(min(opp_mobilities) / _MAX_LEGAL_MOVES, 1.0)
-    else:
-        feats["opponent_mobility_avg"] = 0.0
-        feats["opponent_mobility_max"] = 0.0
-        feats["opponent_mobility_min"] = 0.0
-
-    # opponent corner pressure: total opponent frontier near this player's pieces.
+    # opponent corner pressure: total opponent frontier near this player's
+    # pieces (cheap — frontier sets only, no enumeration).
     opp_frontier_total = 0
     for opp in _PLAYERS:
         if opp == player:
@@ -442,14 +569,14 @@ def extract_rich_features(
         opp_frontier_total += len(board.get_frontier(opp))
     feats["opponent_corner_pressure"] = min(opp_frontier_total / (3.0 * _MAX_FRONTIER), 1.0)
 
-    # leader mobility pressure: mobility of the current score leader (excluding self).
+    # --- Score / race (cheap — square counts only) --------------------------
     scores = _player_scores(board)
-    leader = max((p for p in _PLAYERS if p != player), key=lambda p: scores[p.value])
-    feats["leader_mobility_pressure"] = min(
-        _mobility_count(cache, board, leader) / _MAX_LEGAL_MOVES, 1.0
-    )
-
-    # --- Score / race --------------------------------------------------------
+    if need_opp_mobility:
+        # leader mobility pressure: mobility of the current score leader.
+        leader = max((p for p in _PLAYERS if p != player), key=lambda p: scores[p.value])
+        feats["leader_mobility_pressure"] = min(
+            _mobility_count(cache, board, leader) / _MAX_LEGAL_MOVES, 1.0
+        )
     my_score = scores[player.value]
     others = sorted((scores[p.value] for p in _PLAYERS if p != player), reverse=True)
     leader_score = others[0] if others else 0

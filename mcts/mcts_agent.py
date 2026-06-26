@@ -481,6 +481,10 @@ class MCTSAgent:
         sufficiency_threshold_enabled: bool = False,
         loss_avoidance_enabled: bool = False,
         loss_avoidance_threshold: float = -50.0,
+        # --- Rich leaf evaluator (45-feature TD value at MCTS leaves) ---
+        rich_leaf_eval_enabled: bool = False,
+        rich_leaf_weights_path: Optional[str] = None,
+        rich_leaf_feature_subset: str = "score",
         # --- Search Trace (Visualization) ---
         enable_search_trace: bool = False,
         search_trace_sample_rate: int = 10,
@@ -543,6 +547,16 @@ class MCTSAgent:
             loss_avoidance_enabled: Enable loss avoidance — redirect away from catastrophic
                 nodes during selection (Layer 9)
             loss_avoidance_threshold: Reward threshold below which a result is catastrophic (Layer 9)
+            rich_leaf_eval_enabled: Evaluate MCTS leaves with the 45-feature TD-learned
+                linear value model instead of a rollout. LEAF-ONLY — called once per
+                simulation, never per rollout step. Default False (backward compatible).
+            rich_leaf_weights_path: Path to the TD artifact holding ``rich_phase_weights``
+                (defaults to ``training/state/td_evaluator_weights.json``). Falls back to
+                the 8-feature evaluator when the artifact/weights are absent.
+            rich_leaf_feature_subset: Cost tier for leaf feature extraction —
+                ``"score"`` (default, ~0.8 ms/leaf), ``"no_opp_mobility"`` (~7 ms),
+                or ``"full"`` (~15-25 ms/leaf). See
+                ``training.rich_features.LEAF_FEATURE_SUBSETS``.
         """
         self.iterations = iterations
         self.time_limit = time_limit
@@ -620,6 +634,11 @@ class MCTSAgent:
         self.sufficiency_threshold_enabled = bool(sufficiency_threshold_enabled)
         self.loss_avoidance_enabled = bool(loss_avoidance_enabled)
         self.loss_avoidance_threshold = float(loss_avoidance_threshold)
+
+        # Rich leaf evaluator params (45-feature TD value at MCTS leaves)
+        self.rich_leaf_eval_enabled = bool(rich_leaf_eval_enabled)
+        self.rich_leaf_weights_path = rich_leaf_weights_path
+        self.rich_leaf_feature_subset = str(rich_leaf_feature_subset)
         # Effective per-move values (set in select_action)
         self._effective_exploration_constant = float(
             adaptive_exploration_base if adaptive_exploration_enabled else exploration_constant
@@ -670,6 +689,27 @@ class MCTSAgent:
             weights=state_eval_weights,
             phase_weights=state_eval_phase_weights,
         )
+
+        # Rich leaf evaluator: the 45-feature TD value model applied at leaves.
+        # Constructed only when enabled; falls back to the 8-feature evaluator
+        # (shared with state_evaluator) when the TD artifact is unavailable.
+        self.rich_leaf_evaluator: Optional["RichLeafEvaluator"] = None
+        if self.rich_leaf_eval_enabled:
+            from .rich_leaf_evaluator import (
+                DEFAULT_RICH_LEAF_WEIGHTS_PATH,
+                RichLeafEvaluator,
+            )
+
+            weights_path = (
+                self.rich_leaf_weights_path
+                if self.rich_leaf_weights_path is not None
+                else DEFAULT_RICH_LEAF_WEIGHTS_PATH
+            )
+            self.rich_leaf_evaluator = RichLeafEvaluator(
+                weights_path,
+                feature_subset=self.rich_leaf_feature_subset,
+                fallback_evaluator=self.state_evaluator,
+            )
         # RNG for random rollout policy
         self._rng = np.random.RandomState(seed)
         # Persist the user-provided seed so root-parallel workers can derive
@@ -702,6 +742,7 @@ class MCTSAgent:
             "transposition_hits": 0,
             "rollout_rewards": [],
             "leaf_eval_calls": 0,
+            "rich_leaf_eval_calls": 0,
             "progressive_bias_updates": 0,
             "potential_shaping_terms": [],
             "evaluator_errors": 0,
@@ -1534,9 +1575,13 @@ class MCTSAgent:
                 self.stats["transposition_hits"] += 1
                 return cached_result["reward"], []
 
-        # Run learned leaf evaluation or rollout.
+        # Run leaf evaluation or rollout. The rich leaf evaluator and the
+        # learned-model leaf evaluator are both LEAF-ONLY: invoked exactly once
+        # per simulation, here at the leaf node — never per rollout step.
         rollout_actions: List[int] = []
-        if self.leaf_evaluation_enabled and self.learned_evaluator is not None:
+        if self.rich_leaf_eval_enabled and self.rich_leaf_evaluator is not None:
+            reward = self._evaluate_rich_leaf(node.board, node.player)
+        elif self.leaf_evaluation_enabled and self.learned_evaluator is not None:
             reward = self._evaluate_leaf(node.board, node.player)
         else:
             reward, rollout_actions = self._rollout(node.board, node.player)
@@ -1547,6 +1592,26 @@ class MCTSAgent:
 
         self.stats["rollout_rewards"].append(reward)
         return reward, rollout_actions
+
+    def _evaluate_rich_leaf(self, board: Board, player: Player) -> float:
+        """Evaluate a leaf with the 45-feature TD-learned linear value model.
+
+        LEAF-ONLY: called once per simulation (in place of the rollout), so the
+        richer feature extraction never runs per rollout step. The value is
+        computed from the **root player's** perspective for consistent
+        backpropagation, matching the rollout/learned-leaf reward semantics, and
+        is scaled by ``_eval_reward_scale`` to sit on the same magnitude as the
+        static-evaluation reward path.
+        """
+        reward_player = self._root_player if self._root_player is not None else player
+        try:
+            value = self.rich_leaf_evaluator.evaluate(board, reward_player)
+            self.stats["rich_leaf_eval_calls"] += 1
+            return float(value) * self._eval_reward_scale
+        except Exception:
+            self.stats["evaluator_errors"] += 1
+            reward, _ = self._rollout(board, player)
+            return reward
 
     def _evaluate_leaf(self, board: Board, player: Player) -> float:
         """Evaluate leaf with learned model-backed win probability.
@@ -2127,6 +2192,7 @@ class MCTSAgent:
             "transposition_hits": 0,
             "rollout_rewards": [],
             "leaf_eval_calls": 0,
+            "rich_leaf_eval_calls": 0,
             "progressive_bias_updates": 0,
             "potential_shaping_terms": [],
             "evaluator_errors": 0,

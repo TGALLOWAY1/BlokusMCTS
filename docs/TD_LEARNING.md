@@ -241,11 +241,16 @@ coverage is thin.
 - **Phase-boundary bootstrap — FIXED (2026-06).** `V(s_{t+1})` now uses the next
   state's phase model (`next_phase` stored per row, derived for legacy rows by
   `trajectory_store.annotate_next_phase`). See `docs/TD_AUDIT.md`.
-- **Only eight weights reach the live agent.** The rich features improve the
-  *conditioning* of those eight projected weights but the agent still evaluates
-  with eight fast features (rich features are too slow for per-rollout use).
-  Consuming the full rich model in play would require a separate, slower leaf
-  evaluator.
+- **Only eight weights reach the *rollout* path.** The 8 projected weights drive
+  the per-rollout-step static evaluation, because the rich features are too slow
+  for per-step use. **Addressed (2026-06) for leaf evaluation:** the optional
+  **rich leaf evaluator** (`mcts/rich_leaf_evaluator.py`, flag
+  `rich_leaf_eval_enabled`) applies the full `rich_phase_weights` at MCTS leaves
+  — called once per simulation, not per rollout step — so `score_margin_vs_leader`,
+  `rank_so_far`, mobility, and territory can finally influence search. A cost-tiered
+  feature subset (`score` default ≈0.8 ms/leaf) keeps it within the leaf budget by
+  dropping the all-player opponent-mobility enumeration. See
+  `docs/RICH_FEATURE_ANALYSIS.md §7`.
 - **Linear value model.** No non-linear interactions (see follow-ups: gradient
   boosting / value network).
 - **Self-play roster bias.** Trajectory quality is bounded by the opponents used

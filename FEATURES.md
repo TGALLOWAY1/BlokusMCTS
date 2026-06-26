@@ -29,6 +29,7 @@
 - Adaptive rollout cutoff depth based on branching factor (Layer 9) — `mcts/mcts_agent.py`
 - UCT sufficiency threshold (Layer 9) — `mcts/mcts_agent.py`
 - Loss avoidance for catastrophic nodes (Layer 9) — `mcts/mcts_agent.py`
+- Rich leaf evaluator: optional 45-feature TD-learned linear value model evaluated **only at MCTS leaves** (once per simulation, never per rollout step), unlocking the rich features the 8-feature serving evaluator discards (`score_margin_vs_leader`, `rank_so_far`, mobility, territory). Cost-tiered feature subsets (`score` ≈0.8 ms/leaf default, `no_opp_mobility` ≈7 ms, `full` ≈15–25 ms) drop the expensive opponent-mobility enumeration; loads `rich_phase_weights` from the TD artifact with graceful fallback to the 8-feature evaluator. Default OFF, enabled via `rich_leaf_eval_enabled` — `mcts/rich_leaf_evaluator.py`, `mcts/mcts_agent.py`, `training/rich_features.py` (`extract_leaf_features`, `LEAF_FEATURE_SUBSETS`), A/B harness `scripts/ab_rich_leaf.py`
 - Challenge Champion profile and adaptive human-play budget controller — `config/challenge_champion_config.json`, `mcts/champion_profile.py`, `mcts/adaptive_budget.py`
 - Learned evaluator (GBT model) for state scoring (Layer 2) — `mcts/learned_evaluator.py`
 - Move heuristic scoring — `mcts/move_heuristic.py`
