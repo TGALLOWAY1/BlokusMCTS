@@ -204,6 +204,35 @@ def _elo_recent_summary(history: List[Dict[str, Any]], *, limit: int = 6) -> Lis
     return lines
 
 
+def _approach_lines(record: Optional[Dict[str, Any]]) -> List[str]:
+    """Render the approach-comparison table for the email body."""
+    if not record or not record.get("rows"):
+        return ["_No approach comparison ran this cycle._"]
+    lines: List[str] = []
+    winner = record.get("winner")
+    lines.append(f"- Promoted this run: {winner if winner else 'none'}")
+    pool = record.get("pool") or {}
+    if pool:
+        lines.append(f"- Benchmark pool: {pool.get('version')} "
+                     f"(opponents: {', '.join(pool.get('opponents', []))})")
+    traj = record.get("trajectory") or {}
+    if traj:
+        sig = "real (beyond noise)" if traj.get("significant") else "within noise floor"
+        lines.append(f"- Elo move vs best: {_fmt(traj.get('gap_to_best'), '+.1f')} ({sig})")
+    lines += ["", "| Approach | Created | Games | Win% vs Champ | Elo Δ | TrueSkill Δ | Promoted | Reason |",
+              "|---|---|---|---|---|---|---|---|"]
+    for r in record["rows"]:
+        wr = r.get("win_rate_vs_champion")
+        lines.append(
+            f"| {r['approach']} | {'Yes' if r.get('created') else 'No'} "
+            f"| {_fmt(r.get('games'))} "
+            f"| {(format(wr * 100, '.0f') + '%') if wr is not None else '—'} "
+            f"| {_fmt(r.get('elo_delta'), '+.1f')} | {_fmt(r.get('trueskill_delta'), '+.2f')} "
+            f"| {'Yes' if r.get('promoted') else 'No'} | {r.get('gate_reason') or r.get('reason')} |"
+        )
+    return lines
+
+
 def _learning_lines(last_eval: Optional[Dict[str, Any]]) -> List[str]:
     """Render the learning-method block (regression vs temporal difference)."""
     if not last_eval:
@@ -426,9 +455,20 @@ def build_body(
         lines.append("_No recorded runs yet._")
     lines.append("")
 
+    # --- Approach Comparison (new framework) ---------------------------------
+    approach_record = state.get("last_approach_comparison")
+    if approach_record:
+        lines += ["## Approach Comparison", ""]
+        lines += _approach_lines(approach_record)
+        lines.append("")
+
     # --- Learning Method -----------------------------------------------------
     lines += ["## Learning Method", ""]
-    lines += _learning_lines(last_eval)
+    if last_eval is None and approach_record:
+        lines.append("_See the Approach Comparison section above for each approach's "
+                     "candidate, result, and specific reason._")
+    else:
+        lines += _learning_lines(last_eval)
     lines.append("")
 
     # --- Match Breakdown -----------------------------------------------------

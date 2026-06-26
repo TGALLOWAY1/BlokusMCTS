@@ -76,6 +76,29 @@ def _trend_line(x: List[float], y: List[float]) -> Optional[Tuple[List[float], L
         return None
 
 
+def _rolling_average(y: List[float], window: int) -> List[float]:
+    """Trailing rolling mean (window shrinks at the start)."""
+    out: List[float] = []
+    for i in range(len(y)):
+        lo = max(0, i - window + 1)
+        chunk = y[lo:i + 1]
+        out.append(sum(chunk) / len(chunk))
+    return out
+
+
+def _promotion_points(conn: sqlite3.Connection) -> List[Tuple[float, float]]:
+    """``(total_games, champion_elo)`` for each promoted run (for plot markers)."""
+    try:
+        rows = conn.execute(
+            "SELECT total_games, champion_elo FROM run_summary WHERE promoted=1 "
+            "ORDER BY total_games ASC"
+        ).fetchall()
+    except sqlite3.Error:
+        return []
+    return [(float(r["total_games"]), float(r["champion_elo"])) for r in rows
+            if r["total_games"] is not None and r["champion_elo"] is not None]
+
+
 def render_elo_plot(
     conn: sqlite3.Connection,
     out_path: Path | str,
@@ -109,10 +132,27 @@ def render_elo_plot(
             marker="o" if len(x) <= 60 else None, markersize=3,
             label=f"Champion Elo ({granularity})")
 
-    # Best-so-far reference line.
+    # Rolling average — smooths matchup/seed noise so the real drift is visible.
+    if len(y) >= 5:
+        window = max(5, min(25, len(y) // 5))
+        roll = _rolling_average(y, window)
+        ax.plot(x, roll, color="#f59e0b", linewidth=1.6, alpha=0.9,
+                label=f"Rolling avg (w={window})")
+
+    # Best historical reference line.
     best = max(y)
     ax.axhline(best, color="#16a34a", linewidth=1.0, linestyle="--", alpha=0.7,
-               label=f"Best so far ({best:.0f})")
+               label=f"Best historical ({best:.0f})")
+
+    # Promotion markers — where the champion actually changed.
+    promos = _promotion_points(conn)
+    if promos:
+        px = [p[0] for p in promos]
+        py = [p[1] for p in promos]
+        ax.scatter(px, py, color="#9333ea", marker="^", s=55, zorder=5,
+                   label=f"Promotions ({len(promos)})")
+        for gx in px:
+            ax.axvline(gx, color="#9333ea", linewidth=0.7, linestyle=":", alpha=0.4)
 
     # Linear trend line — the headline "is it moving up?" signal.
     caption_bits: List[str] = []
