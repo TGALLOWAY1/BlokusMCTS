@@ -1,0 +1,103 @@
+"""Tests for the promotion gate + benchmark pool + winner selection."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+from training.evaluation.benchmark_pool import build_benchmark_pool
+from training.evaluation.head_to_head import CandidateEval
+from training.evaluation.promotion_gate import (
+    GateThresholds,
+    evaluate_gate,
+    select_winner,
+)
+
+
+def _decision(promote: bool, champion: str):
+    crit = [{"name": "highest_ranking", "passed": promote, "detail": ""}]
+    return SimpleNamespace(promote=promote, champion=champion, criteria=crit,
+                           summary_line="x")
+
+
+def _eval(name="cand", *, promote=True, cand_wins=30, champ_wins=10,
+          elo_delta=20.0, mu_delta=1.0, games=80, n_seeds=2) -> CandidateEval:
+    return CandidateEval(
+        name=name, approach=f"{name}_approach", games=games, n_seeds=n_seeds,
+        win_rate=0.5, win_rate_ci=(0.4, 0.6), avg_rank=1.5, rank_distribution={1: 40},
+        avg_score=50.0, trueskill_mu=30.0, trueskill_sigma=2.0, elo=1300.0,
+        champion_win_rate=0.3, champion_elo=1300.0 - elo_delta, champion_trueskill_mu=29.0,
+        vs_champion={"candidate_wins": cand_wins, "champion_wins": champ_wins, "ties": 0},
+        elo_delta_vs_champion=elo_delta, trueskill_mu_delta_vs_champion=mu_delta,
+        decision=_decision(promote, name), runtime_s=1.0,
+    )
+
+
+def test_gate_passes_when_all_criteria_met():
+    gr = evaluate_gate(_eval())
+    assert gr.passed, gr.reason
+    assert gr.reason.startswith("PROMOTE")
+
+
+def test_gate_fails_when_conservative_decision_fails():
+    gr = evaluate_gate(_eval(promote=False))
+    assert not gr.passed
+    assert "HOLD" in gr.reason
+
+
+def test_gate_fails_on_negative_elo_delta():
+    gr = evaluate_gate(_eval(elo_delta=-5.0))
+    assert not gr.passed
+    names = [c["name"] for c in gr.criteria if not c["passed"]]
+    assert "elo_improvement" in names
+
+
+def test_gate_fails_when_not_beating_champion_head_to_head():
+    gr = evaluate_gate(_eval(cand_wins=10, champ_wins=20))
+    assert not gr.passed
+    names = [c["name"] for c in gr.criteria if not c["passed"]]
+    assert "beats_champion_head_to_head" in names
+
+
+def test_gate_fails_on_insufficient_games():
+    gr = evaluate_gate(_eval(games=10), GateThresholds(min_total_games=40))
+    assert not gr.passed
+    names = [c["name"] for c in gr.criteria if not c["passed"]]
+    assert "min_total_games" in names
+
+
+def test_gate_fails_on_weak_trueskill_delta():
+    gr = evaluate_gate(_eval(mu_delta=0.1), GateThresholds(min_mu_delta=0.5))
+    assert not gr.passed
+    names = [c["name"] for c in gr.criteria if not c["passed"]]
+    assert "trueskill_improvement" in names
+
+
+def test_select_winner_picks_best_passing():
+    weak = _eval(name="weak", mu_delta=0.6, elo_delta=5.0)
+    strong = _eval(name="strong", mu_delta=2.5, elo_delta=40.0)
+    sel = select_winner([weak, strong])
+    assert sel["winner"].name == "strong"
+    assert sel["winner_gate"].passed
+
+
+def test_select_winner_none_when_nobody_passes():
+    sel = select_winner([_eval(promote=False), _eval(name="b", elo_delta=-1.0)])
+    assert sel["winner"] is None
+
+
+def test_benchmark_pool_has_anchors_and_fixed_seeds():
+    pool = build_benchmark_pool({"checkpoints": []})
+    names = pool.opponent_names()
+    assert "heuristic" in names and "random" in names
+    assert len(pool.seeds) >= 2
+    # No historical checkpoint -> no best_historical opponent.
+    assert "best_historical" not in names
+
+
+def test_benchmark_pool_includes_best_historical_when_present():
+    state = {"checkpoints": [
+        {"rating": {"mu": 20.0}, "params": {"type": "mcts", "params": {}}},
+        {"rating": {"mu": 35.0}, "params": {"type": "mcts", "params": {"x": 1}}},
+    ]}
+    pool = build_benchmark_pool(state)
+    assert "best_historical" in pool.opponent_names()

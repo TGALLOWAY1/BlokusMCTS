@@ -27,6 +27,7 @@ import sys
 import time
 import traceback
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,6 +39,20 @@ from training import REPO_ROOT, TrainingPaths
 from training import human_estimate, ratings_db, state_store
 from training import diagnostics, status_report
 from training import selfplay_core as sc
+from training import approaches as ap_pkg
+from training.approaches.base import (
+    ApproachContext,
+    validate_candidate_artifact,
+    write_candidate_artifact,
+)
+from training.evaluation import (
+    build_benchmark_pool,
+    evaluate_candidates,
+    select_winner,
+    summarize_trajectory,
+)
+from training.evaluation import report as approach_report
+from training.evaluation.promotion_gate import GateThresholds
 
 # Fraction of the wall-clock budget spent on self-play generations; the remainder
 # is reserved for candidate evaluation, reports, commit, and email.
@@ -729,6 +744,308 @@ def _record_error(paths: TrainingPaths, state: Dict[str, Any], generation: int, 
 
 
 # ---------------------------------------------------------------------------
+# Approach-comparison orchestrator (the new default nightly path)
+# ---------------------------------------------------------------------------
+
+def _promote_winner(
+    state: Dict[str, Any],
+    champion: Dict[str, Any],
+    winner_eval: Any,  # evaluation.head_to_head.CandidateEval
+    winner_agent_config: Dict[str, Any],
+    winner_metrics: Dict[str, Any],
+    gate_reason: str,
+    paths: TrainingPaths,
+    *,
+    tracker: TrueSkillTracker,
+    elo: EloTracker,
+    promote_registry: bool,
+) -> bool:
+    """Promote a benchmark-pool winner to champion (multi-candidate naming aware).
+
+    Mirrors :func:`_promote` but keys ranked-row lookups on the winner's own name
+    (approaches use distinct names, not the single ``candidate`` id).
+    """
+    generation = int(state["generation"])
+    now = _utc_now().isoformat()
+    new_version = f"gen{generation}"
+
+    prev_rating = tracker.get_rating(CHAMPION_ID)
+    checkpoint = {
+        "generation": generation,
+        "id": f"ckpt_{new_version}",
+        "promoted_at": now,
+        "rating": {"elo": float(elo.get_rating(CHAMPION_ID)),
+                   "mu": prev_rating["mu"], "sigma": prev_rating["sigma"]},
+        "params": copy.deepcopy(state["champion_params"]),
+    }
+    state.setdefault("checkpoints", []).append(checkpoint)
+    state_store.write_checkpoint(paths, generation, checkpoint)
+
+    new_params = sc.strip_candidate_meta(winner_agent_config)
+    new_params.pop("name", None)
+    state["champion_params"] = new_params
+    state["last_promoted_generation"] = generation
+
+    tracker.reset_agent(CHAMPION_ID, increase_sigma=True)
+
+    champion["version"] = new_version
+    champion["promoted_at"] = now
+    champion["rating"] = {
+        "elo": float(elo.get_rating(CHAMPION_ID)),
+        "trueskill_mu": winner_eval.trueskill_mu,
+        "trueskill_sigma": winner_eval.trueskill_sigma,
+        "conservative": (winner_eval.trueskill_mu - 3.0 * winner_eval.trueskill_sigma
+                         if winner_eval.trueskill_mu is not None
+                         and winner_eval.trueskill_sigma is not None else None),
+    }
+    champion["params"] = new_params
+    champion["flat_config"] = sc.candidate_to_champion_config(new_params, None)
+    champion.setdefault("lineage", []).append({
+        "version": new_version,
+        "promoted_at": now,
+        "reason": gate_reason,
+        "approach": winner_eval.approach,
+        "learning_method": winner_metrics.get("learning_method"),
+        "training_rows": winner_metrics.get("training_rows") or winner_metrics.get("source_rows"),
+        "td_loss": winner_metrics.get("td_loss"),
+    })
+    state_store.save_champion(paths, champion)
+    print(f"[nightly] PROMOTED {winner_eval.approach} -> champion {new_version}: {gate_reason}")
+    return True
+
+
+def run_approaches(
+    *,
+    paths: TrainingPaths,
+    approaches: List[str],
+    games_per_arena: int,
+    seeds: List[int],
+    time_budget_minutes: float,
+    thinking_time_ms: Optional[int],
+    promote_registry: bool,
+    dry_run: bool,
+    verbose: bool,
+    td_weights_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """One nightly run as an approach-comparison: generate candidates from each
+    approach, evaluate the created ones against a fixed benchmark pool with fixed
+    seeds, promote only a gate-passing winner, and write reports.
+
+    Dry-run writes nothing to tracked state (artifacts go to a temp dir); it prints
+    the plan and the per-approach created/reason verdicts and returns.
+    """
+    paths.ensure_dirs()
+    run_id = _new_run_id()
+    now_iso = _utc_now().isoformat()
+    started = time.monotonic()
+    deadline = started + time_budget_minutes * 60.0
+
+    state = state_store.load_latest(paths)
+    champion = state_store.load_champion(paths)
+    _ensure_cold_start(state, champion)
+    state["run_id"] = run_id
+
+    # 1. Candidate generation (budget a quarter of wall-clock to learning).
+    # In dry-run, redirect *all* writes (candidate artifacts + freshly-trained TD
+    # weights) into a throwaway temp dir so no tracked state is touched.
+    artifact_root = paths.root
+    ctx_td_weights = td_weights_path
+    if dry_run:
+        import tempfile
+        artifact_root = Path(tempfile.mkdtemp(prefix="nightly_dryrun_"))
+        if ctx_td_weights is None:
+            ctx_td_weights = str(artifact_root / "td_evaluator_weights.json")
+
+    gen_budget = max(60.0, time_budget_minutes * 60.0 * 0.25)
+    ctx = ApproachContext(
+        state=state, repo_root=paths.root, run_id=run_id, now_iso=now_iso,
+        time_budget_s=gen_budget / max(len(approaches), 1), verbose=verbose,
+        td_weights_path=ctx_td_weights,
+    )
+    candidates = [a.generate(ctx) for a in ap_pkg.build_approaches(approaches)]
+
+    # Validate; demote any "created" candidate whose artifact is malformed.
+    for c in candidates:
+        ok, why = validate_candidate_artifact(c.to_artifact(run_id, now_iso))
+        if c.created and not ok:
+            c.created = False
+            c.agent_config = None
+            c.reason = f"{c.approach}: invalid candidate artifact ({why})"
+
+    for c in candidates:
+        write_candidate_artifact(c, repo_root=artifact_root, run_id=run_id, now_iso=now_iso)
+
+    created = [c for c in candidates if c.created]
+
+    if dry_run:
+        print(f"[nightly] DRY RUN run_id={run_id} approaches={approaches} "
+              f"games={games_per_arena} seeds={seeds} budget_min={time_budget_minutes}")
+        for c in candidates:
+            print(f"[nightly]   {c.approach:18s} created={c.created!s:5s} :: {c.reason}")
+        print(f"[nightly] {len(created)}/{len(candidates)} candidates created. "
+              f"No tracked state written (dry run). Artifacts -> {artifact_root}")
+        return state
+
+    # 2. Evaluation against the fixed benchmark pool.
+    conn = ratings_db.connect(paths.ratings_db)
+    latest_db = ratings_db.latest_ratings(conn)
+    elo = _seed_elo_tracker(latest_db)
+    tracker = _seed_trueskill_tracker(state, latest_db)
+    champ_game_no = ratings_db.max_game_number(conn, agent=CHAMPION_ID)
+
+    state["generation"] = int(state.get("generation", 0)) + 1
+    generation = state["generation"]
+
+    evals_by_name: Dict[str, Any] = {}
+    gates_by_name: Dict[str, Any] = {}
+    winner = None
+    promoted = False
+    total_eval_games = 0
+
+    if created and time.monotonic() < deadline:
+        pool = build_benchmark_pool(state, seeds=seeds)
+        ht = evaluate_candidates(
+            state, created, pool, paths,
+            games_per_arena=games_per_arena, seeds=seeds,
+            thinking_time_ms=thinking_time_ms, verbose=verbose,
+        )
+        evals_by_name = {e.name: e for e in ht.candidate_evals}
+        sel = select_winner(ht.candidate_evals, GateThresholds())
+        gates_by_name = sel["gates"]
+        winner = sel["winner"]
+        total_eval_games = len(ht.all_games)
+
+        # Fold every eval game into the champion's Elo + TrueSkill timeline (the
+        # champion plays in every candidate's battery against a STABLE pool).
+        eval_samples = _replay_games_through_elo(
+            elo, ht.all_games, capture_agent=CHAMPION_ID, start_game_number=champ_game_no)
+        if eval_samples:
+            champ_game_no = eval_samples[-1][0]
+        for record in ht.all_games:
+            scores = record.get("agent_scores", {})
+            if scores:
+                tracker.update_game(scores)
+
+        if winner is not None:
+            wcand = next((c for c in created if c.name == winner.name), None)
+            wmetrics = wcand.metrics if wcand else {}
+            wcfg = wcand.agent_config if wcand else copy.deepcopy(state["champion_params"])
+            promoted = _promote_winner(
+                state, champion, winner, wcfg, wmetrics,
+                gates_by_name[winner.name].reason, paths,
+                tracker=tracker, elo=elo, promote_registry=promote_registry,
+            )
+            if promote_registry:
+                try:
+                    _update_registry_for_winner(champion, winner, generation)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[nightly] registry update skipped: {exc}")
+
+    # 3. Finalise ratings + state.
+    champ_ts = tracker.get_rating(CHAMPION_ID)
+    champ_elo = elo.get_rating(CHAMPION_ID)
+    state["elo"] = float(champ_elo)
+    state["trueskill_mu"] = champ_ts["mu"]
+    state["trueskill_sigma"] = champ_ts["sigma"]
+    state["games_today"] = total_eval_games
+    state["total_games"] = int(state.get("total_games", 0)) + total_eval_games
+    state["days_trained"] = int(state.get("days_trained", 0)) + 1
+    state["last_error"] = None
+
+    # Build + persist the comparison record (status/email/markdown all read this).
+    series = ratings_db.champion_elo_series(conn)
+    series_vals = [float(r.get("elo", 0.0)) for r in series] + [float(champ_elo)]
+    traj = summarize_trajectory(series_vals)
+    record = approach_report.build_comparison_record(
+        run_id=run_id, now_iso=now_iso, candidates=candidates,
+        evals_by_name=evals_by_name, gates_by_name=gates_by_name,
+        winner_name=(winner.name if winner else None),
+        pool=(build_benchmark_pool(state, seeds=seeds).describe()),
+        trajectory=traj.to_dict(), seeds=seeds,
+    )
+    state["last_approach_comparison"] = record
+    state["last_eval"] = None  # superseded by last_approach_comparison
+
+    # Persist DB timeline row (only after a real evaluation).
+    if total_eval_games > 0:
+        ratings_db.record_run(
+            conn, run_id=run_id, timestamp=_utc_now().isoformat(), generation=generation,
+            agent_rows=_build_agent_rows(elo, tracker),
+            run_summary=ratings_db.RunSummaryRow(
+                generation=generation, games_today=total_eval_games,
+                total_games=int(state["total_games"]), champion_elo=float(champ_elo),
+                champion_mu=champ_ts["mu"], champion_sigma=champ_ts["sigma"],
+                promoted=promoted, days_trained=int(state["days_trained"]),
+            ),
+        )
+        ratings_db.record_game_elos(
+            conn, run_id=run_id, timestamp=_utc_now().isoformat(), generation=generation,
+            samples=eval_samples, agent=CHAMPION_ID,
+        )
+
+    est = human_estimate.summarize(
+        float(champ_elo), ratings_db.champion_elo_series(conn),
+        target=float(state.get("human_target_elo", 1700)))
+    state["estimated_games_to_target"] = est.get("games_remaining")
+    state["estimated_days_to_target"] = est.get("days_remaining")
+    state["estimate_confidence"] = est.get("confidence")
+    state["champion"] = {
+        "name": CHAMPION_ID,
+        "version": champion.get("version", state["champion"].get("version", "gen0")),
+        "config_ref": "state/champion.json",
+    }
+    champion.setdefault("rating", {})["elo"] = float(champ_elo)
+    champion["rating"]["trueskill_mu"] = champ_ts["mu"]
+    champion["rating"]["trueskill_sigma"] = champ_ts["sigma"]
+    champion["rating"]["conservative"] = champ_ts["conservative"]
+    state_store.save_champion(paths, champion)
+
+    state_store.append_jsonl(paths.history_jsonl, {
+        "generation": generation, "run_id": run_id, "timestamp": _utc_now().isoformat(),
+        "games": total_eval_games, "approaches": approaches,
+        "candidates_created": [c.name for c in created],
+        "winner": winner.name if winner else None, "promoted": promoted,
+        "champion_elo": float(champ_elo), "champion_mu": champ_ts["mu"],
+        "champion_sigma": champ_ts["sigma"], "champion_conservative": champ_ts["conservative"],
+    })
+
+    state_store.save_latest(paths, state)
+
+    # 4. Reports.
+    approach_report.write_approach_comparison(
+        paths.reports_dir / "approach_comparison.md", record)
+    findings = diagnostics.write_diagnosis(paths, conn, state)
+    status_report.write_status(paths, conn, state, findings=findings, eval_result=None)
+    conn.close()
+
+    print(f"[nightly] DONE run_id={run_id} approaches={len(approaches)} "
+          f"created={len(created)} eval_games={total_eval_games} "
+          f"elo={champ_elo:.1f} promoted={promoted} winner={winner.name if winner else None}")
+    return state
+
+
+def _update_registry_for_winner(champion: Dict[str, Any], winner_eval: Any, generation: int) -> None:
+    """Opt-in: push a promoted approach winner into data/champion_registry.json."""
+    from analytics.tournament import gauntlet
+
+    registry_path = REPO_ROOT / "data" / "champion_registry.json"
+    row = {"name": f"nightly_gen{generation}",
+           "trueskill_mu": winner_eval.trueskill_mu,
+           "trueskill_sigma": winner_eval.trueskill_sigma,
+           "win_rate": winner_eval.win_rate}
+    entry = gauntlet.build_registry_entry(
+        champion_row=row, config_path="(nightly approach winner — params inline)",
+        params=champion.get("flat_config", {}), seeds=[],
+        total_games=winner_eval.games, gauntlet_run_path="training/state/selfplay_runs",
+        comparison_opponents=["champion", "heuristic", "random", "best_historical"],
+        promoted_from=None,
+        promotion_reason=f"Nightly approach '{winner_eval.approach}' gen{generation}",
+        notes="Promoted by training.nightly_run --promote-registry.",
+    )
+    gauntlet.update_registry(registry_path, entry, make_backup=True)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -751,15 +1068,52 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                         "TD weights artifact exists yet.")
     p.add_argument("--td-weights-path", default=None,
                    help="Path to the TD weights JSON (default: training/state/td_evaluator_weights.json).")
+    # --- Approach-comparison mode (the new default nightly path) ---
+    p.add_argument("--approaches", default=None,
+                   help="Comma-separated candidate-generation approaches to compare "
+                        f"(e.g. 'td,mcts_sweep,heuristic_tune,baseline,hybrid'; "
+                        f"'all' = {','.join(ap_pkg.DEFAULT_APPROACHES)}). When set, runs "
+                        "the approach-comparison framework instead of the legacy "
+                        "self-play generation loop.")
+    p.add_argument("--games", type=int, default=None,
+                   help="Games per arena per seed for approach evaluation (approach mode).")
+    p.add_argument("--time-budget-minutes", type=float, default=None,
+                   help="Wall-clock budget in minutes for an approach-comparison run.")
     p.add_argument("--dry-run", action="store_true", help="Print the plan and exit.")
     p.add_argument("--verbose", action="store_true")
     return p.parse_args(argv)
 
 
+def _resolve_approaches(arg: Optional[str]) -> List[str]:
+    if not arg:
+        return []
+    if arg.strip().lower() == "all":
+        return list(ap_pkg.DEFAULT_APPROACHES)
+    return [a.strip() for a in arg.split(",") if a.strip()]
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     paths = TrainingPaths.default()
+    approaches = _resolve_approaches(args.approaches)
     try:
+        if approaches:
+            # New default: approach-comparison framework.
+            run_approaches(
+                paths=paths,
+                approaches=approaches,
+                games_per_arena=args.games if args.games is not None else args.games_per_arena,
+                seeds=args.seeds,
+                time_budget_minutes=(args.time_budget_minutes
+                                     if args.time_budget_minutes is not None
+                                     else args.hours * 60.0),
+                thinking_time_ms=args.thinking_time_ms,
+                promote_registry=args.promote_registry,
+                dry_run=args.dry_run,
+                verbose=args.verbose,
+                td_weights_path=args.td_weights_path,
+            )
+            return 0
         run(
             paths=paths,
             hours=args.hours,
