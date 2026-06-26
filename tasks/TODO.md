@@ -129,21 +129,49 @@ based.
 
 ## MEDIUM-TERM (remove the bottleneck)
 
-### Richer leaf evaluator  ← TOP medium-term item — **NOW UN-GATED**
+### Richer leaf evaluator  ← TOP medium-term item — **IMPLEMENTED 2026-06-26**
 - **Priority:** High
-- **Expected Strength Gain:** **High** — the change most likely to convert TD's
-  richer model into stronger play.
-- **Complexity:** High · **Risk:** Medium (new eval path; must stay within MCTS
-  leaf budget, not per-rollout-step)
-- **Dependencies:** comparison harness confirming the 8-feature ceiling —
-  **SATISFIED 2026-06-25** by `exp_e1261b8e0c3b` (TD 25% vs regression 39%, Δμ
-  −10; recalibrated labels did not help). The gate condition is met.
-- **Suggested Timing:** **Next.** Validation shows TD does not beat regression even
-  after label calibration, which points squarely at the 45→8 projection.
-- **Reason:** Only 8 of 45 features reach the agent; the most predictive ones do
-  not. Evaluating the full rich vector at MCTS *leaves* (called far less often than
-  rollout steps) lets `rank_so_far`/mobility/territory influence search. See
-  `docs/RICH_FEATURE_ANALYSIS.md`.
+- **Status:** **DONE (default OFF, opt-in).** `mcts/rich_leaf_evaluator.py`
+  (`RichLeafEvaluator`) applies the full 45-feature `rich_phase_weights` at MCTS
+  leaves; wired into `MCTSAgent._simulation` behind `rich_leaf_eval_enabled`
+  (+ `rich_leaf_weights_path`, `rich_leaf_feature_subset`), flowed through
+  `analytics/tournament/arena_runner.py` and `mcts/parallel.py`. Graceful fallback
+  to the 8-feature evaluator when the TD artifact is missing/untrained. Unit tests:
+  `tests/test_rich_leaf_evaluator.py` (evaluator math, phase selection, leaf-only
+  call count, subset value-identity, graceful fallback). Docs:
+  `docs/RICH_FEATURE_ANALYSIS.md §7`, `docs/TD_LEARNING.md §8`.
+- **LEAF-ONLY (measured):** called **once per simulation** (verified by test:
+  `rich_leaf_eval_calls == iterations_run`), never per rollout step.
+- **Per-leaf cost & budget (measured):** full 45-feature extraction is
+  ~15–27 ms/leaf (the all-player opponent-mobility enumeration dominates), so a
+  cost-tiered **feature subset** is used (`training.rich_features.LEAF_FEATURE_SUBSETS`):
+  `score` (default, 27 feats, **~0.8 ms/leaf**), `no_opp_mobility` (41 feats,
+  ~7 ms), `full` (45, ~15–25 ms). The `score` default keeps the three
+  highest-signal non-SE features (`score_margin_vs_leader`, `rank_so_far`,
+  `score_margin_vs_next_player`) which are *cheap* (square counts only).
+- **Iterations/move impact (measured):** because leaf eval **replaces** the
+  expensive heuristic rollout, it is *cheaper* per iteration at Blokus' high
+  branching — on a 334-legal-move position, baseline rollout cost **273 ms/iter**
+  vs rich-`score` **4.5 ms/iter (~60× faster)**. Under a time budget this yields
+  ~60× more iterations; under a fixed-iteration budget the per-leaf cost is paid
+  with iterations to spare. Reproduce: `scripts/ab_rich_leaf.py`.
+- **Strength A/B (directional, powered run still owed):** harness
+  `scripts/ab_rich_leaf.py` (baseline vs rich-`score`, two of each per game,
+  rotating seats). A clean fixed-iteration comparison needs a *high* iteration
+  count — the only regime where the tree search, not a single leaf eval, drives
+  strength — but the baseline's full heuristic rollout (~273 ms/iter at Blokus'
+  high branching) makes powered runs slow. At a low fixed budget (30 iters) the
+  baseline led (one game 82–70), as expected: a 50-move rollout out-informs a
+  single linear leaf eval when the tree barely expands. The leaf evaluator's
+  advantage is **iteration efficiency** (≈60× cheaper/iter), which only shows
+  under time / deterministic-arena budgets. **Recommended:** a powered
+  deterministic-arena run (`scripts/arena.py`, ≥250 iters, many games) to confirm
+  net strength. Feature is **default OFF**, so there is no regression risk.
+- **Reason:** Only 8 of 45 features reached the agent; the most predictive ones did
+  not. Evaluating the rich vector at MCTS *leaves* lets `rank_so_far`/score-margin
+  /mobility/territory influence search. See `docs/RICH_FEATURE_ANALYSIS.md`.
+- **Follow-ups now unblocked:** TD(λ) eligibility traces and opponent-aware value
+  targets (both previously gated on ">8 features reaching the agent").
 
 ### Add top non-SE signals to the live evaluator (interim)
 - **Priority:** Medium

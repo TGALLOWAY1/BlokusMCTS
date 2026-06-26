@@ -123,7 +123,7 @@ evaluate positions with more than 8 features, because they never reach it.
    a **richer leaf evaluator**: consume more of the 45 features at MCTS *leaf*
    nodes (called far less often than per-rollout-step eval), where the extra cost
    is affordable. This lets `rank_so_far` / mobility / territory actually
-   influence search. _Substantial work — deferred; see `tasks/TODO.md`._
+   influence search. **IMPLEMENTED 2026-06-26 — see §7.**
 3. **Prune dead/duplicate features.** `corner_count` duplicates `frontier_size`;
    `reachable_empty_squares` and `territory_enclosure_area` carry ~no signal.
    Pruning lowers collection cost and sharpens feature-importance reads. _Small._
@@ -135,10 +135,67 @@ evaluate positions with more than 8 features, because they never reach it.
    still be projected to 8 features. The architecture, not the learner, is the
    limit.
 
-> **Decision:** do **not** implement a rich-feature evaluator yet (per Phase-2
-> constraints). It is documented and prioritised in `tasks/TODO.md` and
-> `docs/LEARNING_ROADMAP.md` as the top medium-term item, gated on the comparison
-> harness confirming the bottleneck.
+> **Decision (superseded 2026-06-26):** the gate condition was met by
+> `exp_e1261b8e0c3b` (TD 25% vs regression 39%; the limiter is the 45→8
+> projection, not the learner), so the rich leaf evaluator is now **implemented**.
+> See §7.
+
+---
+
+## 7. The rich leaf evaluator (implemented 2026-06-26)
+
+The fix recommended above is now an **optional, default-OFF** feature.
+`mcts/rich_leaf_evaluator.py::RichLeafEvaluator` evaluates a node with the full
+45-feature TD value `Σ wᵢ·fᵢ + bias` using the per-phase `rich_phase_weights`
+already persisted in `training/state/td_evaluator_weights.json`. It is wired into
+`MCTSAgent._simulation` as a **leaf-only** call (flag `rich_leaf_eval_enabled`):
+invoked exactly once per simulation, replacing the rollout — **never** per
+rollout step. It loads the rich weights with graceful fallback to the 8-feature
+`BlokusStateEvaluator` when the artifact is missing/untrained.
+
+### The leaf-budget problem and the subset solution
+
+Full 45-feature extraction enumerates legal moves for **all four** players (the
+opponent-mobility features), measured at **~15–27 ms/leaf** — calling that even
+once per simulation would gut the iteration budget. So the evaluator selects a
+**cost tier** (`training.rich_features.LEAF_FEATURE_SUBSETS`); excluded features
+are zeroed, so their TD weights simply drop out of the dot product:
+
+| Subset | Features | Per-leaf cost | Drops |
+|---|---|---|---|
+| `full` | 45 | ~15–25 ms | nothing |
+| `no_opp_mobility` | 41 | ~7 ms | `opponent_mobility_{avg,max,min}`, `leader_mobility_pressure` (the all-player enumeration) |
+| **`score`** (default) | 27 | **~0.8 ms** | all legal-move enumeration + territory BFS |
+
+(measured with the engine's shared move generator at ~0.35 board occupancy;
+per-leaf cost rises with board density.)
+
+The `score` default is deliberate: the three **highest-signal** non-SE features
+(`score_margin_vs_leader` +0.725, `rank_so_far` +0.675,
+`score_margin_vs_next_player` +0.526; §2) are *cheap* — they need only square
+counts — while the expensive opponent-mobility features carry less signal. So the
+default tier recovers most of the lost signal at ~1/30th the cost of full
+extraction, and is the only tier cheaper than a rollout. The included features
+carry **identical values** to `extract_rich_features` (shared gated
+implementation, pinned by tests), so the TD-trained weights apply directly.
+
+### Validation
+
+A/B harness: `scripts/ab_rich_leaf.py` (baseline MCTS vs MCTS+rich-leaf, two of
+each per game, rotating seats, fixed iteration budget). It reports win rate, mean
+score, iterations/move, and per-leaf cost.
+
+**Measured so far.** Per-iteration cost (the decisive number): leaf eval
+*replaces* the rollout, so at a 334-legal-move position the baseline's full
+heuristic rollout costs **~273 ms/iter** vs rich-`score` **~4.5 ms/iter (~60×
+faster)**. Under a wall-clock / deterministic-arena budget that buys ~60× more
+iterations. A clean *fixed-iteration* strength A/B needs a high iteration count
+(the regime where the tree search, not a single leaf eval, carries strength), but
+the slow baseline rollout makes powered fixed-iteration runs impractical here; at
+a low budget (30 iters) the baseline leads, as expected. A powered
+deterministic-arena run is the recommended next validation (see `tasks/TODO.md`).
+The feature is **default OFF**, so there is no regression risk to the existing
+agent.
 
 ---
 

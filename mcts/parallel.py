@@ -93,6 +93,10 @@ def _extract_agent_config(agent) -> dict:
         "sufficiency_threshold_enabled": agent.sufficiency_threshold_enabled,
         "loss_avoidance_enabled": agent.loss_avoidance_enabled,
         "loss_avoidance_threshold": agent.loss_avoidance_threshold,
+        # Rich leaf evaluator (45-feature TD value at MCTS leaves)
+        "rich_leaf_eval_enabled": agent.rich_leaf_eval_enabled,
+        "rich_leaf_weights_path": agent.rich_leaf_weights_path,
+        "rich_leaf_feature_subset": agent.rich_leaf_feature_subset,
     }
 
 
