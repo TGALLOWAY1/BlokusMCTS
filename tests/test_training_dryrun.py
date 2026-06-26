@@ -44,6 +44,38 @@ def test_dry_run_writes_no_tracked_state(tmp_path):
     assert not (tmp_path / "training" / "artifacts" / "candidates").exists()
 
 
+def test_generation_not_advanced_when_no_evaluation_runs(tmp_path, monkeypatch):
+    """If every approach fails to create a candidate, no generation/history is fabricated."""
+    from training.approaches.base import Candidate
+
+    paths = _seed(tmp_path)
+    before = json.loads(paths.latest_json.read_text())
+
+    class _FailAppr:
+        name = "fake"
+
+        def generate(self, ctx):
+            return Candidate(name="fake", approach="fake", created=False,
+                             reason="fake: nothing to learn")
+
+    monkeypatch.setattr(nr.ap_pkg, "build_approaches", lambda names: [_FailAppr()])
+
+    nr.run_approaches(
+        paths=paths, approaches=["fake"], games_per_arena=2, seeds=[1, 2],
+        time_budget_minutes=5, thinking_time_ms=5, promote_registry=False,
+        dry_run=False, verbose=False,
+    )
+
+    after = json.loads(paths.latest_json.read_text())
+    # Generation + days_trained must NOT advance; no history row fabricated.
+    assert after["generation"] == before["generation"]
+    assert after.get("days_trained", 0) == before.get("days_trained", 0)
+    assert not paths.history_jsonl.exists() or paths.history_jsonl.read_text().strip() == ""
+    # But the run still reports why each approach produced nothing.
+    assert paths.status_md.exists()
+    assert "fake: nothing to learn" in (paths.reports_dir / "approach_comparison.md").read_text()
+
+
 def test_resolve_approaches_all_and_csv():
     assert nr._resolve_approaches("all") == list(__import__(
         "training.approaches", fromlist=["DEFAULT_APPROACHES"]).DEFAULT_APPROACHES)

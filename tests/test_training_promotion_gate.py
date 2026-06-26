@@ -94,6 +94,26 @@ def test_benchmark_pool_has_anchors_and_fixed_seeds():
     assert "best_historical" not in names
 
 
+def test_evaluate_candidates_skips_when_over_budget(tmp_path):
+    """A past deadline must skip every candidate without running any arena."""
+    import time
+    from types import SimpleNamespace
+
+    from training import TrainingPaths
+    from training.evaluation.head_to_head import evaluate_candidates
+
+    paths = TrainingPaths.under(tmp_path)
+    paths.ensure_dirs()
+    pool = build_benchmark_pool({"checkpoints": []})
+    cand = SimpleNamespace(created=True, name="x", approach="x_approach",
+                           agent_config={"type": "mcts", "params": {}})
+    state = {"champion_params": {"type": "mcts", "thinking_time_ms": 1, "params": {}}}
+    res = evaluate_candidates(state, [cand], pool, paths, games_per_arena=2,
+                              seeds=[1, 2], deadline=time.monotonic() - 1)
+    assert res.candidate_evals == []
+    assert res.skipped_for_budget == ["x"]
+
+
 def test_benchmark_pool_includes_best_historical_when_present():
     state = {"checkpoints": [
         {"rating": {"mu": 20.0}, "params": {"type": "mcts", "params": {}}},

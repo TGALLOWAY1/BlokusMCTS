@@ -893,27 +893,40 @@ def run_approaches(
     tracker = _seed_trueskill_tracker(state, latest_db)
     champ_game_no = ratings_db.max_game_number(conn, agent=CHAMPION_ID)
 
-    state["generation"] = int(state.get("generation", 0)) + 1
-    generation = state["generation"]
+    prev_generation = int(state.get("generation", 0))
+    generation = prev_generation  # advanced to +1 only once an evaluation runs
 
     evals_by_name: Dict[str, Any] = {}
     gates_by_name: Dict[str, Any] = {}
     winner = None
     promoted = False
     total_eval_games = 0
+    eval_samples: List[tuple] = []
 
     if created and time.monotonic() < deadline:
         pool = build_benchmark_pool(state, seeds=seeds)
         ht = evaluate_candidates(
             state, created, pool, paths,
             games_per_arena=games_per_arena, seeds=seeds,
-            thinking_time_ms=thinking_time_ms, verbose=verbose,
+            thinking_time_ms=thinking_time_ms, deadline=deadline, verbose=verbose,
         )
         evals_by_name = {e.name: e for e in ht.candidate_evals}
         sel = select_winner(ht.candidate_evals, GateThresholds())
         gates_by_name = sel["gates"]
         winner = sel["winner"]
         total_eval_games = len(ht.all_games)
+
+        # A real evaluation ran -> advance the durable generation counter now. A
+        # skipped/empty cycle must NOT look like a completed generation.
+        if total_eval_games > 0:
+            generation = prev_generation + 1
+            state["generation"] = generation
+
+        # Surface any candidates skipped for budget in their report reason.
+        for nm in ht.skipped_for_budget:
+            c = next((cc for cc in created if cc.name == nm), None)
+            if c is not None:
+                c.reason = f"{c.reason} — not evaluated this run (time budget exhausted)"
 
         # Fold every eval game into the champion's Elo + TrueSkill timeline (the
         # champion plays in every candidate's battery against a STABLE pool).
@@ -942,6 +955,7 @@ def run_approaches(
                     print(f"[nightly] registry update skipped: {exc}")
 
     # 3. Finalise ratings + state.
+    eval_ran = total_eval_games > 0
     champ_ts = tracker.get_rating(CHAMPION_ID)
     champ_elo = elo.get_rating(CHAMPION_ID)
     state["elo"] = float(champ_elo)
@@ -949,7 +963,11 @@ def run_approaches(
     state["trueskill_sigma"] = champ_ts["sigma"]
     state["games_today"] = total_eval_games
     state["total_games"] = int(state.get("total_games", 0)) + total_eval_games
-    state["days_trained"] = int(state.get("days_trained", 0)) + 1
+    # Counters that represent *training progress* advance only when an evaluation
+    # actually ran — a cycle where every approach failed to produce a candidate (or
+    # the budget was spent before evaluation) is not a completed generation.
+    if eval_ran:
+        state["days_trained"] = int(state.get("days_trained", 0)) + 1
     state["last_error"] = None
 
     # Build + persist the comparison record (status/email/markdown all read this).
@@ -1000,15 +1018,22 @@ def run_approaches(
     champion["rating"]["conservative"] = champ_ts["conservative"]
     state_store.save_champion(paths, champion)
 
-    state_store.append_jsonl(paths.history_jsonl, {
-        "generation": generation, "run_id": run_id, "timestamp": _utc_now().isoformat(),
-        "games": total_eval_games, "approaches": approaches,
-        "candidates_created": [c.name for c in created],
-        "winner": winner.name if winner else None, "promoted": promoted,
-        "champion_elo": float(champ_elo), "champion_mu": champ_ts["mu"],
-        "champion_sigma": champ_ts["sigma"], "champion_conservative": champ_ts["conservative"],
-    })
+    # Append to the per-generation history only when a generation actually
+    # completed (an evaluation ran), so a skipped cycle does not fabricate a row.
+    if eval_ran:
+        state_store.append_jsonl(paths.history_jsonl, {
+            "generation": generation, "run_id": run_id, "timestamp": _utc_now().isoformat(),
+            "games": total_eval_games, "approaches": approaches,
+            "candidates_created": [c.name for c in created],
+            "winner": winner.name if winner else None, "promoted": promoted,
+            "champion_elo": float(champ_elo), "champion_mu": champ_ts["mu"],
+            "champion_sigma": champ_ts["sigma"], "champion_conservative": champ_ts["conservative"],
+        })
 
+    # Persist the FULL TrueSkill tracker (all agents) back into state so the next
+    # run resumes from the freshly-measured priors. Without this, _seed_trueskill_tracker
+    # prefers stale state['trueskill_ratings'] and the new ratings are lost.
+    persist_tracker(tracker, state)
     state_store.save_latest(paths, state)
 
     # 4. Reports.

@@ -88,6 +88,7 @@ class HeadToHeadResult:
     candidate_evals: List[CandidateEval]
     all_games: List[Dict[str, Any]] = field(default_factory=list)
     run_dirs: List[str] = field(default_factory=list)
+    skipped_for_budget: List[str] = field(default_factory=list)
 
 
 def _candidate_arenas(
@@ -231,15 +232,26 @@ def evaluate_candidates(
     seeds: Optional[List[int]] = None,
     thinking_time_ms: Optional[int] = None,
     min_mu_margin: float = 0.5,
+    deadline: Optional[float] = None,
     verbose: bool = False,
 ) -> HeadToHeadResult:
-    """Evaluate every created candidate against the pool; pool all games."""
+    """Evaluate every created candidate against the pool; pool all games.
+
+    ``deadline`` is a ``time.monotonic()`` cutoff: it is checked *before* each
+    candidate's battery so a multi-candidate run cannot overrun the wall-clock budget
+    by more than one candidate. Candidates skipped for budget are listed in
+    ``skipped`` (still created, just not evaluated this run).
+    """
     seeds = list(seeds) if seeds else list(pool.seeds)
     evals: List[CandidateEval] = []
     all_games: List[Dict[str, Any]] = []
     all_run_dirs: List[str] = []
+    skipped: List[str] = []
     for cand in candidates:
         if not getattr(cand, "created", False) or not getattr(cand, "agent_config", None):
+            continue
+        if deadline is not None and time.monotonic() >= deadline:
+            skipped.append(cand.name)
             continue
         ce, games, run_dirs = evaluate_candidate_vs_pool(
             state, cand.name, cand.approach, cand.agent_config, pool, paths,
@@ -252,4 +264,5 @@ def evaluate_candidates(
     return HeadToHeadResult(
         pool=pool.describe(), seeds=seeds, games_per_arena=games_per_arena,
         candidate_evals=evals, all_games=all_games, run_dirs=all_run_dirs,
+        skipped_for_budget=skipped,
     )
