@@ -55,6 +55,12 @@ based.
   run (≥100 games × ≥10 seeds) to convert the directional verdict into a
   statistically clean one — but it is not a prerequisite for starting the leaf
   evaluator, since the trend already points there.
+- **Superseded mechanism (2026-06-26):** TD validation is now the job of the
+  merged **approach-comparison framework** (PR #171). The canonical path is the
+  first-class `td` approach evaluated against the fixed benchmark pool +
+  statistical promotion gate: `python -m training.nightly_run --approaches td,baseline,heuristic_tune --games 100 --time-budget-minutes 45`. The standalone
+  `training/experiments/compare.py` run above (`exp_e1261b8e0c3b`) stays as
+  auxiliary/historical evidence; the harness itself is still reused under the hood.
 
 ### Larger, less-biased trajectory corpus
 - **Priority:** High
@@ -84,6 +90,10 @@ based.
   18% saturated) and blended terminal value separates ranks cleanly
   (1→0.82, 2→0.22, 3→−0.26, 4→−0.89). Weights retrained. **Still open:** derive
   the rank-value map from observed win-equity rather than the hand-picked values.
+- **Framework integration (2026-06-26):** the calibration rides through the
+  nightly `td` (and `hybrid`) approach automatically — `training/approaches/td_learning.py` builds `TDConfig(min_rows_per_phase=200)` with all other fields at
+  their defaults, so `score_center=82 / score_spread=19` are what the nightly run
+  trains with. Pinned by `tests/test_training_approaches_td_calibration.py`.
 
 ### Prune dead / duplicate rich features
 - **Priority:** Medium

@@ -355,5 +355,17 @@ The new **Strength** section in `training/status.md` now surfaces these numbers
 
 ---
 
+## 10. Production path (post-audit, 2026-06-26)
+
+TD is no longer validated by the standalone harness in isolation: it is a
+first-class **approach** in the merged nightly approach-comparison framework (PR
+#171). The `td` and `hybrid` approaches (`training/approaches/`) re-train the value
+model and build candidates that are scored against a fixed benchmark pool and gated
+by `training/evaluation/promotion_gate.py`. The label-score calibration (§3) rides
+through automatically because those approaches use `TDConfig`'s defaults. The
+audit's headline verdict — *remove the 45→8 projection ceiling before adding more
+learning algorithms* — is unchanged; the framework is simply where that comparison
+now runs (`python -m training.nightly_run --approaches td,baseline,heuristic_tune`).
+
 _Changes made during this audit are listed in the Phase-2 deliverable summary and
 reflected in `FEATURES.md` / `tasks/TODO.md`._

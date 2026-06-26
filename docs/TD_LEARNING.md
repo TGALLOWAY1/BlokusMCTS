@@ -140,6 +140,20 @@ now spans `[−0.98, +0.97]` (≈18% saturated) and the blended terminal value
 separates ranks cleanly (1→0.82, 2→0.22, 3→−0.26, 4→−0.89). The rank-value map is
 still hand-picked — deriving it from observed win-equity is open (`tasks/TODO.md`).
 
+## Integration with the nightly approach-comparison framework
+
+TD reaches the nightly run as a first-class **approach** (PR #171): the `td`
+generator (`training/approaches/td_learning.py`) re-trains the value model from the
+trajectory corpus, writes `training/state/td_evaluator_weights.json`, and builds a
+champion clone with the TD-learned `state_eval_phase_weights`; the `hybrid` approach
+grafts those weights onto a stronger search. Both construct
+`TDConfig(min_rows_per_phase=200)` and leave every other field at its default, so the
+**calibrated** `score_center=82 / score_spread=19` are exactly what the nightly run
+trains with — no per-approach plumbing needed. Created candidates are evaluated
+against the fixed benchmark pool and only promoted through the statistical gate
+(`training/evaluation/`); see `training/README.md`. Run a single approach with
+`python -m training.nightly_run --dry-run --approaches td --games 8`.
+
 ---
 
 ## 5. How to run TD training
