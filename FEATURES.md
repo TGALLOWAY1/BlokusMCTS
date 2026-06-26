@@ -162,6 +162,15 @@
 - GitHub Actions training workflow: cron `0 */6 * * *` (every 6 hours, ~4 runs/day) + manual dispatch, concurrency guard (queues rather than cancels), commit-back of durable state, always-send email — `.github/workflows/nightly-mcts-training.yml`
 - Pipeline guide (architecture, operations, self-hosted runner fallback, storage growth) — `docs/03-implementation/NIGHTLY_TRAINING.md`
 
+## Approach-Comparison Framework (nightly default)
+
+- Controlled approach-comparison nightly run: generates candidates from multiple strategies, evaluates the created ones against a **fixed benchmark pool with fixed seeds**, and promotes only on a statistical gate — replacing the "run more games and hope Elo improves" loop that never promoted in 102 generations — `training/nightly_run.py` (`run_approaches`), `--approaches/--games/--time-budget-minutes/--dry-run` CLI; overview `training/README.md`
+- Candidate-generation approaches, each returning a `Candidate` with an explicit `created`/`reason` (never the vague "No candidate was learned this cycle") + a validated JSON artifact written to `training/artifacts/candidates/<approach>_<run_id>.json` — `training/approaches/{base,baseline_mcts,td_learning,heuristic_tuning,mcts_param_sweep,hybrid_td_mcts}.py`
+- Stable evaluation + promotion: fixed benchmark pool (heuristic, random, best historical champion) with fixed seeds, head-to-head pooled battery, and a statistical promotion gate (beats champion H2H + positive Elo/TrueSkill Δ + conservative 6-gate + min games/seeds) — `training/evaluation/{benchmark_pool,head_to_head,promotion_gate,rating_analysis}.py`
+- Noise-aware reporting: approach-comparison table (Approach · Created · Games · Win% vs Champ · Elo Δ · TrueSkill Δ · Promoted · Reason) in `training/status.md` + email, full detail in `training/reports/approach_comparison.md`, and an Elo-noise-floor "is this move real?" check — `training/evaluation/report.py`, `training/status_report.py`, `training/email_summary.py`
+- Dry-run state isolation: `--dry-run` prints the plan + per-approach verdicts and writes nothing to tracked state (artifacts + TD retrain go to a temp dir) — `training/nightly_run.py`
+- Pipeline audit + diagnosis of why skill stalled (champion weaker than heuristic, learning loop never closed, Elo trajectory was noise, reports frozen at gen1) — `training/reports/training_audit.md`, `training/reports/training_diagnosis.md`
+
 ## Temporal-Difference Learning (opt-in)
 
 - Rich Blokus-specific feature extraction (`rich_blokus_v1`, 45 features): a versioned, append-only **superset** of the 8 Layer-6 evaluator features adding mobility/move-space, corner/frontier, piece-inventory, territory/blocking, score/race, and board-position features; per-extraction `FeatureCache` memoises legal-move enumeration so a 4-player snapshot enumerates each player's moves at most once. Piece-count normalisation divisors derive from the engine's **actual** (non-standard: 1/1/2/6/11, area 88) piece set so no feature exceeds its bound — `training/rich_features.py`

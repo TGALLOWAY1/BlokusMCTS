@@ -15,14 +15,18 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
-      hours:
-        description: "Wall-clock training budget in hours (keep < ~5.5 on hosted runners)."
+      approaches:
+        description: "Comma-separated candidate-generation approaches to compare (or 'all')."
         required: false
-        default: "5"
-      games_per_arena:
-        description: "Games per arena per seed."
+        default: "td,mcts_sweep,heuristic_tune,baseline,hybrid"
+      games:
+        description: "Games per arena per seed for approach evaluation."
         required: false
-        default: "12"
+        default: "100"
+      time_budget_minutes:
+        description: "Wall-clock budget in minutes for the approach-comparison run."
+        required: false
+        default: "45"
 
 # Never run two nightly trainings at once, and never cancel an in-flight run
 # (cancelling mid-train could corrupt a generation). A queued run waits its turn.
@@ -56,13 +60,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run nightly training (resumes from training/state/)
+      - name: Run nightly training (approach-comparison framework)
         id: train
         continue-on-error: true  # reports + email must still run if training crashes
         run: |
+          # Approach-comparison framework: generate candidates from each approach,
+          # evaluate them against a fixed benchmark pool with fixed seeds, and promote
+          # only a candidate that passes the statistical gate. See
+          # docs/03-implementation/NIGHTLY_TRAINING.md and training/README.md.
           python -m training.nightly_run \
-            --hours "${{ github.event.inputs.hours || '5' }}" \
-            --games-per-arena "${{ github.event.inputs.games_per_arena || '12' }}" \
+            --approaches "${{ github.event.inputs.approaches || 'td,mcts_sweep,heuristic_tune,baseline' }}" \
+            --games "${{ github.event.inputs.games || '100' }}" \
+            --time-budget-minutes "${{ github.event.inputs.time_budget_minutes || '45' }}" \
             --resume training/state/latest.json
 
       - name: Generate reports (always)
@@ -91,7 +100,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           # Only the durable, bounded-size artifacts (per training/.gitignore the
           # bulky per-game selfplay_runs/ are excluded).
-          git add training/state training/status.md training/reports data/champion_snapshots.csv data/champion_registry.json 2>/dev/null || true
+          git add training/state training/status.md training/reports training/artifacts data/champion_snapshots.csv data/champion_registry.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else

@@ -51,6 +51,40 @@ def _trend_delta(rows: List[Dict[str, Any]], field: str) -> Optional[float]:
     return float(rows[-1][field]) - float(rows[0][field])
 
 
+def _approach_section(record: Optional[Dict[str, Any]]) -> List[str]:
+    """Render the approach-comparison table + winner from the run record."""
+    if not record or not record.get("rows"):
+        return []
+    lines: List[str] = ["## Approach Comparison", ""]
+    winner = record.get("winner")
+    lines.append(f"- **Promoted this run:** {winner if winner else 'none'}")
+    pool = record.get("pool") or {}
+    if pool:
+        lines.append(f"- **Benchmark pool:** {pool.get('version')} "
+                     f"(opponents: {', '.join(pool.get('opponents', []))}; seeds {pool.get('seeds')})")
+    traj = record.get("trajectory") or {}
+    if traj:
+        sig = "real (beyond noise)" if traj.get("significant") else "within noise floor"
+        noise = traj.get("noise", {})
+        lines.append(f"- **Elo move vs best:** {_fmt(traj.get('gap_to_best'), '+.1f')} "
+                     f"— {sig} (σ≈±{_fmt(noise.get('stddev'), '.0f')})")
+    lines += ["", "| Approach | Created | Games | Win% vs Champ | Elo Δ | TrueSkill Δ | Promoted | Reason |",
+              "|---|---|---|---|---|---|---|---|"]
+    for r in record["rows"]:
+        wr = r.get("win_rate_vs_champion")
+        lines.append(
+            f"| {r['approach']} | {'Yes' if r.get('created') else 'No'} "
+            f"| {_fmt(r.get('games'))} "
+            f"| {(format(wr * 100, '.0f') + '%') if wr is not None else '—'} "
+            f"| {_fmt(r.get('elo_delta'), '+.1f')} "
+            f"| {_fmt(r.get('trueskill_delta'), '+.2f')} "
+            f"| {'Yes' if r.get('promoted') else 'No'} "
+            f"| {r.get('gate_reason') or r.get('reason')} |"
+        )
+    lines.append("")
+    return lines
+
+
 def render_status(data: Dict[str, Any]) -> str:
     """Render the full status markdown from a plain data bundle (pure)."""
     state = data["state"]
@@ -86,6 +120,9 @@ def render_status(data: Dict[str, Any]) -> str:
         f"- **Generation:** {state.get('generation')}",
         "",
     ]
+
+    # --- Approach Comparison (new framework) ---------------------------------
+    lines += _approach_section(data.get("approach_comparison"))
 
     # --- Daily Progress ------------------------------------------------------
     elo_delta = _trend_delta(window7[-2:], "champion_elo") if len(window7) >= 2 else None
@@ -137,6 +174,11 @@ def render_status(data: Dict[str, Any]) -> str:
             lines.append(f"- **Weight drift (L2):** {_fmt(learning.get('weight_drift_l2'), '.4f')}")
         promoted = bool((data.get("state", {}).get("last_eval") or {}).get("promoted"))
         lines.append(f"- **Promotion result:** {'✅ promoted' if promoted else '❌ not promoted (champion retained)'}")
+    elif data.get("approach_comparison"):
+        # The approach-comparison framework is in play; per-approach created/reason
+        # detail lives in the Approach Comparison section above (no vague fallback).
+        lines.append("_See the Approach Comparison section above for each approach's "
+                     "candidate, result, and specific reason._")
     else:
         lines.append("_No candidate was learned this cycle (insufficient data, or out of "
                      "time budget). Champion retained._")
@@ -343,6 +385,7 @@ def write_status(
         "strength": _strength_summary(conn, state, series),
         "loss_trend": _loss_trend(),
         "experiment": _latest_experiment(),
+        "approach_comparison": state.get("last_approach_comparison"),
     }
     markdown = render_status(data)
 

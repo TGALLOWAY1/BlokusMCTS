@@ -221,6 +221,52 @@ based.
 
 ---
 
+## Approach-comparison framework — DONE (this cycle)
+
+- ✅ Audit + diagnosis of why skill was not improving
+  (`training/reports/training_audit.md`, `training_diagnosis.md`).
+- ✅ `training/approaches/` — first-class candidate generators (baseline_mcts, td,
+  heuristic_tune, mcts_param_sweep, hybrid) each returning a `Candidate` with an
+  explicit `created`/`reason` and a validated JSON artifact.
+- ✅ `training/evaluation/` — fixed benchmark pool + fixed seeds, head-to-head
+  battery, statistical promotion gate, noise-aware rating analysis.
+- ✅ `nightly_run.run_approaches` orchestrator + CLI (`--approaches/--games/
+  --time-budget-minutes/--dry-run`); ratings/history updated only after a valid
+  eval; dry-run touches no tracked state.
+- ✅ Approach-comparison table in status.md + email; `approach_comparison.md`;
+  elo_plot rolling average + promotion markers.
+
+## DEFERRED (next cycles)
+
+Tracked here so the next agent can pick them up. Most are gated on the framework
+above now existing.
+
+- **Larger training budgets / self-hosted runner.** Hosted runners cap a job at
+  360 min; full heuristic-rollout baselines are slow. A self-hosted runner would
+  allow more games/seeds per candidate (tighter CIs) and the full 5-approach roster
+  incl. hybrid every night. *(Priority: High · gates statistical power.)*
+- **Remote-runner support** for the nightly workflow (matrix/parallel approach
+  evaluation across machines).
+- **More robust learned evaluators.** Remove the 45→8 projection ceiling (the
+  measured bottleneck) before TD(λ)/eligibility traces; let the live agent see the
+  top non-SE signals (`score_margin_vs_leader`, `rank_so_far`).
+- **Opening-book generation** for the first N plies (cheap, high-leverage).
+- **Neural-network evaluator** (AlphaZero-style expert iteration) — gated on the
+  richer evaluator + larger corpus.
+- **Better human-strength calibration.** The 1700-Elo anchor is unvalidated;
+  calibrate against known human benchmarks / external bots in the pool.
+- **Web dashboard for training progress** (live Elo trajectory, approach win rates,
+  promotion history) instead of committed PNG + markdown.
+- **Better rating-uncertainty modelling.** Surface win-rate confidence bands and a
+  Bayesian skill estimate; gate promotion on posterior P(candidate > champion).
+- **Per-candidate time budgeting inside `evaluate_candidates`.** Today the deadline
+  gates only the *start* of evaluation; a slow candidate battery can overrun. Add a
+  mid-battery time check and/or move-time caps for the strong baseline.
+- **Wire `mcts_param_sweep` to a real internal sweep** (currently emits the best
+  a-priori grid point validated by the benchmark battery).
+
+---
+
 ## DONE in Phase 2 (for reference)
 
 - ✅ Phase-boundary bootstrap fix (`next_phase` stored; `V(s_{t+1})` uses next
