@@ -297,11 +297,26 @@ above now existing.
   promotion history) instead of committed PNG + markdown.
 - **Better rating-uncertainty modelling.** Surface win-rate confidence bands and a
   Bayesian skill estimate; gate promotion on posterior P(candidate > champion).
-- **Per-candidate time budgeting inside `evaluate_candidates`.** Today the deadline
-  gates only the *start* of evaluation; a slow candidate battery can overrun. Add a
-  mid-battery time check and/or move-time caps for the strong baseline.
+- ✅ **Per-candidate time budgeting inside `evaluate_candidates`.** DONE — the
+  deadline is now threaded into `evaluate_candidate_vs_pool` and checked before each
+  `(arena, seed)` sub-battery, so a slow candidate can no longer overrun the budget
+  (the overrun was the root cause of the cancelled jobs / stale emails — see
+  `docs/email_reporting.md`). *Follow-up still open:* add per-move time caps for the
+  strong baseline so even a single arena can't dominate the budget.
 - **Wire `mcts_param_sweep` to a real internal sweep** (currently emits the best
   a-priori grid point validated by the benchmark battery).
+
+## Email / workflow reporting — deferred follow-ups
+
+- **Surface eval coverage in the email.** When the deadline trips mid-battery,
+  approaches land in `skipped_for_budget`; show "evaluated N of M approaches (budget)"
+  in the Approach Comparison section so a partial run is obvious.
+- **Reconcile the `Status: completed` line with the LEGACY/INCOMPLETE banner.** The
+  Summary still prints `completed` when stale-but-self-consistent state is read; the
+  banner + subject already flag it, but the line itself could read `INCOMPLETE`.
+- **Right-size `timeout-minutes` vs the time budget.** The job cap (350) is far above
+  the 45-min budget; with the mid-battery deadline this is now belt-and-suspenders,
+  but aligning them (budget + buffer) would surface future overruns as failures faster.
 
 ---
 
