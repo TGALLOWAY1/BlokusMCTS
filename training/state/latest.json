@@ -36,35 +36,181 @@
     "type": "mcts"
   },
   "checkpoints": [],
-  "days_trained": 1,
-  "elo": 1181.940526943303,
+  "days_trained": 2,
+  "elo": 1157.5491654066504,
   "estimate_confidence": "none",
   "estimated_days_to_target": null,
   "estimated_games_to_target": null,
-  "games_today": 96,
-  "generation": 123,
+  "games_today": 100,
+  "generation": 124,
   "human_target_elo": 1700,
+  "last_approach_comparison": {
+    "generated_at": "2026-06-27T20:07:17.903606+00:00",
+    "pool": {
+      "opponents": [
+        "heuristic",
+        "random"
+      ],
+      "seeds": [
+        20260620,
+        20260621
+      ],
+      "version": "benchmark_v1"
+    },
+    "rows": [
+      {
+        "approach": "td_learning",
+        "created": true,
+        "elo_delta": 30.51905152228892,
+        "games": 100,
+        "gate_passed": false,
+        "gate_reason": "HOLD td: failed ['beats_champion_head_to_head', 'trueskill_improvement'].",
+        "metrics": {
+          "learning_method": "temporal_difference",
+          "mean_abs_td_error": 0.070134,
+          "rows_by_phase": {
+            "early": 505,
+            "late": 437,
+            "mid": 669
+          },
+          "source_rows": 1611,
+          "td_loss": 0.010128,
+          "td_loss_by_phase": {
+            "early": 0.007831,
+            "late": 0.016401,
+            "mid": 0.007764
+          },
+          "trained_phases": {
+            "early": true,
+            "late": true,
+            "mid": true
+          }
+        },
+        "name": "td",
+        "promoted": false,
+        "reason": "td: trained on 1611 trajectory rows (td_loss=0.010128)",
+        "runtime_s": 11940.16952036,
+        "trueskill_delta": -8.159528061403826,
+        "win_rate": 0.275,
+        "win_rate_vs_champion": 0.46938775510204084
+      },
+      {
+        "approach": "mcts_param_sweep",
+        "created": true,
+        "elo_delta": null,
+        "games": 0,
+        "gate_passed": false,
+        "gate_reason": null,
+        "metrics": {
+          "chosen": 1.0,
+          "grid": [
+            0.7,
+            1.0,
+            1.414,
+            2.0
+          ],
+          "previous": 1.414,
+          "swept_param": "exploration_constant"
+        },
+        "name": "mcts_sweep",
+        "promoted": false,
+        "reason": "mcts_sweep: exploration_constant 1.414 -> 1.0 over grid [0.7, 1.0, 1.414, 2.0] (on corrected strong search) \u2014 not evaluated this run (time budget exhausted)",
+        "runtime_s": null,
+        "trueskill_delta": null,
+        "win_rate": null,
+        "win_rate_vs_champion": null
+      },
+      {
+        "approach": "heuristic_tuning",
+        "created": true,
+        "elo_delta": null,
+        "games": 0,
+        "gate_passed": false,
+        "gate_reason": null,
+        "metrics": {
+          "learning_method": "regression",
+          "r2_by_phase": {
+            "early": 0.25201791865280476,
+            "late": 0.7502781453404764,
+            "mid": 0.3853658236844436
+          },
+          "r2_global": 0.3365017454081656,
+          "training_rows": 44832
+        },
+        "name": "heuristic_tune",
+        "promoted": false,
+        "reason": "heuristic: re-fit Layer-6 weights from 44832 snapshot rows \u2014 not evaluated this run (time budget exhausted)",
+        "runtime_s": null,
+        "trueskill_delta": null,
+        "win_rate": null,
+        "win_rate_vs_champion": null
+      },
+      {
+        "approach": "baseline_mcts",
+        "created": true,
+        "elo_delta": null,
+        "games": 0,
+        "gate_passed": false,
+        "gate_reason": null,
+        "metrics": {
+          "overrides": {
+            "adaptive_rollout_depth_enabled": false,
+            "iterations_per_ms": 1.0,
+            "rollout_cutoff_depth": null,
+            "rollout_policy": "heuristic"
+          }
+        },
+        "name": "baseline",
+        "promoted": false,
+        "reason": "baseline: corrected weak-champion search settings (heuristic rollouts, no shallow cutoff, ~2x iterations) \u2014 not evaluated this run (time budget exhausted)",
+        "runtime_s": null,
+        "trueskill_delta": null,
+        "win_rate": null,
+        "win_rate_vs_champion": null
+      }
+    ],
+    "run_id": "20260627T200717Z",
+    "seeds": [
+      20260620,
+      20260621
+    ],
+    "trajectory": {
+      "best": 1379.2,
+      "current": 1157.5,
+      "gap_to_best": -221.7,
+      "noise": {
+        "mean": 1192.1,
+        "n": 20,
+        "spread": 155.4,
+        "stddev": 50.6
+      },
+      "rolling_last": 1167.8,
+      "significant": true,
+      "trend_per_step": -0.2729
+    },
+    "winner": null
+  },
   "last_error": null,
   "last_eval": null,
   "last_promoted_generation": null,
   "last_refit_generation": -1,
-  "run_id": "20260626T145156Z",
+  "run_id": "20260627T200717Z",
   "schema_version": 1,
-  "total_games": 1466,
+  "total_games": 1566,
   "total_snapshot_rows": 44832,
-  "trueskill_mu": 23.937356594634718,
+  "trueskill_mu": 27.12916774695192,
   "trueskill_ratings": {
     "champion": {
-      "conservative": 8.619680053531589,
-      "games_played": 1466,
-      "mu": 23.937356594634718,
-      "sigma": 5.10589218036771
+      "conservative": 11.855359762705355,
+      "games_played": 1566,
+      "mu": 27.12916774695192,
+      "sigma": 5.091269328082189
     },
     "heuristic": {
-      "conservative": 42.94114986329585,
-      "games_played": 1466,
-      "mu": 58.77416462031396,
-      "sigma": 5.277671585672704
+      "conservative": 38.35657161772918,
+      "games_played": 1566,
+      "mu": 54.10362082103532,
+      "sigma": 5.249016401102047
     },
     "mcts_deep_cutoff": {
       "conservative": 22.791317804178846,
@@ -145,12 +291,18 @@
       "sigma": 5.700806616465989
     },
     "random": {
-      "conservative": -60.823152879728596,
-      "games_played": 1466,
-      "mu": -41.67040595997148,
-      "sigma": 6.38424897325237
+      "conservative": -52.73343528647588,
+      "games_played": 1566,
+      "mu": -33.697874017433506,
+      "sigma": 6.345187089680792
+    },
+    "td": {
+      "conservative": -1.3837795819855394,
+      "games_played": 100,
+      "mu": 17.76957217503363,
+      "sigma": 6.384450585673057
     }
   },
-  "trueskill_sigma": 5.10589218036771,
-  "updated_at": "2026-06-26T18:26:50.073537+00:00"
+  "trueskill_sigma": 5.091269328082189,
+  "updated_at": "2026-06-27T23:26:19.520057+00:00"
 }

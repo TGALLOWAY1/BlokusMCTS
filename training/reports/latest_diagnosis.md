@@ -1,8 +1,9 @@
 # Nightly Training Diagnosis
 
-_Generated: 2026-06-22 00:35 UTC · run `20260622T003148Z` · generation 1_
+_Generated: 2026-06-27 23:26 UTC · run `20260627T200717Z` · generation 124_
 
-**1 finding(s):**
+**2 finding(s):**
 
-- 🔵 **[info] refit_pending** — Only 64 snapshot rows accumulated (need 200 before the evaluator can re-fit) — no candidate will be generated until then.
-  - _evidence: rows=64_
+- 🟠 **[warn] regression** — Champion Elo dropped 101 from a recent peak of 1258 to 1158.
+  - _evidence: last 6 points: [1197, 1103, 1138, 1258, 1182, 1158]_
+- 🔵 **[info] no_promotion_yet** — No champion promotion in 124 generations. The seed champion may already be near-optimal, or candidates aren't clearing the gates.
