@@ -27,6 +27,7 @@ import os
 import smtplib
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -34,6 +35,20 @@ from typing import Any, Callable, Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from training import TrainingPaths, diagnostics, ratings_db, state_store
+
+# ---------------------------------------------------------------------------
+# Canonical pipeline identity (see docs/training_workflows.md). The email always
+# stamps these so a reader can prove which workflow/mode produced the report and
+# spot immediately if an old-style report ever slips through again.
+# ---------------------------------------------------------------------------
+
+CANONICAL_WORKFLOW_FILE = ".github/workflows/nightly-mcts-training.yml"
+TRAINING_MODE_MULTI_AGENT = "multi-agent-approach-comparison"
+TRAINING_MODE_LEGACY = "legacy/incomplete (no approach comparison)"
+
+# The canonical new-framework output. Its presence in the durable state is the
+# single source of truth for "this report reflects a completed multi-agent run".
+APPROACH_COMPARISON_KEY = "last_approach_comparison"
 
 
 @dataclass(frozen=True)
@@ -85,6 +100,68 @@ def _fmt(value: Any, spec: str = "", dash: str = "n/a") -> str:
         except (ValueError, TypeError):
             return str(value)
     return str(value)
+
+
+# ---------------------------------------------------------------------------
+# Provenance — proves which workflow/commit/mode produced this email
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Provenance:
+    """Where this report came from. Stamped into the subject and a header block.
+
+    ``multi_agent`` is the guardrail: it is True iff the durable state carries a
+    completed approach-comparison record. When it is False the report is flagged
+    LEGACY/INCOMPLETE everywhere (subject + banner) so an old-style email can
+    never again masquerade as a fresh multi-agent result.
+    """
+
+    workflow_file: str
+    workflow_name: Optional[str]
+    run_id: Optional[str]
+    run_url: Optional[str]
+    commit_sha: Optional[str]
+    branch: Optional[str]
+    state_timestamp: Optional[str]
+    generated_at: str
+    mode: str
+    multi_agent: bool
+
+    @property
+    def short_sha(self) -> str:
+        return (self.commit_sha or "")[:7] or "nosha"
+
+    @property
+    def date(self) -> str:
+        return self.generated_at[:10]
+
+
+def build_provenance(state: Dict[str, Any]) -> Provenance:
+    """Assemble provenance from the GitHub Actions env + the durable state.
+
+    Everything degrades gracefully off-CI (env vars absent) so a local
+    ``--dry-run`` still renders a complete, honest header.
+    """
+    server = os.getenv("GITHUB_SERVER_URL")
+    repo = os.getenv("GITHUB_REPOSITORY")
+    run_id = os.getenv("GITHUB_RUN_ID")
+    run_url = (
+        f"{server}/{repo}/actions/runs/{run_id}"
+        if server and repo and run_id else None
+    )
+    multi_agent = bool(state.get(APPROACH_COMPARISON_KEY))
+    return Provenance(
+        workflow_file=CANONICAL_WORKFLOW_FILE,
+        workflow_name=os.getenv("GITHUB_WORKFLOW"),
+        run_id=run_id or state.get("run_id"),
+        run_url=run_url,
+        commit_sha=os.getenv("GITHUB_SHA"),
+        branch=os.getenv("GITHUB_REF_NAME"),
+        state_timestamp=state.get("updated_at"),
+        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        mode=TRAINING_MODE_MULTI_AGENT if multi_agent else TRAINING_MODE_LEGACY,
+        multi_agent=multi_agent,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -165,19 +242,35 @@ def build_run_view(history: List[Dict[str, Any]], state: Dict[str, Any]) -> RunV
 # ---------------------------------------------------------------------------
 
 def build_subject(
-    state: Dict[str, Any], view: Optional[RunView] = None, *, failed: bool = False
+    state: Dict[str, Any],
+    view: Optional[RunView] = None,
+    *,
+    failed: bool = False,
+    provenance: Optional[Provenance] = None,
 ) -> str:
-    """Compose the subject line.
+    """Compose the subject line, branded for the multi-agent framework.
 
-    Success with a fresh Elo →  ``MCTS Nightly Training Report — ELO 1042.7 (+12.4)``
-    Failure / no fresh Elo    →  ``MCTS Nightly Training Failed — No New ELO Calculated``
+    The subject distinguishes new vs old/incomplete reports at a glance and
+    carries the date + short commit SHA so two reports are never confused::
+
+        MCTS Lab Multi-Agent Training Report — 2026-06-27 — a1b2c3d — ELO 1042.7 (+12.4)
+        MCTS Lab Multi-Agent Training — INCOMPLETE (no multi-agent result) — 2026-06-27 — a1b2c3d
+        MCTS Lab Multi-Agent Training — FAILED — 2026-06-27 — a1b2c3d
     """
-    if failed or view is None or not view.fresh or view.current_elo is None:
-        return "MCTS Nightly Training Failed — No New ELO Calculated"
+    prov = provenance or build_provenance(state)
+    tag = f"{prov.date} — {prov.short_sha}"
+
+    if failed:
+        return f"MCTS Lab Multi-Agent Training — FAILED — {tag}"
+    # No completed multi-agent comparison, or no fresh Elo → never look like a
+    # normal success. This is the guardrail against silent old-style reports.
+    if not prov.multi_agent or view is None or not view.fresh or view.current_elo is None:
+        return f"MCTS Lab Multi-Agent Training — INCOMPLETE (no multi-agent result) — {tag}"
     elo = view.current_elo
     if view.elo_delta_previous is None:
-        return f"MCTS Nightly Training Report — ELO {elo:.1f} (baseline)"
-    return f"MCTS Nightly Training Report — ELO {elo:.1f} ({view.elo_delta_previous:+.1f})"
+        return f"MCTS Lab Multi-Agent Training Report — {tag} — ELO {elo:.1f} (baseline)"
+    return (f"MCTS Lab Multi-Agent Training Report — {tag} — "
+            f"ELO {elo:.1f} ({view.elo_delta_previous:+.1f})")
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +444,7 @@ def build_body(
     paths: Optional[TrainingPaths] = None,
     plot_attached: bool = False,
     plot_game_count: Optional[int] = None,
+    provenance: Optional[Provenance] = None,
 ) -> str:
     """Render the full markdown email body.
 
@@ -363,6 +457,7 @@ def build_body(
         view = build_run_view([], state)
     if paths is None:
         paths = TrainingPaths.default()
+    prov = provenance or build_provenance(state)
 
     champ = state.get("champion", {})
     cur = view.current or {}
@@ -370,7 +465,40 @@ def build_body(
     best_elo = float(view.best["champion_elo"]) if view.best else None
     last_eval = state.get("last_eval")
 
-    lines: List[str] = ["# MCTS Nightly Training Report", ""]
+    lines: List[str] = ["# MCTS Lab Multi-Agent Training Report", ""]
+
+    # --- Run provenance (always — proves which pipeline produced this) -------
+    lines += ["## Run Provenance", ""]
+    lines += [
+        f"- Workflow: `{prov.workflow_name or 'nightly-mcts-training'}` "
+        f"(`{prov.workflow_file}`)",
+        f"- Training mode: **{prov.mode}**",
+        f"- Run ID: {_fmt(prov.run_id)}",
+        f"- Commit: `{prov.short_sha}`",
+        f"- Branch: {_fmt(prov.branch)}",
+        f"- State timestamp: {_fmt(prov.state_timestamp)}",
+        f"- Report generated: {prov.generated_at}",
+    ]
+    if prov.run_url:
+        lines.append(f"- GitHub Actions run: {prov.run_url}")
+    lines.append("")
+
+    # --- LEGACY / INCOMPLETE guardrail banner --------------------------------
+    # If the durable state carries no completed approach-comparison record, the
+    # figures below are stale (the run almost certainly timed out / was cancelled
+    # before persisting its result). Flag it loudly rather than shipping a report
+    # that looks like a normal old-style success.
+    if not prov.multi_agent and not failed:
+        lines += [
+            "> ⚠️ **LEGACY / INCOMPLETE REPORT — NOT A MULTI-AGENT RESULT.**",
+            ">",
+            f"> No completed multi-agent approach comparison was found in the durable "
+            f"state (`{APPROACH_COMPARISON_KEY}` is absent). The most likely cause is "
+            "that the training run was cancelled or hit the job timeout before it could "
+            "persist its result, so every figure below reflects **stale state from an "
+            "earlier run**, not this one. See `docs/email_reporting.md`.",
+            "",
+        ]
 
     # --- Failure / no-fresh-Elo banner --------------------------------------
     if failed:
@@ -632,14 +760,16 @@ def compose(
         conn.close()
 
     view = build_run_view(history, state)
-    subject = build_subject(state, view, failed=failed)
+    prov = build_provenance(state)
+    subject = build_subject(state, view, failed=failed, provenance=prov)
     body = build_body(
         state, view, failed=failed, promoted=promoted, findings=findings, paths=paths,
         plot_attached=plot_path is not None, plot_game_count=plot_game_count,
+        provenance=prov,
     )
     return {
         "subject": subject, "body": body, "view": view, "state": state,
-        "plot_path": plot_path,
+        "plot_path": plot_path, "provenance": prov,
     }
 
 
