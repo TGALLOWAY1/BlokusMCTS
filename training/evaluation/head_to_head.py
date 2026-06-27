@@ -133,9 +133,17 @@ def evaluate_candidate_vs_pool(
     thinking_time_ms: Optional[int] = None,
     min_mu_margin: float = 0.5,
     run_label_prefix: str = "ht",
+    deadline: Optional[float] = None,
     verbose: bool = False,
 ) -> Tuple[CandidateEval, List[Dict[str, Any]], List[str]]:
-    """Evaluate one candidate; returns ``(CandidateEval, games, run_dirs)``."""
+    """Evaluate one candidate; returns ``(CandidateEval, games, run_dirs)``.
+
+    ``deadline`` is a ``time.monotonic()`` cutoff checked *before every (arena,
+    seed) sub-battery* so a single candidate's battery can never blow the whole
+    wall-clock budget. Without this the job ran to the 350-minute GitHub job
+    timeout, was cancelled mid-evaluation, and the run never persisted its
+    approach-comparison record (see docs/email_reporting.md).
+    """
     from training.experiments.compare import _mean_ci, per_agent_game_stats
 
     seeds = list(seeds) if seeds else list(pool.seeds)
@@ -146,6 +154,11 @@ def evaluate_candidate_vs_pool(
     for arena_idx, agents in enumerate(arenas):
         sc._apply_thinking_override(agents, thinking_time_ms)
         for seed in seeds:
+            if deadline is not None and time.monotonic() >= deadline:
+                if verbose:
+                    print(f"[ht] deadline reached mid-battery for {candidate_name}; "
+                          f"stopping after {len(games)} game(s).")
+                break
             result = sc.run_arena_inproc(
                 agents, paths=paths,
                 run_label=f"{run_label_prefix}_{candidate_name}_a{arena_idx}_s{seed}",
@@ -153,6 +166,9 @@ def evaluate_candidate_vs_pool(
             )
             run_dirs.append(result["run_dir"])
             games.extend(sc._load_games(result["run_dir"]))
+        else:
+            continue  # inner loop completed without break → next arena
+        break  # inner loop hit the deadline → stop launching further arenas
 
     agent_names = sorted({a["name"] for arena in arenas for a in arena})
     thinking_by_agent = {
@@ -238,8 +254,9 @@ def evaluate_candidates(
     """Evaluate every created candidate against the pool; pool all games.
 
     ``deadline`` is a ``time.monotonic()`` cutoff: it is checked *before* each
-    candidate's battery so a multi-candidate run cannot overrun the wall-clock budget
-    by more than one candidate. Candidates skipped for budget are listed in
+    candidate's battery AND threaded into the battery itself so it is also honoured
+    *between (arena, seed) sub-batteries*. A single candidate can therefore no longer
+    overrun the wall-clock budget. Candidates skipped for budget are listed in
     ``skipped`` (still created, just not evaluated this run).
     """
     seeds = list(seeds) if seeds else list(pool.seeds)
@@ -256,7 +273,8 @@ def evaluate_candidates(
         ce, games, run_dirs = evaluate_candidate_vs_pool(
             state, cand.name, cand.approach, cand.agent_config, pool, paths,
             games_per_arena=games_per_arena, seeds=seeds,
-            thinking_time_ms=thinking_time_ms, min_mu_margin=min_mu_margin, verbose=verbose,
+            thinking_time_ms=thinking_time_ms, min_mu_margin=min_mu_margin,
+            deadline=deadline, verbose=verbose,
         )
         evals.append(ce)
         all_games.extend(games)
