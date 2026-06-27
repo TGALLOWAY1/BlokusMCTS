@@ -36,6 +36,9 @@ def _state(run_id="run4", generation=4, **over):
         "estimate_confidence": "low",
         "last_error": None,
         "last_promoted_generation": None,
+        # Mark the state as a completed multi-agent run by default so the subject
+        # /body are not flagged INCOMPLETE; legacy-state tests override this.
+        "last_approach_comparison": {"run_id": run_id, "rows": [], "winner": None},
         "last_eval": {
             "run_id": run_id, "total_games": 240, "n_seeds": 2, "seeds": [1, 2],
             "promoted": False,
@@ -116,10 +119,11 @@ def test_run_id_mismatch_is_not_fresh():
 # Subject
 # ---------------------------------------------------------------------------
 
-def test_subject_success_shows_elo_and_delta():
+def test_subject_success_is_multi_agent_branded_with_elo_and_delta():
     view = es.build_run_view(_history(), _state())
     subj = es.build_subject(_state(), view, failed=False)
-    assert subj == "MCTS Nightly Training Report — ELO 1042.7 (+12.4)"
+    assert subj.startswith("MCTS Lab Multi-Agent Training Report — ")
+    assert subj.endswith("ELO 1042.7 (+12.4)")
 
 
 def test_subject_regression_shows_negative_delta():
@@ -127,18 +131,29 @@ def test_subject_regression_shows_negative_delta():
     hist.append(_summary_row("run5", "2026-06-24T04:00:00Z", 5, 1030.3))
     view = es.build_run_view(hist, _state(run_id="run5", generation=5))
     subj = es.build_subject(_state(run_id="run5"), view, failed=False)
-    assert subj.startswith("MCTS Nightly Training Report — ELO 1030.3 (-12.4)")
+    assert subj.startswith("MCTS Lab Multi-Agent Training Report — ")
+    assert subj.endswith("ELO 1030.3 (-12.4)")
 
 
-def test_subject_failed_says_no_new_elo():
+def test_subject_failed_is_branded_failed():
     subj = es.build_subject(_state(), None, failed=True)
-    assert subj == "MCTS Nightly Training Failed — No New ELO Calculated"
+    assert subj.startswith("MCTS Lab Multi-Agent Training — FAILED — ")
 
 
-def test_subject_stale_says_no_new_elo():
+def test_subject_stale_says_incomplete():
     view = es.build_run_view([], _state())  # not fresh
     subj = es.build_subject(_state(), view, failed=False)
-    assert subj == "MCTS Nightly Training Failed — No New ELO Calculated"
+    assert subj.startswith("MCTS Lab Multi-Agent Training — INCOMPLETE")
+
+
+def test_subject_legacy_state_says_incomplete():
+    # State WITHOUT a completed approach comparison must never look like a success,
+    # even with a fresh Elo — this is the regression the user reported.
+    legacy = _state()
+    legacy.pop("last_approach_comparison")
+    view = es.build_run_view(_history(), legacy)
+    subj = es.build_subject(legacy, view, failed=False)
+    assert subj.startswith("MCTS Lab Multi-Agent Training — INCOMPLETE")
 
 
 # ---------------------------------------------------------------------------
@@ -325,9 +340,74 @@ def test_compose_reads_latest_recorded_elo(tmp_path):
     state["run_id"] = "runB"
     state["generation"] = 2
     state["elo"] = 1025.0
+    state["last_approach_comparison"] = {"run_id": "runB", "rows": [], "winner": None}
     state_store.save_latest(paths, state)
 
     composed = es.compose(paths)
-    assert composed["subject"] == "MCTS Nightly Training Report — ELO 1025.0 (+25.0)"
+    assert composed["subject"].startswith("MCTS Lab Multi-Agent Training Report — ")
+    assert composed["subject"].endswith("ELO 1025.0 (+25.0)")
     assert "Current ELO: 1025.0" in composed["body"]
     assert composed["view"].fresh is True
+
+
+def test_compose_legacy_state_flags_incomplete(tmp_path):
+    """State without an approach comparison (the reported bug) → INCOMPLETE + banner."""
+    from training import TrainingPaths, ratings_db, state_store
+
+    paths = TrainingPaths.under(tmp_path)
+    paths.ensure_dirs()
+    conn = ratings_db.connect(paths.ratings_db)
+    ratings_db.record_run(
+        conn, run_id="legacy", timestamp="2026-06-22T04:00:00Z", generation=1,
+        agent_rows=[ratings_db.AgentRatingRow("champion", 1175.0, 24.6, 8.2, 0.0, 2)],
+        run_summary=ratings_db.RunSummaryRow(1, 2, 2, 1175.0, 24.6, 8.2, False, 1),
+    )
+    conn.close()
+
+    state = state_store.default_latest_state()
+    state["run_id"] = "legacy"
+    state["generation"] = 1
+    state["elo"] = 1175.0
+    state.pop("last_approach_comparison", None)  # the pre-migration shape
+    state_store.save_latest(paths, state)
+
+    composed = es.compose(paths)
+    assert composed["subject"].startswith("MCTS Lab Multi-Agent Training — INCOMPLETE")
+    assert "LEGACY / INCOMPLETE REPORT" in composed["body"]
+    assert composed["provenance"].multi_agent is False
+
+
+# ---------------------------------------------------------------------------
+# Provenance header + multi-agent branding
+# ---------------------------------------------------------------------------
+
+def test_body_has_provenance_header():
+    view = es.build_run_view(_history(), _state())
+    body = es.build_body(_state(), view, failed=False)
+    assert body.startswith("# MCTS Lab Multi-Agent Training Report")
+    assert "## Run Provenance" in body
+    assert "Training mode: **multi-agent-approach-comparison**" in body
+    assert es.CANONICAL_WORKFLOW_FILE in body
+
+
+def test_body_legacy_state_has_banner():
+    legacy = _state()
+    legacy.pop("last_approach_comparison")
+    view = es.build_run_view(_history(), legacy)
+    body = es.build_body(legacy, view, failed=False)
+    assert "LEGACY / INCOMPLETE REPORT" in body
+    assert "Training mode: **legacy/incomplete" in body
+
+
+def test_provenance_reads_github_env(monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", "abcdef1234567890")
+    monkeypatch.setenv("GITHUB_REF_NAME", "main")
+    monkeypatch.setenv("GITHUB_RUN_ID", "999")
+    monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "nightly-mcts-training")
+    prov = es.build_provenance(_state())
+    assert prov.short_sha == "abcdef1"
+    assert prov.branch == "main"
+    assert prov.run_url == "https://github.com/owner/repo/actions/runs/999"
+    assert prov.multi_agent is True

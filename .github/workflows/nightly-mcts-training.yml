@@ -117,7 +117,18 @@ jobs:
             done
           fi
 
-      - name: Email summary (ALWAYS — success or failure)
+      - name: Verify the report reflects the multi-agent framework (guardrail)
+        if: always()
+        run: |
+          # Guardrail against silently shipping an old-style report: the durable
+          # state MUST carry a completed approach-comparison record. If it does not
+          # (e.g. the training step was cancelled / timed out before persisting its
+          # result), warn loudly here — the email itself is also flagged INCOMPLETE
+          # by training.email_summary. See docs/email_reporting.md.
+          python -m training.verify_report_freshness || \
+            echo "::warning title=Stale report::Durable state has no completed multi-agent approach comparison; the email will be flagged INCOMPLETE."
+
+      - name: Email summary (ALWAYS — success, failure, or cancellation)
         if: always()
         env:
           SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
@@ -127,14 +138,19 @@ jobs:
           TRAINING_EMAIL_TO: ${{ secrets.TRAINING_EMAIL_TO }}
           TRAINING_EMAIL_FROM: ${{ secrets.TRAINING_EMAIL_FROM }}
         run: |
+          # A true crash → failure email. A cancellation/timeout is NOT a crash but
+          # also did not produce a fresh multi-agent result; email_summary's own
+          # provenance guard flags those INCOMPLETE automatically (the durable state
+          # lacks last_approach_comparison), so a normal compose is correct there.
           if [ "${{ steps.train.outcome }}" = "failure" ]; then
             python -m training.email_summary --failed
           else
             python -m training.email_summary
           fi
 
-      - name: Fail the job if training failed
-        if: always() && steps.train.outcome == 'failure'
+      - name: Fail the job if training did not succeed
+        if: always() && steps.train.outcome != 'success'
         run: |
-          echo "Training step failed; see logs and the failure email."
+          echo "Training step outcome was '${{ steps.train.outcome }}' (not success);"
+          echo "see logs and the failure/incomplete email."
           exit 1
