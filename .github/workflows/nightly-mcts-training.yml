@@ -24,18 +24,19 @@ on:
       games:
         description: "Games per arena per seed for approach evaluation."
         required: false
-        # 20 games/arena x 2 pool seeds = 40 total, the promotion-gate minimum.
-        # The evaluator now stops at game granularity, so this is an upper cap that
-        # the per-candidate time slice may trim — it is no longer an uninterruptible
-        # block that lets the first approach eat the whole budget.
-        default: "20"
+        # 10 games/arena x 2 pool seeds = 20 total, the SHORT eval-gate minimum
+        # (training.evaluation.head_to_head.EVAL_MIN_TOTAL_GAMES). The evaluator
+        # stops at game granularity, so this is an upper cap the per-candidate
+        # time slice may trim — it can no longer let the first approach eat the
+        # whole budget.
+        default: "10"
       time_budget_minutes:
         description: "Wall-clock budget in minutes for the approach-comparison run."
         required: false
-        # ~300 min fits under the 350-min job cap with headroom for report/commit/
-        # email, and fair-splits to ~75 min per candidate across four approaches so
-        # every approach is actually evaluated (not skipped for budget).
-        default: "300"
+        # ~210 min fits under the 350-min job cap with headroom for report/commit/
+        # email. At ~2 min/game (full 500 ms MCTS) a 20-game candidate is ~40 min,
+        # so four approaches (~160 min) finish inside the budget with margin.
+        default: "210"
 
 # Never run two nightly trainings at once, and never cancel an in-flight run
 # (cancelling mid-train could corrupt a generation). A queued run waits its turn.
@@ -79,8 +80,8 @@ jobs:
           # docs/03-implementation/NIGHTLY_TRAINING.md and training/README.md.
           python -m training.nightly_run \
             --approaches "${{ github.event.inputs.approaches || 'baseline,td,mcts_sweep,heuristic_tune' }}" \
-            --games "${{ github.event.inputs.games || '20' }}" \
-            --time-budget-minutes "${{ github.event.inputs.time_budget_minutes || '300' }}" \
+            --games "${{ github.event.inputs.games || '10' }}" \
+            --time-budget-minutes "${{ github.event.inputs.time_budget_minutes || '210' }}" \
             --resume training/state/latest.json
 
       - name: Generate reports (always)

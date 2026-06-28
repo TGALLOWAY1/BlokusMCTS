@@ -21,6 +21,25 @@ from analytics.tournament.elo import EloTracker
 from training import TrainingPaths, selfplay_core as sc
 from training.evaluation.benchmark_pool import BenchmarkPool
 
+# --- Eval gate sizing -------------------------------------------------------
+# The "eval gate" is how much evidence an evaluation must collect before a
+# candidate can be considered for promotion. We deliberately start SHORT: at
+# full 500 ms MCTS strength a single game is ~2 min, so a 40-game gate costs
+# ~80 min/candidate and four approaches cannot all be evaluated within a single
+# CI run. 20 games over the two pool seeds (10/seed) halves that while keeping
+# both seeds in play. Defined here (the lower-level module) so both gate layers
+# — the gauntlet decision below and ``promotion_gate.GateThresholds`` — share a
+# single source of truth without a circular import.
+#
+# TODO(eval-vs-promotion-gate): later, test the opposite regime — a *longer*
+# eval (more games, e.g. 60–100, optionally at a reduced uniform thinking time
+# so it still fits the budget) paired with a *shorter/relaxed promotion gate*
+# (e.g. a smaller ``min_mu_margin`` / Elo-delta requirement). The question is
+# whether more games at lower per-move strength gives a less noisy promotion
+# signal than fewer games at full strength. See docs/05-planning/BACKLOG.md.
+EVAL_MIN_TOTAL_GAMES = 20
+EVAL_MIN_SEEDS = 2
+
 
 def _with_name(cfg: Dict[str, Any], name: str) -> Dict[str, Any]:
     out = copy.deepcopy(cfg)
@@ -204,7 +223,8 @@ def evaluate_candidate_vs_pool(
     decision = gauntlet.evaluate_promotion(
         ranked, pooled, n_seeds=len(seeds), total_games=total_games,
         thresholds=gauntlet.PromotionThresholds(
-            min_seeds=2, min_total_games=40, min_mu_margin=min_mu_margin, num_agents=4),
+            min_seeds=EVAL_MIN_SEEDS, min_total_games=EVAL_MIN_TOTAL_GAMES,
+            min_mu_margin=min_mu_margin, num_agents=4),
     )
 
     # Per-agent score/rank/Elo from the pooled games.
