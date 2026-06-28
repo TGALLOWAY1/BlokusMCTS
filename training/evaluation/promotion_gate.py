@@ -19,13 +19,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from training.evaluation.head_to_head import CandidateEval
+from training.evaluation.head_to_head import (
+    EVAL_MIN_SEEDS,
+    EVAL_MIN_TOTAL_GAMES,
+    CandidateEval,
+)
 
 
 @dataclass
 class GateThresholds:
-    min_total_games: int = 40
-    min_seeds: int = 2
+    # Shorter eval gate (see head_to_head.EVAL_MIN_TOTAL_GAMES): start with fewer
+    # required games so all four approaches can be evaluated within one CI budget.
+    min_total_games: int = EVAL_MIN_TOTAL_GAMES
+    min_seeds: int = EVAL_MIN_SEEDS
     min_mu_delta: float = 0.5
     min_elo_delta: float = 0.0
     h2h_strictly_beats_champion: bool = True

@@ -7,6 +7,31 @@
 
 ---
 
+## Task: Test shorter promotion gate with a longer eval
+Priority: Medium (score +4)
+Category: Training / evaluation quality
+User impact: +2 · Tech risk: +1 · Demo: +0 · Complexity: −1
+Why now: We currently run a SHORT eval gate — 20 games/candidate at full 500 ms
+MCTS (`head_to_head.EVAL_MIN_TOTAL_GAMES = 20`) — so all four approaches fit one
+CI budget. The open question is whether the promotion signal would be *less
+noisy* with the opposite regime: a longer eval (60–100 games/candidate), made
+affordable by a reduced **uniform** thinking-time override (applied to every
+agent so the comparison stays fair), paired with a *shorter/relaxed promotion
+gate* (smaller `min_mu_delta` / Elo-delta margin). More games at lower per-move
+strength may estimate win-rate / Δμ more tightly than fewer games at full
+strength.
+Relevant files: `training/evaluation/head_to_head.py`
+(`EVAL_MIN_TOTAL_GAMES`, the gauntlet `PromotionThresholds`),
+`training/evaluation/promotion_gate.py` (`GateThresholds.min_mu_delta`),
+`.github/workflows/nightly-mcts-training.yml` (`games`, `time_budget_minutes`,
+and a new uniform `--thinking-time-ms`).
+Dependencies: the game-granular / fair-split eval budget (already landed).
+Acceptance: a documented A/B comparing promotion-decision stability (variance of
+Δμ vs champion across repeated seeds) between (a) short-eval/strict-gate and
+(b) long-eval/relaxed-gate at matched wall-clock cost.
+Verification: run both configs over the fixed benchmark pool; compare Δμ spread
+and false-promotion rate.
+
 ## Task: Add MCTS-core unit tests
 Priority: High (score +7)
 Category: Quality / correctness
