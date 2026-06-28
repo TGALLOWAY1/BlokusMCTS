@@ -1031,11 +1031,18 @@ def run_experiment(
     verbose: bool = False,
     enable_game_logging: bool = False,
     resume_run_dir: Optional[str | Path] = None,
+    deadline: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Run a full arena experiment and write all required artifacts.
 
     If resume_run_dir is provided, appends games to an existing run until
     num_games is reached. Uses the config from the existing run.
+
+    ``deadline`` is an optional ``time.monotonic()`` cutoff checked *before each
+    game*. When reached the loop stops early and the summary is computed over the
+    games that actually completed. This makes a single arena interruptible at game
+    granularity so it cannot overrun a wall-clock budget (e.g. a 100-game battery
+    can no longer blow a 45-minute evaluation budget by 4x).
     """
     if resume_run_dir is not None:
         run_dir = Path(resume_run_dir)
@@ -1106,6 +1113,14 @@ def run_experiment(
     mode = "a" if resume_run_dir else "w"
     with games_path.open(mode, encoding="utf-8") as handle:
         for game_index in range(start_index, run_config.num_games):
+            if deadline is not None and time.monotonic() >= deadline:
+                if verbose:
+                    print(
+                        f"      Deadline reached after {game_index - start_index} "
+                        f"game(s); stopping arena early.",
+                        flush=True,
+                    )
+                break
             game_seed = game_seed_from_run_seed(run_config.seed, game_index)
             seat_assignment = _seat_assignment_for_game(
                 run_config.agent_names,

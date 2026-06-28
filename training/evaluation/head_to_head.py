@@ -163,6 +163,7 @@ def evaluate_candidate_vs_pool(
                 agents, paths=paths,
                 run_label=f"{run_label_prefix}_{candidate_name}_a{arena_idx}_s{seed}",
                 num_games=games_per_arena, seed=seed, enable_snapshots=False, verbose=verbose,
+                deadline=deadline,
             )
             run_dirs.append(result["run_dir"])
             games.extend(sc._load_games(result["run_dir"]))
@@ -171,6 +172,22 @@ def evaluate_candidate_vs_pool(
         break  # inner loop hit the deadline → stop launching further arenas
 
     agent_names = sorted({a["name"] for arena in arenas for a in arena})
+
+    # The sub-deadline can elapse before a single game finishes. Aggregating over an
+    # empty game set is meaningless (and several downstream stats divide by the game
+    # count), so return a zero-game eval the caller will record as skipped-for-budget.
+    if not games:
+        empty = CandidateEval(
+            name=candidate_name, approach=candidate_approach, games=0, n_seeds=len(seeds),
+            win_rate=0.0, win_rate_ci=(0.0, 0.0), avg_rank=0.0, rank_distribution={},
+            avg_score=0.0, trueskill_mu=None, trueskill_sigma=None, elo=0.0,
+            champion_win_rate=0.0, champion_elo=0.0, champion_trueskill_mu=None,
+            vs_champion={"candidate_wins": 0, "champion_wins": 0, "ties": 0},
+            elo_delta_vs_champion=0.0, trueskill_mu_delta_vs_champion=None,
+            decision=None, runtime_s=time.monotonic() - t0, ranked=[], pooled_summary={},
+        )
+        return empty, [], run_dirs
+
     thinking_by_agent = {
         a["name"]: (thinking_time_ms if thinking_time_ms is not None else a.get("thinking_time_ms"))
         for arena in arenas for a in arena
@@ -253,29 +270,56 @@ def evaluate_candidates(
 ) -> HeadToHeadResult:
     """Evaluate every created candidate against the pool; pool all games.
 
-    ``deadline`` is a ``time.monotonic()`` cutoff: it is checked *before* each
-    candidate's battery AND threaded into the battery itself so it is also honoured
-    *between (arena, seed) sub-batteries*. A single candidate can therefore no longer
-    overrun the wall-clock budget. Candidates skipped for budget are listed in
-    ``skipped`` (still created, just not evaluated this run).
+    ``deadline`` is a ``time.monotonic()`` cutoff enforced at three layers so no
+    single candidate can starve the others:
+
+    1. *before* each candidate's battery (skip if the global budget is spent);
+    2. as a *fair per-candidate sub-deadline* — each remaining candidate gets an
+       equal share of the time left, recomputed each iteration so a candidate that
+       finishes early rolls its leftover forward to the next;
+    3. *inside* the battery, threaded down to game granularity via
+       ``run_experiment``'s deadline.
+
+    Previously the first candidate (``td`` was first in the roster) ran its full
+    100-game battery to completion — ~199 min against a 45-min budget — and every
+    other approach was skipped for budget on *every* run, so the "comparison" only
+    ever evaluated one approach. The per-candidate split fixes that.
+
+    Candidates skipped for budget are listed in ``skipped`` (still created, just not
+    evaluated this run).
     """
     seeds = list(seeds) if seeds else list(pool.seeds)
     evals: List[CandidateEval] = []
     all_games: List[Dict[str, Any]] = []
     all_run_dirs: List[str] = []
     skipped: List[str] = []
-    for cand in candidates:
-        if not getattr(cand, "created", False) or not getattr(cand, "agent_config", None):
-            continue
-        if deadline is not None and time.monotonic() >= deadline:
+    pending = [
+        c for c in candidates
+        if getattr(c, "created", False) and getattr(c, "agent_config", None)
+    ]
+    for idx, cand in enumerate(pending):
+        now = time.monotonic()
+        if deadline is not None and now >= deadline:
             skipped.append(cand.name)
             continue
+        # Fair share: split the time that remains evenly across the candidates that
+        # still need evaluating (this one included). Cap by the global deadline.
+        cand_deadline = deadline
+        if deadline is not None:
+            remaining_candidates = len(pending) - idx
+            share = (deadline - now) / max(remaining_candidates, 1)
+            cand_deadline = min(deadline, now + share)
         ce, games, run_dirs = evaluate_candidate_vs_pool(
             state, cand.name, cand.approach, cand.agent_config, pool, paths,
             games_per_arena=games_per_arena, seeds=seeds,
             thinking_time_ms=thinking_time_ms, min_mu_margin=min_mu_margin,
-            deadline=deadline, verbose=verbose,
+            deadline=cand_deadline, verbose=verbose,
         )
+        if ce.games == 0:
+            # The sub-deadline elapsed before a single game finished — record it as
+            # skipped rather than emitting a zero-game eval the gate can't use.
+            skipped.append(cand.name)
+            continue
         evals.append(ce)
         all_games.extend(games)
         all_run_dirs.extend(run_dirs)

@@ -55,20 +55,46 @@ class Finding:
 # Detectors (pure; take plain data so they're trivially unit-tested)
 # ---------------------------------------------------------------------------
 
-def detect_regression(elo_series: List[Dict[str, Any]], *, window: int = 5) -> List[Finding]:
+def detect_regression(
+    elo_series: List[Dict[str, Any]],
+    *,
+    window: int = 5,
+    champion_static: bool = False,
+) -> List[Finding]:
+    """Flag a recent Elo drop — but only as a *regression* if the champion's
+    config could actually have changed within the window.
+
+    When ``champion_static`` is True (no promotion has touched the champion across
+    the window), the agent under measurement is byte-for-byte identical at every
+    point, so an Elo "drop" is sampling variance — not a skill regression. Calling
+    it a regression is a false positive: it sent a 🟠 warn for an unchanged agent.
+    In that case we downgrade to an 🔵 info finding that names the real cause
+    (small-sample noise against a rotating opponent / candidate set), so the report
+    stops chasing a phantom regression.
+    """
     pts = elo_series[-(window + 1):]
     if len(pts) < 2:
         return []
     peak = max(p["elo"] for p in pts)
     current = pts[-1]["elo"]
     drop = peak - current
-    if drop >= _REGRESSION_ELO_DROP:
+    if drop < _REGRESSION_ELO_DROP:
+        return []
+    evidence = f"last {len(pts)} points: {[round(p['elo']) for p in pts]}"
+    if champion_static:
         return [Finding(
-            "warn", "regression",
-            f"Champion Elo dropped {drop:.0f} from a recent peak of {peak:.0f} to {current:.0f}.",
-            f"last {len(pts)} points: {[round(p['elo']) for p in pts]}",
+            "info", "elo_variance",
+            f"Champion Elo swung {drop:.0f} (peak {peak:.0f} → {current:.0f}) but the "
+            "champion config is unchanged (no promotion in this window), so this is "
+            "sampling variance, not a skill regression. Treat the Elo timeline as "
+            "noise until a promotion actually changes the agent.",
+            evidence,
         )]
-    return []
+    return [Finding(
+        "warn", "regression",
+        f"Champion Elo dropped {drop:.0f} from a recent peak of {peak:.0f} to {current:.0f}.",
+        evidence,
+    )]
 
 
 def detect_stagnation(elo_series: List[Dict[str, Any]], *, window: int = 7) -> List[Finding]:
@@ -197,7 +223,20 @@ def collect_findings(conn: sqlite3.Connection, state: Dict[str, Any]) -> List[Fi
         ).fetchall()
     ]
     findings: List[Finding] = []
-    findings += detect_regression(elo_series)
+    # The champion is "static" across the regression window when no promotion has
+    # changed it recently: never promoted, or the last promotion is older than the
+    # window (one diagnosis run ≈ one generation). A static champion can't have
+    # *regressed* — its Elo move is noise (see detect_regression).
+    _regression_window = 5
+    last_promoted = state.get("last_promoted_generation")
+    current_gen = int(state.get("generation", 0))
+    champion_static = (
+        last_promoted is None
+        or (current_gen - int(last_promoted)) >= _regression_window
+    )
+    findings += detect_regression(
+        elo_series, window=_regression_window, champion_static=champion_static
+    )
     findings += detect_stagnation(elo_series)
     findings += detect_stale_elo(elo_series)
     findings += detect_metrics_not_updated(elo_series, state)

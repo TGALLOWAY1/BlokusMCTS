@@ -145,10 +145,15 @@ def run_arena_inproc(
     enable_snapshots: bool,
     max_turns: int = 2500,
     verbose: bool = False,
+    deadline: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Run one 4-agent arena in-process and return ``run_experiment``'s result.
 
     ``result`` = ``{"run_id", "run_dir", "summary", "snapshot_rows"}``.
+
+    ``deadline`` (a ``time.monotonic()`` cutoff) is threaded into ``run_experiment``
+    so the arena stops between games once the budget is spent — a long battery can
+    no longer overrun the caller's wall-clock budget.
     """
     # Strip candidate-metadata keys so they never reach the engine as params.
     agents = [strip_candidate_meta(a) for a in agents]
@@ -167,7 +172,7 @@ def run_arena_inproc(
         },
     }
     run_config = RunConfig.from_dict(config)
-    return run_experiment(run_config, verbose=verbose)
+    return run_experiment(run_config, verbose=verbose, deadline=deadline)
 
 
 # ---------------------------------------------------------------------------

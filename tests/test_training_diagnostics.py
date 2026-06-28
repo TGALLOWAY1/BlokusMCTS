@@ -27,6 +27,25 @@ def test_detect_regression_quiet_when_stable():
     assert diagnostics.detect_regression(_series([1400, 1405, 1410, 1412])) == []
 
 
+def test_detect_regression_downgrades_for_static_champion():
+    # Same drop, but the champion config is unchanged across the window -> the move
+    # is sampling variance, not a regression. Expect an info finding, not a warn.
+    findings = diagnostics.detect_regression(
+        _series([1400, 1410, 1420, 1380]), champion_static=True
+    )
+    assert findings, "a finding should still be emitted for the swing"
+    assert all(f.code != "regression" for f in findings)
+    assert any(f.code == "elo_variance" and f.severity == "info" for f in findings)
+
+
+def test_detect_regression_warns_when_champion_changed():
+    # champion_static=False (a promotion could have changed the agent) -> real warn.
+    findings = diagnostics.detect_regression(
+        _series([1400, 1410, 1420, 1380]), champion_static=False
+    )
+    assert any(f.code == "regression" and f.severity == "warn" for f in findings)
+
+
 def test_detect_stagnation_fires_on_flat():
     findings = diagnostics.detect_stagnation(_series([1500] * 7))
     assert any(f.code == "stagnation" for f in findings)
