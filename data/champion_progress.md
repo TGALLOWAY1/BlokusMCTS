@@ -1,15 +1,31 @@
+# Champion Self-Improvement Progress
+_Updated: 2026-06-28 20:49 UTC_
+
+**Generation:** 0  **Snapshot rows accumulated:** 0  **Last weight re-fit:** generation 0
+
+## TrueSkill Leaderboard
+| Rank | Agent | μ | σ | μ-3σ | Games |
+|------|-------|---|---|------|-------|
+| 1 | champion ★ | 25.00 | 8.33 | 0.00 | 0 |
+
+## Current Champion Parameters
+```json
 {
-  "single_weights": {
-    "squares_placed": 0.02704942365103236,
-    "remaining_piece_area": -0.0270494236510325,
-    "accessible_corners": 0.0498842681443622,
-    "reachable_empty_squares": 0.07431567379399176,
-    "largest_remaining_piece_size": -0.17574642900639742,
-    "opponent_avg_mobility": -0.3,
-    "center_proximity": 0.17973651600189042,
-    "territory_enclosure_area": 0.0
-  },
-  "phase_weights": {
+  "deterministic_time_budget": true,
+  "iterations_per_ms": 10.0,
+  "exploration_constant": 1.414,
+  "rollout_policy": "random",
+  "rollout_cutoff_depth": 5,
+  "minimax_backup_alpha": 0.25,
+  "rave_enabled": true,
+  "rave_k": 1000,
+  "progressive_widening_enabled": true,
+  "pw_c": 2.0,
+  "pw_alpha": 0.5,
+  "adaptive_rollout_depth_enabled": true,
+  "adaptive_rollout_depth_base": 5,
+  "adaptive_rollout_depth_avg_bf": 80.0,
+  "state_eval_phase_weights": {
     "early": {
       "squares_placed": 0.11354182484350582,
       "remaining_piece_area": -0.11354182484350593,
@@ -40,15 +56,6 @@
       "center_proximity": 0.3,
       "territory_enclosure_area": 0.0
     }
-  },
-  "default_weights": {
-    "squares_placed": 0.03,
-    "remaining_piece_area": -0.03,
-    "accessible_corners": 0.24,
-    "reachable_empty_squares": 0.08,
-    "largest_remaining_piece_size": -0.23,
-    "opponent_avg_mobility": -0.3,
-    "center_proximity": 0.25,
-    "territory_enclosure_area": 0.0
   }
 }
+```
