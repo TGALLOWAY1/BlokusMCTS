@@ -36,16 +36,16 @@
     "type": "mcts"
   },
   "checkpoints": [],
-  "days_trained": 2,
-  "elo": 1157.5491654066504,
-  "estimate_confidence": "none",
-  "estimated_days_to_target": null,
+  "days_trained": 3,
+  "elo": 1157.515285561567,
+  "estimate_confidence": "medium",
+  "estimated_days_to_target": 85.5,
   "estimated_games_to_target": null,
   "games_today": 100,
-  "generation": 124,
+  "generation": 125,
   "human_target_elo": 1700,
   "last_approach_comparison": {
-    "generated_at": "2026-06-27T20:07:17.903606+00:00",
+    "generated_at": "2026-06-28T02:31:02.308444+00:00",
     "pool": {
       "opponents": [
         "heuristic",
@@ -89,7 +89,7 @@
         "name": "td",
         "promoted": false,
         "reason": "td: trained on 1611 trajectory rows (td_loss=0.010128)",
-        "runtime_s": 11940.16952036,
+        "runtime_s": 11932.835076257,
         "trueskill_delta": -8.159528061403826,
         "win_rate": 0.275,
         "win_rate_vs_champion": 0.46938775510204084
@@ -169,7 +169,7 @@
         "win_rate_vs_champion": null
       }
     ],
-    "run_id": "20260627T200717Z",
+    "run_id": "20260628T023102Z",
     "seeds": [
       20260620,
       20260621
@@ -179,14 +179,14 @@
       "current": 1157.5,
       "gap_to_best": -221.7,
       "noise": {
-        "mean": 1192.1,
+        "mean": 1188.1,
         "n": 20,
         "spread": 155.4,
-        "stddev": 50.6
+        "stddev": 50.0
       },
-      "rolling_last": 1167.8,
+      "rolling_last": 1178.7,
       "significant": true,
-      "trend_per_step": -0.2729
+      "trend_per_step": -0.3156
     },
     "winner": null
   },
@@ -194,23 +194,23 @@
   "last_eval": null,
   "last_promoted_generation": null,
   "last_refit_generation": -1,
-  "run_id": "20260627T200717Z",
+  "run_id": "20260628T023102Z",
   "schema_version": 1,
-  "total_games": 1566,
+  "total_games": 1666,
   "total_snapshot_rows": 44832,
-  "trueskill_mu": 27.12916774695192,
+  "trueskill_mu": 26.933785759418754,
   "trueskill_ratings": {
     "champion": {
-      "conservative": 11.855359762705355,
-      "games_played": 1566,
-      "mu": 27.12916774695192,
-      "sigma": 5.091269328082189
+      "conservative": 11.785992249454889,
+      "games_played": 1666,
+      "mu": 26.933785759418754,
+      "sigma": 5.049264503321289
     },
     "heuristic": {
-      "conservative": 38.35657161772918,
-      "games_played": 1566,
-      "mu": 54.10362082103532,
-      "sigma": 5.249016401102047
+      "conservative": 36.7452255999977,
+      "games_played": 1666,
+      "mu": 52.3691026829941,
+      "sigma": 5.207959027665464
     },
     "mcts_deep_cutoff": {
       "conservative": 22.791317804178846,
@@ -291,18 +291,18 @@
       "sigma": 5.700806616465989
     },
     "random": {
-      "conservative": -52.73343528647588,
-      "games_played": 1566,
-      "mu": -33.697874017433506,
-      "sigma": 6.345187089680792
+      "conservative": -49.16812275046978,
+      "games_played": 1666,
+      "mu": -30.497574454353522,
+      "sigma": 6.22351609870542
     },
     "td": {
-      "conservative": -1.3837795819855394,
-      "games_played": 100,
-      "mu": 17.76957217503363,
-      "sigma": 6.384450585673057
+      "conservative": 0.6318311585385885,
+      "games_played": 200,
+      "mu": 17.74542691108006,
+      "sigma": 5.704531917513824
     }
   },
-  "trueskill_sigma": 5.091269328082189,
-  "updated_at": "2026-06-27T23:26:19.520057+00:00"
+  "trueskill_sigma": 5.049264503321289,
+  "updated_at": "2026-06-28T05:49:56.860701+00:00"
 }

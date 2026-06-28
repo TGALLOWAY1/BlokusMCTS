@@ -1,6 +1,6 @@
 # Nightly Training — Approach Comparison
 
-_Run `20260627T200717Z` · generated 2026-06-27T20:07:17.903606+00:00_
+_Run `20260628T023102Z` · generated 2026-06-28T02:31:02.308444+00:00_
 
 **Promoted this run:** none
 **Benchmark pool:** benchmark_v1 — opponents heuristic, random; seeds [20260620, 20260621]
@@ -8,8 +8,8 @@ _Run `20260627T200717Z` · generated 2026-06-27T20:07:17.903606+00:00_
 ## Champion Elo trajectory
 
 - Current: **1157.5** · Best: 1379.2 · Gap to best: -221.7
-- Rolling avg: 1167.8 · Trend/step: -0.2729
-- Elo noise floor (σ over fixed-config tail): ±50.6 (spread 155.4, n=20)
+- Rolling avg: 1178.7 · Trend/step: -0.3156
+- Elo noise floor (σ over fixed-config tail): ±50.0 (spread 155.4, n=20)
 - Move beyond noise floor? **yes**
 
 ## Approaches
@@ -26,7 +26,7 @@ _Run `20260627T200717Z` · generated 2026-06-27T20:07:17.903606+00:00_
 ### td_learning (`td`)
 
 - Created: yes — td: trained on 1611 trajectory rows (td_loss=0.010128)
-- Games: 100 · Win rate (battery): 0.28 · Runtime: 11940.2s
+- Games: 100 · Win rate (battery): 0.28 · Runtime: 11932.8s
 - Elo Δ vs champion: +30.5 · TrueSkill μ Δ: -8.16
 - Gate: HOLD td: failed ['beats_champion_head_to_head', 'trueskill_improvement'].
 - Metrics: `{'source_rows': 1611, 'rows_by_phase': {'early': 505, 'mid': 669, 'late': 437}, 'trained_phases': {'early': True, 'mid': True, 'late': True}, 'td_loss': 0.010128, 'td_loss_by_phase': {'early': 0.007831, 'mid': 0.007764, 'late': 0.016401}, 'mean_abs_td_error': 0.070134, 'learning_method': 'temporal_difference'}`

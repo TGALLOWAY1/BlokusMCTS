@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "approach": "baseline_mcts",
+  "name": "baseline",
+  "run_id": "20260628T023102Z",
+  "created_at": "2026-06-28T02:31:02.308444+00:00",
+  "created": true,
+  "reason": "baseline: corrected weak-champion search settings (heuristic rollouts, no shallow cutoff, ~2x iterations)",
+  "agent_config": {
+    "params": {
+      "adaptive_rollout_depth_avg_bf": 80.0,
+      "adaptive_rollout_depth_base": 5,
+      "adaptive_rollout_depth_enabled": false,
+      "deterministic_time_budget": true,
+      "exploration_constant": 1.414,
+      "iterations_per_ms": 1.0,
+      "minimax_backup_alpha": 0.25,
+      "num_workers": 2,
+      "parallel_strategy": "root",
+      "rave_enabled": true,
+      "rave_k": 1000,
+      "rollout_cutoff_depth": null,
+      "rollout_policy": "heuristic",
+      "state_eval_weights": {
+        "accessible_corners": 0.243,
+        "center_proximity": 0.0,
+        "largest_remaining_piece_size": -0.231,
+        "opponent_avg_mobility": -0.3,
+        "reachable_empty_squares": 0.081,
+        "remaining_piece_area": -0.0295,
+        "squares_placed": 0.0295,
+        "territory_enclosure_area": 0.0
+      },
+      "use_transposition_table": true
+    },
+    "thinking_time_ms": 500,
+    "type": "mcts",
+    "name": "baseline"
+  },
+  "metrics": {
+    "overrides": {
+      "rollout_policy": "heuristic",
+      "rollout_cutoff_depth": null,
+      "adaptive_rollout_depth_enabled": false,
+      "iterations_per_ms": 1.0
+    }
+  }
+}
