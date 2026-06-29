@@ -43,5 +43,28 @@
 - This pass: numbered `docs/00-08` system, archived stale RL-era/superseded docs,
   status-labeled inventories, risk register, planning, and AI-context protocol.
 
+## Phase 7 — Nightly multi-agent training reliability (Jun 2026)
+- **Approach-comparison budget actually compares all approaches (2026-06-29).**
+  The nightly framework had been silently degenerate: a training report showed
+  three of four approaches getting 0 games every run ("time budget exhausted")
+  while `td_learning` alone ran ~199 min against a 45-min budget. Root cause —
+  the eval deadline was only checked *between* `(arena, seed)` sub-batteries, so
+  the first uninterruptible 100-game battery ate the whole budget and every later
+  approach (including `baseline_mcts`, the one able to lift the champion off the
+  sub-heuristic floor) was skipped.
+- Fix landed on three fronts: **game-granular interruption** (`run_experiment`
+  takes a `deadline` checked before each game), a **fair per-candidate budget
+  split** (each remaining candidate gets an equal share of the time left,
+  recomputed so unused time rolls forward), and a **self-consistent workflow
+  config**. Also fixed a **false-positive regression alarm** — a fixed champion's
+  Elo move is sampling variance, not a skill regression, so it is downgraded from
+  a `regression` warn to an `elo_variance` info.
+- **Short eval gate** (`EVAL_MIN_TOTAL_GAMES = 20`) chosen as the starting point
+  so all four approaches fit one CI run; a backlog item tracks A/B-testing a
+  longer eval with a relaxed promotion gate.
+- **Health-verified (2026-06-29):** a smoke run on a temp state copy evaluated
+  **4/4 approaches** within a tight budget (vs 1/4 before the fix), confirming the
+  fair split no longer starves any approach. 44 training tests pass.
+
 > This file is a high-level summary, not a per-commit changelog. For commit-level
 > history use `git log`; for arena-run-level history see the run registry.

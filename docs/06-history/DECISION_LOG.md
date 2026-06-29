@@ -5,6 +5,35 @@
 
 ---
 
+# Decision: Fair-split eval budget + short eval gate for nightly approach comparison
+Date: 2026-06-29
+Status: Accepted
+Context: The nightly approach-comparison run was silently degenerate — the eval
+deadline was only checked between `(arena, seed)` sub-batteries, so the first
+candidate's uninterruptible 100-game battery (~199 min) consumed the entire
+45-min budget and the other three approaches got 0 games on *every* run. The
+"comparison" only ever evaluated one approach.
+Decision: Enforce the deadline at game granularity (`run_experiment(deadline=…)`),
+split the budget fairly across candidates (equal share of remaining time,
+recomputed each iteration), and start with a **short eval gate**
+(`EVAL_MIN_TOTAL_GAMES = 20`, two seeds) so all four approaches fit one CI run at
+full 500 ms strength.
+Why: A comparison that only ever scores one approach is useless; fairness must be
+structural, not dependent on roster order. Short-but-complete beats
+long-but-truncated for a first healthy baseline.
+Alternatives considered: (a) lower the per-move thinking time to fit more games
+at full roster — deferred to a backlog A/B (longer eval + relaxed promotion gate);
+(b) keep the 40-game gate and raise the budget past the 350-min CI cap — rejected
+(doesn't fit one run).
+Consequences: Promotion is conservative on thin runs (fails safe). A backlog item
+tracks testing the opposite regime.
+Verification: smoke run evaluated 4/4 approaches within a tight budget (vs 1/4
+before); 44 training tests pass.
+Related files: `training/evaluation/head_to_head.py`,
+`training/evaluation/promotion_gate.py`, `analytics/tournament/arena_runner.py`,
+`.github/workflows/nightly-mcts-training.yml`,
+`docs/05-planning/BACKLOG.md`.
+
 # Decision: Pivot from RL environment to MCTS platform
 Date: 2026-03-06
 Status: Accepted
