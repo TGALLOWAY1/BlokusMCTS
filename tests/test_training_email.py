@@ -136,14 +136,15 @@ def test_subject_regression_shows_negative_delta():
 
 
 def test_subject_failed_is_branded_failed():
+    # A crash is an operational alert -> 🚨 prefix so it's obvious from the inbox.
     subj = es.build_subject(_state(), None, failed=True)
-    assert subj.startswith("MCTS Lab Multi-Agent Training — FAILED — ")
+    assert subj.startswith("🚨 MCTS Lab Multi-Agent Training — FAILED — ")
 
 
 def test_subject_stale_says_incomplete():
     view = es.build_run_view([], _state())  # not fresh
     subj = es.build_subject(_state(), view, failed=False)
-    assert subj.startswith("MCTS Lab Multi-Agent Training — INCOMPLETE")
+    assert subj.startswith("🚨 MCTS Lab Multi-Agent Training — INCOMPLETE")
 
 
 def test_subject_legacy_state_says_incomplete():
@@ -153,7 +154,19 @@ def test_subject_legacy_state_says_incomplete():
     legacy.pop("last_approach_comparison")
     view = es.build_run_view(_history(), legacy)
     subj = es.build_subject(legacy, view, failed=False)
-    assert subj.startswith("MCTS Lab Multi-Agent Training — INCOMPLETE")
+    assert subj.startswith("🚨 MCTS Lab Multi-Agent Training — INCOMPLETE")
+
+
+def test_subject_alert_flag_prepends_siren():
+    view = es.build_run_view(_history(), _state())
+    subj = es.build_subject(_state(), view, failed=False, alert=True)
+    assert subj.startswith("🚨 MCTS Lab Multi-Agent Training Report — ")
+
+
+def test_subject_no_alert_has_no_siren():
+    view = es.build_run_view(_history(), _state())
+    subj = es.build_subject(_state(), view, failed=False, alert=False)
+    assert subj.startswith("MCTS Lab Multi-Agent Training Report — ")
 
 
 # ---------------------------------------------------------------------------
@@ -372,7 +385,7 @@ def test_compose_legacy_state_flags_incomplete(tmp_path):
     state_store.save_latest(paths, state)
 
     composed = es.compose(paths)
-    assert composed["subject"].startswith("MCTS Lab Multi-Agent Training — INCOMPLETE")
+    assert composed["subject"].startswith("🚨 MCTS Lab Multi-Agent Training — INCOMPLETE")
     assert "LEGACY / INCOMPLETE REPORT" in composed["body"]
     assert composed["provenance"].multi_agent is False
 
@@ -397,6 +410,104 @@ def test_body_legacy_state_has_banner():
     body = es.build_body(legacy, view, failed=False)
     assert "LEGACY / INCOMPLETE REPORT" in body
     assert "Training mode: **legacy/incomplete" in body
+
+
+# ---------------------------------------------------------------------------
+# Verdict + Alerts — explicit good/bad and 🚨/❌ for operational problems
+# ---------------------------------------------------------------------------
+
+def _prov(multi_agent=True):
+    return es.build_provenance(
+        _state() if multi_agent else {k: v for k, v in _state().items()
+                                      if k != "last_approach_comparison"}
+    )
+
+
+def test_alerts_empty_on_clean_run():
+    view = es.build_run_view(_history(), _state())
+    record = {"run_id": "run4", "rows": [
+        {"approach": "td_learning", "created": True, "games": 20, "reason": "ok"}],
+        "winner": None, "trajectory": {}}
+    alerts = es.collect_alerts(_state(), view, record, failed=False,
+                               provenance=_prov(True))
+    assert alerts == []
+    verdict = es.overall_verdict(view, record, alerts)
+    assert verdict.emoji == "✅"  # Elo rose +12.4 vs previous
+
+
+def test_alert_on_crash_is_siren():
+    state = _state(last_error={"generation": 9, "message": "RuntimeError: boom"})
+    view = es.build_run_view(_history(), state)
+    alerts = es.collect_alerts(state, view, None, failed=True, provenance=_prov(True))
+    assert len(alerts) == 1 and alerts[0].level == "alert"
+    assert es.overall_verdict(view, None, alerts).emoji == "🚨"
+
+
+def test_alert_on_missing_multi_agent_result_is_timeout_siren():
+    legacy = _state()
+    legacy.pop("last_approach_comparison")
+    view = es.build_run_view(_history(), legacy)
+    alerts = es.collect_alerts(legacy, view, None, failed=False,
+                               provenance=_prov(False))
+    assert any(a.level == "alert" and "did not finish" in a.title for a in alerts)
+
+
+def test_alert_on_arena_terminated_early():
+    view = es.build_run_view(_history(), _state())
+    record = {"run_id": "run4", "winner": None, "trajectory": {}, "rows": [
+        {"approach": "td_learning", "created": True, "games": 20, "reason": "ok"},
+        {"approach": "heuristic_tuning", "created": True, "games": 0,
+         "reason": "candidate not evaluated this run (time budget exhausted)"},
+    ]}
+    alerts = es.collect_alerts(_state(), view, record, failed=False,
+                               provenance=_prov(True))
+    assert any(a.level == "alert" and "terminated early" in a.title for a in alerts)
+    assert es.overall_verdict(view, record, alerts).emoji == "🚨"
+
+
+def test_error_on_no_candidate_trained():
+    view = es.build_run_view(_history(), _state())
+    record = {"run_id": "run4", "winner": None, "trajectory": {}, "rows": [
+        {"approach": "td_learning", "created": False, "reason": "no trajectories yet"},
+        {"approach": "baseline_mcts", "created": False, "reason": "nothing to do"},
+    ]}
+    alerts = es.collect_alerts(_state(), view, record, failed=False,
+                               provenance=_prov(True))
+    assert any(a.level == "error" and "No candidate" in a.title for a in alerts)
+    assert es.overall_verdict(view, record, alerts).emoji == "❌"
+
+
+def test_error_on_regression_beyond_noise():
+    view = es.build_run_view(_history(), _state())
+    record = {"run_id": "run4", "winner": None, "rows": [
+        {"approach": "td_learning", "created": True, "games": 20, "reason": "ok"}],
+        "trajectory": {"significant": True, "gap_to_best": -200.0}}
+    alerts = es.collect_alerts(_state(), view, record, failed=False,
+                               provenance=_prov(True))
+    assert any(a.level == "error" and "regression" in a.title.lower() for a in alerts)
+
+
+def test_body_leads_with_verdict_and_alerts_section():
+    view = es.build_run_view(_history(), _state())
+    body = es.build_body(_state(), view, failed=False)
+    assert "## Alerts" in body
+    # The verdict banner is the first section after the H1.
+    head = body.split("## Run Provenance")[0]
+    assert "Overall:" in head
+    # A clean run states the all-clear explicitly.
+    assert "No alerts" in body
+
+
+def test_body_alerts_section_is_loud_on_problem():
+    view = es.build_run_view(_history(), _state())
+    state = _state()
+    state["last_approach_comparison"] = {
+        "run_id": "run4", "winner": None, "trajectory": {}, "rows": [
+            {"approach": "heuristic_tuning", "created": True, "games": 0,
+             "reason": "not evaluated this run (time budget exhausted)"}]}
+    body = es.build_body(state, view, failed=False)
+    assert "🚨" in body
+    assert "terminated early" in body
 
 
 def test_provenance_reads_github_env(monkeypatch):

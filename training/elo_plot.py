@@ -31,23 +31,26 @@ _MAX_POINTS = 600
 
 
 def _load_series(
-    conn: sqlite3.Connection, *, agent: str = "champion"
+    conn: sqlite3.Connection, *, agent: str = "champion",
+    since_run_id: Optional[str] = None,
 ) -> Tuple[List[float], List[float], str]:
     """Return ``(x, y, granularity)`` for the champion Elo curve.
 
     Prefers the per-game trajectory (x = cumulative game number); falls back to the
     per-generation run summary (x = cumulative total games). ``granularity`` is
-    ``"per-game"`` or ``"per-generation"`` for the caption/title.
+    ``"per-game"`` or ``"per-generation"`` for the caption/title. ``since_run_id``
+    restricts the curve to the multi-agent era (see
+    :data:`ratings_db.MULTI_AGENT_EPOCH_RUN_ID`).
     """
     game_series = ratings_db.champion_game_elo_series(
-        conn, agent=agent, limit=_MAX_POINTS
+        conn, agent=agent, limit=_MAX_POINTS, since_run_id=since_run_id
     )
     if game_series:
         x = [float(p["game_number"]) for p in game_series]
         y = [float(p["elo"]) for p in game_series]
         return x, y, "per-game"
 
-    run_series = ratings_db.champion_elo_series(conn, agent=agent)
+    run_series = ratings_db.champion_elo_series(conn, agent=agent, since_run_id=since_run_id)
     if run_series:
         x = [float(p["total_games"]) for p in run_series]
         y = [float(p["elo"]) for p in run_series]
@@ -86,13 +89,22 @@ def _rolling_average(y: List[float], window: int) -> List[float]:
     return out
 
 
-def _promotion_points(conn: sqlite3.Connection) -> List[Tuple[float, float]]:
+def _promotion_points(
+    conn: sqlite3.Connection, *, since_run_id: Optional[str] = None
+) -> List[Tuple[float, float]]:
     """``(total_games, champion_elo)`` for each promoted run (for plot markers)."""
     try:
-        rows = conn.execute(
-            "SELECT total_games, champion_elo FROM run_summary WHERE promoted=1 "
-            "ORDER BY total_games ASC"
-        ).fetchall()
+        if since_run_id:
+            rows = conn.execute(
+                "SELECT total_games, champion_elo FROM run_summary "
+                "WHERE promoted=1 AND run_id >= ? ORDER BY total_games ASC",
+                (since_run_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT total_games, champion_elo FROM run_summary WHERE promoted=1 "
+                "ORDER BY total_games ASC"
+            ).fetchall()
     except sqlite3.Error:
         return []
     return [(float(r["total_games"]), float(r["champion_elo"])) for r in rows
@@ -105,15 +117,17 @@ def render_elo_plot(
     *,
     agent: str = "champion",
     target_elo: Optional[float] = None,
+    since_run_id: Optional[str] = None,
 ) -> Optional[Path]:
     """Render the champion Elo trajectory to ``out_path`` (PNG). Returns the path.
 
     Returns ``None`` — without raising — when there is nothing to plot or
     matplotlib is unavailable, so callers can treat a missing plot as "ship the
-    email without it".
+    email without it". ``since_run_id`` restricts the plot to the multi-agent era
+    (see :data:`ratings_db.MULTI_AGENT_EPOCH_RUN_ID`).
     """
     out_path = Path(out_path)
-    x, y, granularity = _load_series(conn, agent=agent)
+    x, y, granularity = _load_series(conn, agent=agent, since_run_id=since_run_id)
     if not x:
         return None
 
@@ -145,7 +159,7 @@ def render_elo_plot(
                label=f"Best historical ({best:.0f})")
 
     # Promotion markers — where the champion actually changed.
-    promos = _promotion_points(conn)
+    promos = _promotion_points(conn, since_run_id=since_run_id)
     if promos:
         px = [p[0] for p in promos]
         py = [p[1] for p in promos]
@@ -178,7 +192,8 @@ def render_elo_plot(
     xlabel = "Cumulative game" if granularity == "per-game" else "Cumulative games played"
     ax.set_xlabel(xlabel, fontsize=10)
     ax.set_ylabel("Champion Elo", fontsize=10)
-    title = "Champion Elo trajectory"
+    title = ("Champion Elo trajectory (multi-agent era)" if since_run_id
+             else "Champion Elo trajectory")
     if caption_bits:
         title += "  —  " + ", ".join(caption_bits)
     ax.set_title(title, fontsize=12, fontweight="bold")
@@ -193,10 +208,13 @@ def render_elo_plot(
 
 def render_default(
     target_elo: Optional[float] = None,
+    *,
+    since_run_id: Optional[str] = ratings_db.MULTI_AGENT_EPOCH_RUN_ID,
 ) -> Optional[Path]:
     """Render the plot for the real repo DB into ``training/reports/elo_trend.png``.
 
     Convenience entry point for the workflow's report step and the email composer.
+    Defaults to the multi-agent era so the committed PNG matches the email.
     """
     from training import TrainingPaths
 
@@ -205,7 +223,8 @@ def render_default(
     conn = ratings_db.connect(paths.ratings_db)
     try:
         return render_elo_plot(
-            conn, paths.reports_dir / "elo_trend.png", target_elo=target_elo
+            conn, paths.reports_dir / "elo_trend.png", target_elo=target_elo,
+            since_run_id=since_run_id,
         )
     finally:
         conn.close()
