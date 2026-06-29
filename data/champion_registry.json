@@ -1,5 +1,5 @@
 {
-  "current_version": "v2",
+  "current_version": "v3",
   "versions": {
     "v1": {
       "promoted_at": "2026-04-29T00:00:00+00:00",
@@ -88,13 +88,118 @@
       "gate_pass": true
     }
   },
+    "v3": {
+      "promoted_at": "2026-06-29T00:00:00+00:00",
+      "promoted_from": "v2",
+      "promotion_reason": "Night 3 gated promotion: refit from 44,832 snapshots. center_proximity promoted 0.0 -> +0.3 in mid/late phases (global R2=0.337). Validation: 120-game arena champ_new_weights vs champ_old_weights + pool_heuristic + pool_l9_partial_200ms. Pairwise new vs old: 87-30-3, sign-test p~0.0000. Delta_mu=25.975. Both gates passed.",
+      "champion_name": "champ_new_weights",
+      "config_path": "scripts/arena_config_night3_validation.json",
+      "params": {
+        "deterministic_time_budget": true,
+        "iterations_per_ms": 0.5,
+        "exploration_constant": 1.414,
+        "use_transposition_table": true,
+        "rollout_policy": "random",
+        "rollout_cutoff_depth": 5,
+        "minimax_backup_alpha": 0.25,
+        "rave_enabled": true,
+        "rave_k": 1000,
+        "progressive_widening_enabled": true,
+        "pw_c": 2.0,
+        "pw_alpha": 0.5,
+        "opponent_modeling_enabled": true,
+        "alliance_detection_enabled": true,
+        "alliance_threshold": 2.0,
+        "kingmaker_detection_enabled": true,
+        "kingmaker_score_gap": 15,
+        "adaptive_rollout_depth_enabled": true,
+        "adaptive_rollout_depth_base": 5,
+        "adaptive_rollout_depth_avg_bf": 80.0,
+        "adaptive_exploration_enabled": true,
+        "adaptive_exploration_base": 1.414,
+        "adaptive_exploration_avg_bf": 80.0,
+        "sufficiency_threshold_enabled": true,
+        "loss_avoidance_enabled": true,
+        "loss_avoidance_threshold": -50.0,
+        "state_eval_weights": {
+          "squares_placed": 0.02704942365103236,
+          "remaining_piece_area": -0.0270494236510325,
+          "accessible_corners": 0.0498842681443622,
+          "reachable_empty_squares": 0.07431567379399176,
+          "largest_remaining_piece_size": -0.17574642900639742,
+          "opponent_avg_mobility": -0.3,
+          "center_proximity": 0.17973651600189042,
+          "territory_enclosure_area": 0.0
+        },
+        "state_eval_phase_weights": {
+          "early": {
+            "squares_placed": 0.11354182484350582,
+            "remaining_piece_area": -0.11354182484350593,
+            "accessible_corners": 0.08836305227314599,
+            "reachable_empty_squares": 0.0,
+            "largest_remaining_piece_size": 0.0,
+            "opponent_avg_mobility": -0.3,
+            "center_proximity": 0.0026248922266153534,
+            "territory_enclosure_area": 0.0
+          },
+          "mid": {
+            "squares_placed": 0.04988760327628422,
+            "remaining_piece_area": -0.04988760327628426,
+            "accessible_corners": 0.13638714041073274,
+            "reachable_empty_squares": 0.11762983842748906,
+            "largest_remaining_piece_size": -0.12002019921459996,
+            "opponent_avg_mobility": -0.1807198509366564,
+            "center_proximity": 0.3,
+            "territory_enclosure_area": 0.0
+          },
+          "late": {
+            "squares_placed": 0.15445700654515712,
+            "remaining_piece_area": -0.15445700654515745,
+            "accessible_corners": -0.010231676575125935,
+            "reachable_empty_squares": 0.06146017633650651,
+            "largest_remaining_piece_size": -0.06038569705663195,
+            "opponent_avg_mobility": 0.05044375008467363,
+            "center_proximity": 0.3,
+            "territory_enclosure_area": 0.0
+          }
+        }
+      },
+      "thinking_time_ms": 500,
+      "avg_win_rate": 0.688,
+      "win_rate_ci": null,
+      "avg_trueskill_mu": 60.282,
+      "trueskill_sigma": 6.497,
+      "trueskill_conservative": 40.790,
+      "total_games_played": 120,
+      "seeds": [20260605],
+      "validation_date": "2026-06-29T00:00:00+00:00",
+      "gauntlet_run_path": "arena_runs/20260628_210150_3383f5f7",
+      "comparison_opponents": ["champ_old_weights", "pool_heuristic", "pool_l9_partial_200ms"],
+      "gate_pass": true,
+      "gate_details": {
+        "delta_mu": 25.975,
+        "delta_mu_threshold": 0.5,
+        "sign_test_p": 0.0,
+        "sign_test_threshold": 0.05,
+        "pairwise_new_wins": 87,
+        "pairwise_old_wins": 30,
+        "pairwise_ties": 3,
+        "pairwise_total": 120
+      }
+    }
+  },
   "iterations": [
     {
       "version": "v2",
       "champion": "key_findings_best",
       "promoted_at": "2026-06-17T09:00:03.011908+00:00"
+    },
+    {
+      "version": "v3",
+      "champion": "champ_new_weights",
+      "promoted_at": "2026-06-29T00:00:00+00:00"
     }
   ],
-  "snapshot_csv_paths": [],
-  "total_games_played": 0
+  "snapshot_csv_paths": ["arena_runs/20260628_210150_3383f5f7/snapshots.csv"],
+  "total_games_played": 120
 }
