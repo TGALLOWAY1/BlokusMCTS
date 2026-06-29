@@ -27,6 +27,24 @@ from typing import Any, Dict, List, Optional
 
 SCHEMA_VERSION = 2
 
+# ---------------------------------------------------------------------------
+# Multi-agent epoch
+# ---------------------------------------------------------------------------
+# The nightly pipeline switched from the legacy single-line self-play generation
+# loop to the multi-agent approach-comparison framework in commit 3b36f7c
+# (2026-06-26 05:57 UTC). Every run recorded *before* that is a legacy run whose
+# Elo trajectory is not comparable to the current approach, so the morning report
+# must not mix the two: doing so dragged a stale, much higher legacy "best
+# historical" into the deltas and made the trend look far worse than the
+# multi-agent era actually is.
+#
+# Run ids are minted as ``%Y%m%dT%H%M%SZ`` (see ``nightly_run._new_run_id``), so
+# they sort lexicographically by wall-clock time. Filtering ``run_id >= EPOCH``
+# therefore keeps exactly the multi-agent-era rows. The boundary is intentionally
+# a single constant: change it here and every report (trend table, deltas, plot)
+# re-bases consistently.
+MULTI_AGENT_EPOCH_RUN_ID = "20260626T055723Z"
+
 
 @dataclass(frozen=True)
 class AgentRatingRow:
@@ -243,32 +261,40 @@ def max_game_number(conn: sqlite3.Connection, *, agent: str = "champion") -> int
 
 
 def champion_game_elo_series(
-    conn: sqlite3.Connection, *, agent: str = "champion", limit: Optional[int] = None
+    conn: sqlite3.Connection, *, agent: str = "champion", limit: Optional[int] = None,
+    since_run_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Per-game Elo trajectory for ``agent``, oldest-first.
 
     With ``limit`` set, returns the most-recent ``limit`` games (still oldest-first)
     so the email plot can bound how many points it renders without losing the head
-    of the series to ordering.
+    of the series to ordering. With ``since_run_id`` set, only games recorded by
+    runs at/after that run id are returned (see :data:`MULTI_AGENT_EPOCH_RUN_ID`),
+    so the report can plot the multi-agent era alone.
     """
+    where = "agent = ?"
+    params: List[Any] = [agent]
+    if since_run_id:
+        where += " AND run_id >= ?"
+        params.append(since_run_id)
     if limit:
         rows = conn.execute(
-            """
+            f"""
             SELECT game_number, elo, generation, run_id, timestamp
-            FROM game_elo WHERE agent = ?
+            FROM game_elo WHERE {where}
             ORDER BY game_number DESC, id DESC LIMIT ?
             """,
-            (agent, int(limit)),
+            (*params, int(limit)),
         ).fetchall()
         rows = list(reversed(rows))
     else:
         rows = conn.execute(
-            """
+            f"""
             SELECT game_number, elo, generation, run_id, timestamp
-            FROM game_elo WHERE agent = ?
+            FROM game_elo WHERE {where}
             ORDER BY game_number ASC, id ASC
             """,
-            (agent,),
+            tuple(params),
         ).fetchall()
     return [
         {
@@ -311,20 +337,30 @@ def latest_ratings(conn: sqlite3.Connection) -> Dict[str, Dict[str, Any]]:
 
 
 def champion_elo_series(
-    conn: sqlite3.Connection, *, agent: str = "champion"
+    conn: sqlite3.Connection, *, agent: str = "champion",
+    since_run_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Ordered (oldest-first) Elo timeline for ``agent`` with cumulative games.
 
     Pulls from ``run_summary`` for the champion (one point per run) so the
-    human-strength estimator sees a clean per-run series.
+    human-strength estimator sees a clean per-run series. With ``since_run_id``
+    set, only runs at/after that run id are returned (see
+    :data:`MULTI_AGENT_EPOCH_RUN_ID`).
     """
+    where = ""
+    params: tuple = ()
+    if since_run_id:
+        where = "WHERE run_id >= ?"
+        params = (since_run_id,)
     rows = conn.execute(
-        """
+        f"""
         SELECT run_id, timestamp, champion_elo AS elo, total_games, generation,
                promoted, games_today
         FROM run_summary
+        {where}
         ORDER BY timestamp ASC, id ASC
-        """
+        """,
+        params,
     ).fetchall()
     return [
         {
@@ -340,14 +376,30 @@ def champion_elo_series(
     ]
 
 
-def recent_window(conn: sqlite3.Connection, *, limit: int) -> List[Dict[str, Any]]:
-    """Most-recent ``limit`` run summaries, oldest-first (for 7d/30d trends)."""
-    rows = conn.execute(
-        """
-        SELECT * FROM run_summary ORDER BY timestamp DESC, id DESC LIMIT ?
-        """,
-        (int(limit),),
-    ).fetchall()
+def recent_window(
+    conn: sqlite3.Connection, *, limit: int, since_run_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """Most-recent ``limit`` run summaries, oldest-first (for 7d/30d trends).
+
+    With ``since_run_id`` set, only runs at/after that run id are considered (see
+    :data:`MULTI_AGENT_EPOCH_RUN_ID`), so the morning report's trend, deltas, and
+    "best historical" never reach back into the pre-multi-agent era.
+    """
+    if since_run_id:
+        rows = conn.execute(
+            """
+            SELECT * FROM run_summary WHERE run_id >= ?
+            ORDER BY timestamp DESC, id DESC LIMIT ?
+            """,
+            (since_run_id, int(limit)),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM run_summary ORDER BY timestamp DESC, id DESC LIMIT ?
+            """,
+            (int(limit),),
+        ).fetchall()
     out = [dict(row) for row in rows]
     out.reverse()  # oldest-first
     return out

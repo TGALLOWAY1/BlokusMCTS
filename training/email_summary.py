@@ -247,29 +247,35 @@ def build_subject(
     *,
     failed: bool = False,
     provenance: Optional[Provenance] = None,
+    alert: bool = False,
 ) -> str:
     """Compose the subject line, branded for the multi-agent framework.
 
     The subject distinguishes new vs old/incomplete reports at a glance and
-    carries the date + short commit SHA so two reports are never confused::
+    carries the date + short commit SHA so two reports are never confused. When
+    ``alert`` is set (an arena terminated early, training could not run, a timeout,
+    or a regression beyond noise) the subject is prefixed with 🚨 so a problem is
+    obvious from the inbox without opening the mail::
 
         MCTS Lab Multi-Agent Training Report — 2026-06-27 — a1b2c3d — ELO 1042.7 (+12.4)
+        🚨 MCTS Lab Multi-Agent Training Report — 2026-06-27 — a1b2c3d — ELO 1042.7 (-12.4)
         MCTS Lab Multi-Agent Training — INCOMPLETE (no multi-agent result) — 2026-06-27 — a1b2c3d
         MCTS Lab Multi-Agent Training — FAILED — 2026-06-27 — a1b2c3d
     """
     prov = provenance or build_provenance(state)
     tag = f"{prov.date} — {prov.short_sha}"
+    prefix = "🚨 " if alert else ""
 
     if failed:
-        return f"MCTS Lab Multi-Agent Training — FAILED — {tag}"
+        return f"🚨 MCTS Lab Multi-Agent Training — FAILED — {tag}"
     # No completed multi-agent comparison, or no fresh Elo → never look like a
     # normal success. This is the guardrail against silent old-style reports.
     if not prov.multi_agent or view is None or not view.fresh or view.current_elo is None:
-        return f"MCTS Lab Multi-Agent Training — INCOMPLETE (no multi-agent result) — {tag}"
+        return f"🚨 MCTS Lab Multi-Agent Training — INCOMPLETE (no multi-agent result) — {tag}"
     elo = view.current_elo
     if view.elo_delta_previous is None:
-        return f"MCTS Lab Multi-Agent Training Report — {tag} — ELO {elo:.1f} (baseline)"
-    return (f"MCTS Lab Multi-Agent Training Report — {tag} — "
+        return f"{prefix}MCTS Lab Multi-Agent Training Report — {tag} — ELO {elo:.1f} (baseline)"
+    return (f"{prefix}MCTS Lab Multi-Agent Training Report — {tag} — "
             f"ELO {elo:.1f} ({view.elo_delta_previous:+.1f})")
 
 
@@ -390,7 +396,8 @@ def _match_breakdown(last_eval: Optional[Dict[str, Any]]) -> List[str]:
 
 
 def _diagnostics_lines(
-    view: RunView, findings: Optional[List[Any]], failed: bool
+    view: RunView, findings: Optional[List[Any]], failed: bool,
+    *, has_alerts: bool = False,
 ) -> List[str]:
     out: List[str] = []
     if failed:
@@ -402,7 +409,13 @@ def _diagnostics_lines(
         out.append(f"- [{getattr(f, 'severity', 'info')}] {getattr(f, 'code', '')}: "
                    f"{getattr(f, 'message', '')}")
     if not out:
-        out.append("- No diagnostic warnings. Training is progressing normally.")
+        # Never claim "progressing normally" while the Alerts section is shouting —
+        # this is the diagnostic *engine's* findings only, so say so explicitly.
+        if has_alerts:
+            out.append("- No additional diagnostic-engine findings beyond the "
+                       "**Alerts** section above.")
+        else:
+            out.append("- No diagnostic warnings. Training is progressing normally.")
     return out
 
 
@@ -432,6 +445,204 @@ def _links_lines(paths: TrainingPaths, state: Dict[str, Any]) -> List[str]:
     if server and repo and run_id:
         lines.append(f"- GitHub Actions run: {server}/{repo}/actions/runs/{run_id}")
     return lines
+
+
+# ---------------------------------------------------------------------------
+# Verdict + Alerts — the at-a-glance "is this going well or not?" layer
+# ---------------------------------------------------------------------------
+#
+# The user's standing requirement: the morning report must say *explicitly*
+# whether things are going well, and any operational problem — an arena that
+# terminated early, a training that could not be done, or a timeout — must be a
+# loud 🚨 or ❌, never something you have to infer from a table.
+
+# Substrings (case-insensitive) in an approach's reason / gate_reason that mean
+# the evaluation arena was cut short or never ran to completion.
+_BUDGET_MARKERS = (
+    "time budget", "budget exhausted", "not evaluated", "deadline",
+    "timed out", "timeout", "cut short",
+)
+# Substrings that mean the arena did not play enough games for a conclusive gate.
+_INSUFFICIENT_MARKERS = ("enough_games", "min_total_games", "min_games", "insufficient")
+
+
+@dataclass(frozen=True)
+class Alert:
+    """One operational problem worth shouting about. ``level`` picks the emoji."""
+
+    level: str  # "alert" -> 🚨 (run did not complete) | "error" -> ❌ (bad result)
+    title: str
+    detail: str
+
+    @property
+    def emoji(self) -> str:
+        return "🚨" if self.level == "alert" else "❌"
+
+
+@dataclass(frozen=True)
+class Verdict:
+    """The headline good/bad call, rendered as the very first thing in the body."""
+
+    emoji: str
+    headline: str
+    reasons: List[str]
+
+
+def _row_text(row: Dict[str, Any]) -> str:
+    return f"{row.get('reason') or ''} {row.get('gate_reason') or ''}".lower()
+
+
+def _matches(row: Dict[str, Any], markers: tuple) -> bool:
+    text = _row_text(row)
+    return any(m in text for m in markers)
+
+
+def collect_alerts(
+    state: Dict[str, Any],
+    view: RunView,
+    approach_record: Optional[Dict[str, Any]],
+    *,
+    failed: bool,
+    provenance: Provenance,
+) -> List[Alert]:
+    """Surface every operational problem as a 🚨/❌ alert (empty list == clean run).
+
+    Detects, in order of severity: a hard crash, a run that never persisted a
+    multi-agent result (timeout / cancellation), a stale Elo, every approach
+    failing to produce a candidate, an arena terminated early for budget, a zero-
+    game evaluation, too-few-games gates, and a real Elo regression beyond noise.
+    """
+    alerts: List[Alert] = []
+
+    # 1. Hard crash — dominates; the rest of the state is unreliable after it.
+    if failed:
+        err = state.get("last_error") or {}
+        alerts.append(Alert(
+            "alert", "Training run crashed before completing",
+            f"Failed at generation {err.get('generation', state.get('generation'))}: "
+            f"{err.get('message', 'unknown error')}. Partial progress was preserved; "
+            "the next run resumes from the last valid state.",
+        ))
+        return alerts
+
+    # 2. No fresh multi-agent result persisted -> almost certainly a timeout.
+    if not provenance.multi_agent:
+        alerts.append(Alert(
+            "alert", "Run did not finish — no multi-agent result was persisted",
+            "No completed approach comparison was written to the durable state "
+            f"(`{APPROACH_COMPARISON_KEY}` is absent). The most likely cause is that "
+            "the run hit the job timeout or was cancelled before it could evaluate "
+            "and persist. Every figure below reflects an earlier run, not this one.",
+        ))
+        return alerts
+
+    # 3. Stale Elo — the record exists but the metrics DB did not advance this run.
+    if not view.fresh:
+        alerts.append(Alert(
+            "error", "No fresh Elo was recorded this run",
+            view.stale_reason or "The metrics timeline did not advance this cycle.",
+        ))
+
+    # 4. Approach-comparison health.
+    rows = (approach_record or {}).get("rows") or []
+    created = [r for r in rows if r.get("created")]
+    if rows and not created:
+        names = ", ".join(sorted({str(r.get("approach", "?")) for r in rows}))
+        alerts.append(Alert(
+            "error", "No candidate could be trained this run",
+            f"Every approach failed to produce a valid candidate ({names}). No new "
+            "agent was learned; the champion was retained by default.",
+        ))
+    elif created:
+        cut = [r for r in created if _matches(r, _BUDGET_MARKERS)]
+        if cut:
+            names = ", ".join(sorted({str(r.get("approach", "?")) for r in cut}))
+            alerts.append(Alert(
+                "alert", "Arena terminated early — evaluation time budget exhausted",
+                f"{len(cut)} approach(es) were not fully evaluated before the wall-clock "
+                f"budget ran out: {names}. Their head-to-head results are missing or partial.",
+            ))
+        if all(int(r.get("games") or 0) == 0 for r in created):
+            alerts.append(Alert(
+                "alert", "Evaluation arena played zero games",
+                "Candidates were generated but no head-to-head games ran, so there is no "
+                "fresh win-rate or Elo measurement this cycle.",
+            ))
+        else:
+            thin = [r for r in created if _matches(r, _INSUFFICIENT_MARKERS)]
+            if thin:
+                names = ", ".join(sorted({str(r.get("approach", "?")) for r in thin}))
+                alerts.append(Alert(
+                    "error", "Too few games to reach a verdict",
+                    f"The arena did not play enough games for a conclusive promotion gate "
+                    f"on: {names}. Raise --games / the time budget or the result stays "
+                    "inconclusive.",
+                ))
+
+    # 5. Real Elo regression (declining beyond the measurement noise floor).
+    traj = (approach_record or {}).get("trajectory") or {}
+    gap = traj.get("gap_to_best")
+    if traj.get("significant") and isinstance(gap, (int, float)) and gap < 0:
+        alerts.append(Alert(
+            "error", "Elo regression beyond the noise floor",
+            f"The champion is {abs(gap):.1f} Elo below its multi-agent-era best — a move "
+            "larger than the measurement noise, so the trend is genuinely declining.",
+        ))
+
+    return alerts
+
+
+def overall_verdict(
+    view: RunView,
+    approach_record: Optional[Dict[str, Any]],
+    alerts: List[Alert],
+) -> Verdict:
+    """Reduce the alerts + Elo direction to a single, explicit good/bad headline."""
+    if any(a.level == "alert" for a in alerts):
+        return Verdict("🚨", "ALERT — the run did not complete cleanly",
+                       [f"{a.emoji} {a.title}" for a in alerts])
+    if any(a.level == "error" for a in alerts):
+        return Verdict("❌", "NOT GOING WELL",
+                       [f"{a.emoji} {a.title}" for a in alerts])
+
+    # Operationally clean -> judge purely on Elo direction.
+    reasons: List[str] = []
+    winner = (approach_record or {}).get("winner")
+    if winner:
+        reasons.append(f"A candidate was promoted ({winner}).")
+    dp = view.elo_delta_previous
+    if dp is not None:
+        verb = "rose" if dp > 0 else ("fell" if dp < 0 else "held")
+        reasons.append(f"Elo {verb} {dp:+.1f} vs the previous run.")
+    if winner or (dp is not None and dp > 0):
+        return Verdict("✅", "GOING WELL", reasons or ["Elo is improving; no alerts fired."])
+    if dp is not None and dp < 0:
+        return Verdict("⚠️", "CAUTION — no alerts, but Elo is not improving "
+                       "(within the noise floor)", reasons)
+    return Verdict("➖", "STEADY — no material change and no alerts",
+                   reasons or ["No change this run."])
+
+
+def _verdict_lines(verdict: Verdict) -> List[str]:
+    """Render the verdict as the prominent banner at the very top of the body."""
+    out = [f"## {verdict.emoji} Overall: {verdict.headline}", ""]
+    for r in verdict.reasons:
+        out.append(f"- {r}")
+    out.append("")
+    return out
+
+
+def _alert_lines(alerts: List[Alert]) -> List[str]:
+    """Render the dedicated Alerts section (loud, or an explicit all-clear)."""
+    out = ["## Alerts", ""]
+    if not alerts:
+        out += ["✅ No alerts — the run completed cleanly (arena finished, training ran, "
+                "no timeout).", ""]
+        return out
+    for a in alerts:
+        out.append(f"- {a.emoji} **{a.title}.** {a.detail}")
+    out.append("")
+    return out
 
 
 def build_body(
@@ -464,8 +675,20 @@ def build_body(
     cur_elo = view.current_elo
     best_elo = float(view.best["champion_elo"]) if view.best else None
     last_eval = state.get("last_eval")
+    approach_record = state.get("last_approach_comparison")
+
+    # Explicit good/bad verdict + loud alerts, computed up front so they can lead
+    # the report (the at-a-glance answer to "is this going well?").
+    alerts = collect_alerts(
+        state, view, approach_record, failed=failed, provenance=prov
+    )
+    verdict = overall_verdict(view, approach_record, alerts)
 
     lines: List[str] = ["# MCTS Lab Multi-Agent Training Report", ""]
+
+    # --- Verdict banner + Alerts (lead the report) ---------------------------
+    lines += _verdict_lines(verdict)
+    lines += _alert_lines(alerts)
 
     # --- Run provenance (always — proves which pipeline produced this) -------
     lines += ["## Run Provenance", ""]
@@ -584,7 +807,6 @@ def build_body(
     lines.append("")
 
     # --- Approach Comparison (new framework) ---------------------------------
-    approach_record = state.get("last_approach_comparison")
     if approach_record:
         lines += ["## Approach Comparison", ""]
         lines += _approach_lines(approach_record)
@@ -617,7 +839,7 @@ def build_body(
 
     # --- Diagnostics ---------------------------------------------------------
     lines += ["## Diagnostics", ""]
-    lines += _diagnostics_lines(view, findings, failed)
+    lines += _diagnostics_lines(view, findings, failed, has_alerts=bool(alerts))
     lines.append("")
 
     # --- Links / Artifacts ---------------------------------------------------
@@ -753,7 +975,11 @@ def compose(
 
     conn = ratings_db.connect(paths.ratings_db)
     try:
-        history = ratings_db.recent_window(conn, limit=30)
+        # Restrict the trend, deltas, and plot to the multi-agent era so the report
+        # reflects the current approach and never drags in pre-multi-agent runs.
+        history = ratings_db.recent_window(
+            conn, limit=30, since_run_id=ratings_db.MULTI_AGENT_EPOCH_RUN_ID
+        )
         findings = diagnostics.collect_findings(conn, state)
         plot_path, plot_game_count = _render_plot(conn, paths, state)
     finally:
@@ -761,7 +987,14 @@ def compose(
 
     view = build_run_view(history, state)
     prov = build_provenance(state)
-    subject = build_subject(state, view, failed=failed, provenance=prov)
+    alerts = collect_alerts(
+        state, view, state.get("last_approach_comparison"),
+        failed=failed, provenance=prov,
+    )
+    verdict = overall_verdict(view, state.get("last_approach_comparison"), alerts)
+    subject = build_subject(
+        state, view, failed=failed, provenance=prov, alert=bool(alerts)
+    )
     body = build_body(
         state, view, failed=failed, promoted=promoted, findings=findings, paths=paths,
         plot_attached=plot_path is not None, plot_game_count=plot_game_count,
@@ -770,6 +1003,7 @@ def compose(
     return {
         "subject": subject, "body": body, "view": view, "state": state,
         "plot_path": plot_path, "provenance": prov,
+        "alerts": alerts, "verdict": verdict,
     }
 
 
@@ -785,12 +1019,56 @@ def _render_plot(conn, paths: TrainingPaths, state: Dict[str, Any]):
         out = elo_plot.render_elo_plot(
             conn, paths.reports_dir / "elo_trend.png",
             target_elo=float(state.get("human_target_elo", 1700) or 0) or None,
+            since_run_id=ratings_db.MULTI_AGENT_EPOCH_RUN_ID,
         )
-        count = ratings_db.max_game_number(conn) if out is not None else None
+        # Count only the multi-agent-era games the plot actually drew, for the callout.
+        count = (
+            len(ratings_db.champion_game_elo_series(
+                conn, since_run_id=ratings_db.MULTI_AGENT_EPOCH_RUN_ID))
+            if out is not None else None
+        )
         return (out, count)
     except Exception as exc:  # noqa: BLE001 — plotting must never break the email
         print(f"[email] Plot render skipped ({type(exc).__name__}: {exc}).")
         return (None, None)
+
+
+def _emit_github_outputs(composed: Dict[str, Any]) -> None:
+    """Mirror the verdict + alerts onto the GitHub Actions run page.
+
+    Writes a verdict/alerts block to ``$GITHUB_STEP_SUMMARY`` (the run's summary
+    card) and emits ``::error::`` / ``::warning::`` annotations for each alert, so
+    the Actions UI shows explicitly whether things are going well — not only the
+    email. A no-op off-CI (env vars absent). Never raises.
+    """
+    try:
+        verdict: Verdict = composed["verdict"]
+        alerts: List[Alert] = composed["alerts"]
+        summary_path = os.getenv("GITHUB_STEP_SUMMARY")
+        if summary_path:
+            lines = [
+                f"## {verdict.emoji} {verdict.headline}",
+                "",
+                f"**Subject:** {composed['subject']}",
+                "",
+            ]
+            if alerts:
+                lines.append("### Alerts")
+                for a in alerts:
+                    lines.append(f"- {a.emoji} **{a.title}.** {a.detail}")
+            else:
+                lines.append("✅ No alerts — the run completed cleanly.")
+            lines.append("")
+            with open(summary_path, "a", encoding="utf-8") as handle:
+                handle.write("\n".join(lines) + "\n")
+        # Inline annotations (show on the job + in the PR checks UI).
+        for a in alerts:
+            stream = "error" if a.level == "alert" else "warning"
+            title = a.title.replace("\n", " ")
+            detail = a.detail.replace("\n", " ")
+            print(f"::{stream} title={title}::{detail}")
+    except Exception as exc:  # noqa: BLE001 — observability must not break the run
+        print(f"[email] GitHub summary skipped ({type(exc).__name__}: {exc}).")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -811,6 +1089,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(body)
     print("=" * 70)
     print(f"[email] Plot: {plot_path if plot_path else 'none (text-only)'}")
+
+    # Mirror the verdict/alerts onto the Actions run page (no-op off-CI).
+    _emit_github_outputs(composed)
 
     if args.dry_run:
         return 0

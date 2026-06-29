@@ -165,6 +165,54 @@ def test_game_elo_series_continues_across_runs_and_limit(tmp_path):
     assert [p["game_number"] for p in tail] == [3, 4]
 
 
+def test_since_run_id_filters_legacy_runs_out(tmp_path):
+    """`since_run_id` keeps only multi-agent-era rows (run_id >= epoch)."""
+    conn = rdb.connect(tmp_path / "r.sqlite")
+    epoch = rdb.MULTI_AGENT_EPOCH_RUN_ID
+    # One legacy run (before the epoch) and two multi-agent runs (at/after).
+    rdb.record_run(
+        conn, run_id="20260622T000000Z", timestamp="2026-06-22T00:00:00Z",
+        generation=1, agent_rows=_agent_rows(1290.0, 2),
+        run_summary=_summary(1, 2, 1290.0),
+    )
+    rdb.record_run(
+        conn, run_id="20260626T090000Z", timestamp="2026-06-26T09:00:00Z",
+        generation=2, agent_rows=_agent_rows(1180.0, 4),
+        run_summary=_summary(2, 4, 1180.0),
+    )
+    rdb.record_run(
+        conn, run_id="20260628T090000Z", timestamp="2026-06-28T09:00:00Z",
+        generation=3, agent_rows=_agent_rows(1100.0, 6),
+        run_summary=_summary(3, 6, 1100.0),
+    )
+    assert epoch < "20260626T090000Z" and "20260622T000000Z" < epoch
+
+    # Unfiltered: all three runs; "best" includes the stale legacy 1290.
+    full = rdb.recent_window(conn, limit=30)
+    assert len(full) == 3
+    assert max(r["champion_elo"] for r in full) == 1290.0
+
+    # Filtered: legacy run dropped; best is the multi-agent-era max (1180).
+    multi = rdb.recent_window(conn, limit=30, since_run_id=epoch)
+    assert [r["generation"] for r in multi] == [2, 3]
+    assert max(r["champion_elo"] for r in multi) == 1180.0
+
+    series = rdb.champion_elo_series(conn, since_run_id=epoch)
+    assert [p["generation"] for p in series] == [2, 3]
+
+    # Per-game series is filtered the same way.
+    rdb.record_game_elos(
+        conn, run_id="20260622T000000Z", timestamp="t", generation=1,
+        samples=[(1, 1290.0)],
+    )
+    rdb.record_game_elos(
+        conn, run_id="20260626T090000Z", timestamp="t", generation=2,
+        samples=[(2, 1180.0)],
+    )
+    games = rdb.champion_game_elo_series(conn, since_run_id=epoch)
+    assert [p["game_number"] for p in games] == [2]
+
+
 def test_persists_across_reconnect(tmp_path):
     db = tmp_path / "r.sqlite"
     conn = rdb.connect(db)
