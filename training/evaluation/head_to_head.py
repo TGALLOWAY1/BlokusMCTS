@@ -134,6 +134,11 @@ def _candidate_arenas(
     n = len(opps)
     if n == 2:
         pairs = [(opps[0], opps[1])]
+    elif n >= 4:
+        # Keep evaluation bounded at two arenas but cover both weak anchors
+        # (heuristic/random) and the fixed MCTS anchors. Consecutive-pair capping
+        # would otherwise omit later anchors such as baseline_mcts_strong.
+        pairs = [(opps[0], opps[1]), (opps[2], opps[3])]
     else:  # rotate consecutive pairs, capped at 2 arenas to bound cost
         pairs = [(opps[i], opps[(i + 1) % n]) for i in range(n)][:2]
     return [[champ, cand, copy.deepcopy(a), copy.deepcopy(b)] for a, b in pairs]

@@ -69,6 +69,12 @@ def evaluate_gate(ce: CandidateEval, thresholds: Optional[GateThresholds] = None
     decision = ce.decision
     conservative_pass = bool(getattr(decision, "promote", False)
                              and getattr(decision, "champion", None) == ce.name)
+    criteria.append(_crit(
+        "conservative_promotes_candidate",
+        conservative_pass,
+        f"conservative decision promote={bool(getattr(decision, 'promote', False))} "
+        f"champion={getattr(decision, 'champion', None)!r} candidate={ce.name!r}",
+    ))
     for c in getattr(decision, "criteria", []) or []:
         criteria.append(_crit(f"conservative:{c.get('name')}", c.get("passed"),
                                str(c.get("detail", ""))))

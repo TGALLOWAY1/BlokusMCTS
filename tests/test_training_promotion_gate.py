@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from training.evaluation.benchmark_pool import build_benchmark_pool
+from training.evaluation.head_to_head import _candidate_arenas
 from training.evaluation.head_to_head import CandidateEval
 from training.evaluation.promotion_gate import (
     GateThresholds,
@@ -42,6 +43,22 @@ def test_gate_fails_when_conservative_decision_fails():
     gr = evaluate_gate(_eval(promote=False))
     assert not gr.passed
     assert "HOLD" in gr.reason
+    assert "conservative_promotes_candidate" in gr.reason
+
+
+def test_gate_explains_empty_failed_conservative_list():
+    """Regression guard for reports that said ``failed []``.
+
+    The lower-level gauntlet can return promote=False with no failed criterion
+    when its top-ranked agent is not the candidate being evaluated. The wrapper
+    must surface that as an explicit failed criterion.
+    """
+    ev = _eval(promote=False, games=20)
+    ev.decision.criteria = []
+    gr = evaluate_gate(ev, GateThresholds(min_total_games=20))
+    failed = [c["name"] for c in gr.criteria if not c["passed"]]
+    assert failed == ["conservative_promotes_candidate"]
+    assert "failed ['conservative_promotes_candidate']" in gr.reason
 
 
 def test_gate_fails_on_negative_elo_delta():
@@ -65,6 +82,34 @@ def test_gate_fails_on_insufficient_games():
     assert "min_total_games" in names
 
 
+def test_positive_candidate_with_insufficient_games_does_not_promote():
+    gr = evaluate_gate(
+        _eval(cand_wins=2, champ_wins=0, elo_delta=80.0, mu_delta=2.0, games=2),
+        GateThresholds(min_total_games=20),
+    )
+    assert not gr.passed
+    assert "min_total_games" in [c["name"] for c in gr.criteria if not c["passed"]]
+
+
+def test_candidate_with_enough_games_and_clear_win_rate_promotes():
+    gr = evaluate_gate(
+        _eval(cand_wins=16, champ_wins=4, elo_delta=90.0, mu_delta=3.0, games=20),
+        GateThresholds(min_total_games=20),
+    )
+    assert gr.passed
+
+
+def test_noop_promotion_when_result_inconclusive():
+    gr = evaluate_gate(
+        _eval(cand_wins=10, champ_wins=10, elo_delta=0.0, mu_delta=0.0, games=20),
+        GateThresholds(min_total_games=20),
+    )
+    assert not gr.passed
+    failed = [c["name"] for c in gr.criteria if not c["passed"]]
+    assert "beats_champion_head_to_head" in failed
+    assert "trueskill_improvement" in failed
+
+
 def test_gate_fails_on_weak_trueskill_delta():
     gr = evaluate_gate(_eval(mu_delta=0.1), GateThresholds(min_mu_delta=0.5))
     assert not gr.passed
@@ -86,9 +131,14 @@ def test_select_winner_none_when_nobody_passes():
 
 
 def test_benchmark_pool_has_anchors_and_fixed_seeds():
-    pool = build_benchmark_pool({"checkpoints": []})
+    pool = build_benchmark_pool({
+        "checkpoints": [],
+        "champion_params": {"type": "mcts", "thinking_time_ms": 500, "params": {}},
+    })
     names = pool.opponent_names()
     assert "heuristic" in names and "random" in names
+    assert "baseline_mcts_fast" in names
+    assert "baseline_mcts_strong" in names
     assert len(pool.seeds) >= 2
     # No historical checkpoint -> no best_historical opponent.
     assert "best_historical" not in names
@@ -115,9 +165,23 @@ def test_evaluate_candidates_skips_when_over_budget(tmp_path):
 
 
 def test_benchmark_pool_includes_best_historical_when_present():
-    state = {"checkpoints": [
+    state = {"champion_params": {"type": "mcts", "params": {}}, "checkpoints": [
         {"rating": {"mu": 20.0}, "params": {"type": "mcts", "params": {}}},
         {"rating": {"mu": 35.0}, "params": {"type": "mcts", "params": {"x": 1}}},
     ]}
     pool = build_benchmark_pool(state)
     assert "best_historical" in pool.opponent_names()
+
+
+def test_candidate_arenas_cover_weak_and_mcts_anchor_pairs():
+    state = {"champion_params": {"type": "mcts", "thinking_time_ms": 1, "params": {}}}
+    pool = build_benchmark_pool(state)
+    arenas = _candidate_arenas(
+        state,
+        {"type": "mcts", "thinking_time_ms": 1, "params": {}},
+        "candidate_x",
+        pool,
+    )
+    opponent_pairs = [{arena[2]["name"], arena[3]["name"]} for arena in arenas]
+    assert {"heuristic", "random"} in opponent_pairs
+    assert {"baseline_mcts_fast", "baseline_mcts_strong"} in opponent_pairs

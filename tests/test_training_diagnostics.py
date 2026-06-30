@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from training import TrainingPaths, diagnostics, ratings_db
 from training import state_store
+from training.diagnostics import audit_training_state
 
 
 def _series(elos):
@@ -129,3 +130,27 @@ def test_write_diagnosis_always_writes(tmp_path):
 def test_render_diagnosis_no_findings():
     text = diagnostics.render_diagnosis([], {"run_id": "r", "generation": 0})
     assert "No issues detected" in text
+
+
+def test_audit_gate_satisfiability_requires_all_created_candidates():
+    comp = {
+        "seeds": [1, 2],
+        "rows": [
+            {"name": "baseline", "created": True, "games": 2},
+            {"name": "td", "created": True, "games": 20},
+            {"name": "skipped", "created": False, "games": 0},
+        ],
+    }
+    sat = audit_training_state.promotion_gate_satisfiability(comp)
+    assert sat["any_candidate_satisfiable_by_latest_counts"] is True
+    assert sat["all_created_candidates_satisfy_game_floor"] is False
+    assert sat["under_min_total_games"] == {"baseline": 2}
+
+
+def test_audit_benchmark_pool_health_reports_mcts_anchors():
+    state = {"champion_params": {"type": "mcts", "thinking_time_ms": 500, "params": {}}}
+    health = audit_training_state.benchmark_pool_health(state, [1, 2])
+    assert health["has_random"] is True
+    assert health["has_heuristic"] is True
+    assert health["has_stable_mcts_anchor"] is True
+    assert health["mcts_anchor_count"] >= 2
