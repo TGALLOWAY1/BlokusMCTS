@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from training import ratings_db as rdb
+from analytics.tournament.elo import EloTracker
 
 
 def _agent_rows(elo_champ=1210.0, games=10):
@@ -225,3 +226,40 @@ def test_persists_across_reconnect(tmp_path):
     conn2 = rdb.connect(db)
     assert rdb.run_count(conn2) == 1
     assert rdb.latest_ratings(conn2)["champion"]["elo"] == 1210.0
+
+
+def test_multiplayer_elo_update_direction():
+    tracker = EloTracker()
+    before_winner = tracker.get_rating("winner")
+    before_loser = tracker.get_rating("loser")
+    tracker.update_game({"winner": 80, "middle": 40, "loser": 10, "last": 0})
+    assert tracker.get_rating("winner") > before_winner
+    assert tracker.get_rating("loser") < before_loser
+
+
+def test_history_replay_matches_stored_game_elo_state(tmp_path):
+    conn = rdb.connect(tmp_path / "r.sqlite")
+    games = [
+        {"champion": 70, "candidate": 30, "heuristic": 20, "random": 10},
+        {"champion": 10, "candidate": 80, "heuristic": 20, "random": 0},
+        {"champion": 50, "candidate": 40, "heuristic": 30, "random": 20},
+    ]
+    tracker = EloTracker()
+    samples = []
+    for idx, scores in enumerate(games, start=1):
+        tracker.update_game(scores)
+        samples.append((idx, tracker.get_rating("champion")))
+
+    rdb.record_game_elos(
+        conn, run_id="run1", timestamp="2026-06-29T00:00:00Z",
+        generation=1, samples=samples,
+    )
+
+    replay = EloTracker()
+    replay_samples = []
+    for idx, scores in enumerate(games, start=1):
+        replay.update_game(scores)
+        replay_samples.append(round(replay.get_rating("champion"), 8))
+
+    stored = [round(row["elo"], 8) for row in rdb.champion_game_elo_series(conn)]
+    assert stored == replay_samples

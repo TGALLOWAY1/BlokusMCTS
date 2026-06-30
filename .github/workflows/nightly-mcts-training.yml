@@ -24,19 +24,23 @@ on:
       games:
         description: "Games per arena per seed for approach evaluation."
         required: false
-        # 10 games/arena x 2 pool seeds = 20 total, the SHORT eval-gate minimum
-        # (training.evaluation.head_to_head.EVAL_MIN_TOTAL_GAMES). The evaluator
-        # stops at game granularity, so this is an upper cap the per-candidate
-        # time slice may trim — it can no longer let the first approach eat the
-        # whole budget.
-        default: "10"
+        # The benchmark pool currently creates two arenas. 5 games/arena x
+        # 2 arenas x 2 pool seeds = 20 total, the SHORT eval-gate minimum
+        # (training.evaluation.head_to_head.EVAL_MIN_TOTAL_GAMES). Keeping the
+        # cap at the gate minimum avoids spending the whole job on one candidate.
+        default: "5"
       time_budget_minutes:
         description: "Wall-clock budget in minutes for the approach-comparison run."
         required: false
-        # ~210 min fits under the 350-min job cap with headroom for report/commit/
-        # email. At ~2 min/game (full 500 ms MCTS) a 20-game candidate is ~40 min,
-        # so four approaches (~160 min) finish inside the budget with margin.
-        default: "210"
+        # 330 min stays under the 350-min job cap while leaving report/commit/email
+        # headroom. The audit showed 210 min starved later candidates.
+        default: "330"
+      thinking_time_ms:
+        description: "Uniform MCTS thinking-time override for evaluation agents."
+        required: false
+        # Use a faster uniform evaluator so every approach can satisfy the
+        # 20-game promotion gate. Full-strength 500 ms games exceeded the budget.
+        default: "100"
 
 # Never run two nightly trainings at once, and never cancel an in-flight run
 # (cancelling mid-train could corrupt a generation). A queued run waits its turn.
@@ -80,8 +84,9 @@ jobs:
           # docs/03-implementation/NIGHTLY_TRAINING.md and training/README.md.
           python -m training.nightly_run \
             --approaches "${{ github.event.inputs.approaches || 'baseline,td,mcts_sweep,heuristic_tune' }}" \
-            --games "${{ github.event.inputs.games || '10' }}" \
-            --time-budget-minutes "${{ github.event.inputs.time_budget_minutes || '210' }}" \
+            --games "${{ github.event.inputs.games || '5' }}" \
+            --time-budget-minutes "${{ github.event.inputs.time_budget_minutes || '330' }}" \
+            --thinking-time-ms "${{ github.event.inputs.thinking_time_ms || '100' }}" \
             --resume training/state/latest.json
 
       - name: Generate reports (always)
@@ -89,6 +94,7 @@ jobs:
         run: |
           python -m training.status_report || true
           python -m training.diagnostics || true
+          python -m training.diagnostics.audit_training_state > training/reports/training_state_audit.md || true
           # Render the champion per-game Elo trajectory PNG so it is committed with
           # the rest of the report artifacts and ready for the email to attach.
           python -m training.elo_plot || true
