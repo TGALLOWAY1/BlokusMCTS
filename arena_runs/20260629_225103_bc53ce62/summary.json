@@ -1,0 +1,1262 @@
+{
+  "audit_version": "v1_2026-03-28",
+  "completed_games": 60,
+  "error_games": 0,
+  "game_duration_sec": {
+    "count": 60,
+    "max": 175.80501000600634,
+    "mean": 146.810073809982,
+    "median": 145.3166223424996,
+    "min": 133.6525959460123,
+    "p25": 140.09116324574643,
+    "p75": 151.91492266474233,
+    "std": 8.614254457708764
+  },
+  "num_games": 60,
+  "pairwise_matchups": {
+    "champ_v3__vs__pool_heuristic": {
+      "a_beats_b": 53,
+      "agent_a": "champ_v3",
+      "agent_b": "pool_heuristic",
+      "b_beats_a": 7,
+      "tie": 0,
+      "total": 60
+    },
+    "champ_v3__vs__pool_l45_100ms": {
+      "a_beats_b": 57,
+      "agent_a": "champ_v3",
+      "agent_b": "pool_l45_100ms",
+      "b_beats_a": 3,
+      "tie": 0,
+      "total": 60
+    },
+    "champ_v3__vs__pool_peer_500ms": {
+      "a_beats_b": 34,
+      "agent_a": "champ_v3",
+      "agent_b": "pool_peer_500ms",
+      "b_beats_a": 25,
+      "tie": 1,
+      "total": 60
+    },
+    "pool_heuristic__vs__pool_l45_100ms": {
+      "a_beats_b": 35,
+      "agent_a": "pool_heuristic",
+      "agent_b": "pool_l45_100ms",
+      "b_beats_a": 18,
+      "tie": 7,
+      "total": 60
+    },
+    "pool_heuristic__vs__pool_peer_500ms": {
+      "a_beats_b": 4,
+      "agent_a": "pool_heuristic",
+      "agent_b": "pool_peer_500ms",
+      "b_beats_a": 54,
+      "tie": 2,
+      "total": 60
+    },
+    "pool_l45_100ms__vs__pool_peer_500ms": {
+      "a_beats_b": 3,
+      "agent_a": "pool_l45_100ms",
+      "agent_b": "pool_peer_500ms",
+      "b_beats_a": 54,
+      "tie": 3,
+      "total": 60
+    }
+  },
+  "pairwise_total_comparisons": 360,
+  "run_config": {
+    "agents": [
+      {
+        "name": "champ_v3",
+        "params": {
+          "adaptive_exploration_avg_bf": 80.0,
+          "adaptive_exploration_base": 1.414,
+          "adaptive_exploration_enabled": true,
+          "adaptive_rollout_depth_avg_bf": 80.0,
+          "adaptive_rollout_depth_base": 5,
+          "adaptive_rollout_depth_enabled": true,
+          "alliance_detection_enabled": true,
+          "alliance_threshold": 2.0,
+          "deterministic_time_budget": true,
+          "exploration_constant": 1.414,
+          "iterations_per_ms": 0.5,
+          "kingmaker_detection_enabled": true,
+          "kingmaker_score_gap": 15,
+          "loss_avoidance_enabled": true,
+          "loss_avoidance_threshold": -50.0,
+          "minimax_backup_alpha": 0.25,
+          "opponent_modeling_enabled": true,
+          "progressive_widening_enabled": true,
+          "pw_alpha": 0.5,
+          "pw_c": 2.0,
+          "rave_enabled": true,
+          "rave_k": 1000,
+          "rollout_cutoff_depth": 5,
+          "rollout_policy": "random",
+          "state_eval_phase_weights": {
+            "early": {
+              "accessible_corners": 0.08836305227314599,
+              "center_proximity": 0.0026248922266153534,
+              "largest_remaining_piece_size": 0.0,
+              "opponent_avg_mobility": -0.3,
+              "reachable_empty_squares": 0.0,
+              "remaining_piece_area": -0.11354182484350593,
+              "squares_placed": 0.11354182484350582,
+              "territory_enclosure_area": 0.0
+            },
+            "late": {
+              "accessible_corners": -0.010231676575125935,
+              "center_proximity": 0.3,
+              "largest_remaining_piece_size": -0.06038569705663195,
+              "opponent_avg_mobility": 0.05044375008467363,
+              "reachable_empty_squares": 0.06146017633650651,
+              "remaining_piece_area": -0.15445700654515745,
+              "squares_placed": 0.15445700654515712,
+              "territory_enclosure_area": 0.0
+            },
+            "mid": {
+              "accessible_corners": 0.13638714041073274,
+              "center_proximity": 0.3,
+              "largest_remaining_piece_size": -0.12002019921459996,
+              "opponent_avg_mobility": -0.1807198509366564,
+              "reachable_empty_squares": 0.11762983842748906,
+              "remaining_piece_area": -0.04988760327628426,
+              "squares_placed": 0.04988760327628422,
+              "territory_enclosure_area": 0.0
+            }
+          },
+          "state_eval_weights": {
+            "accessible_corners": 0.0498842681443622,
+            "center_proximity": 0.17973651600189042,
+            "largest_remaining_piece_size": -0.17574642900639742,
+            "opponent_avg_mobility": -0.3,
+            "reachable_empty_squares": 0.07431567379399176,
+            "remaining_piece_area": -0.0270494236510325,
+            "squares_placed": 0.02704942365103236,
+            "territory_enclosure_area": 0.0
+          },
+          "sufficiency_threshold_enabled": true,
+          "use_transposition_table": true
+        },
+        "thinking_time_ms": 500,
+        "type": "mcts"
+      },
+      {
+        "name": "pool_heuristic",
+        "params": {},
+        "thinking_time_ms": null,
+        "type": "heuristic"
+      },
+      {
+        "name": "pool_l45_100ms",
+        "params": {
+          "deterministic_time_budget": true,
+          "iterations_per_ms": 0.5,
+          "minimax_backup_alpha": 0.25,
+          "rave_enabled": true,
+          "rave_k": 1000,
+          "rollout_cutoff_depth": 5,
+          "rollout_policy": "random",
+          "state_eval_weights": {
+            "accessible_corners": 0.243,
+            "center_proximity": 0.0,
+            "largest_remaining_piece_size": -0.231,
+            "opponent_avg_mobility": -0.3,
+            "reachable_empty_squares": 0.081,
+            "remaining_piece_area": -0.0295,
+            "squares_placed": 0.0295,
+            "territory_enclosure_area": 0.0
+          }
+        },
+        "thinking_time_ms": 100,
+        "type": "mcts"
+      },
+      {
+        "name": "pool_peer_500ms",
+        "params": {
+          "adaptive_exploration_avg_bf": 80.0,
+          "adaptive_exploration_base": 1.414,
+          "adaptive_exploration_enabled": true,
+          "adaptive_rollout_depth_avg_bf": 80.0,
+          "adaptive_rollout_depth_base": 5,
+          "adaptive_rollout_depth_enabled": true,
+          "deterministic_time_budget": true,
+          "exploration_constant": 1.414,
+          "iterations_per_ms": 0.5,
+          "loss_avoidance_enabled": true,
+          "minimax_backup_alpha": 0.25,
+          "progressive_widening_enabled": true,
+          "pw_alpha": 0.5,
+          "pw_c": 2.0,
+          "rave_enabled": true,
+          "rave_k": 1000,
+          "rollout_cutoff_depth": 5,
+          "rollout_policy": "random",
+          "state_eval_weights": {
+            "accessible_corners": 0.243,
+            "center_proximity": 0.0,
+            "largest_remaining_piece_size": -0.231,
+            "opponent_avg_mobility": -0.3,
+            "reachable_empty_squares": 0.081,
+            "remaining_piece_area": -0.0295,
+            "squares_placed": 0.0295,
+            "territory_enclosure_area": 0.0
+          },
+          "sufficiency_threshold_enabled": true,
+          "use_transposition_table": true
+        },
+        "thinking_time_ms": 500,
+        "type": "mcts"
+      }
+    ],
+    "created_at": "2026-06-29T22:51:03",
+    "max_turns": 2500,
+    "notes": "Night5-seed4",
+    "num_games": 60,
+    "output_root": "arena_runs",
+    "run_id": "20260629_225103_bc53ce62",
+    "seat_policy": "round_robin",
+    "seed": 20260604,
+    "snapshots": {
+      "checkpoints": [
+        8,
+        16,
+        24,
+        32,
+        40,
+        48,
+        56,
+        64
+      ],
+      "enabled": true,
+      "strategy": "fixed_ply"
+    }
+  },
+  "run_id": "20260629_225103_bc53ce62",
+  "score_by_seat_position": {
+    "champ_v3": {
+      "P1": {
+        "mean": 98.27,
+        "n": 15,
+        "se": 2.46,
+        "std": 9.52
+      },
+      "P2": {
+        "mean": 95.47,
+        "n": 15,
+        "se": 2.63,
+        "std": 10.19
+      },
+      "P3": {
+        "mean": 103.2,
+        "n": 15,
+        "se": 3.18,
+        "std": 12.32
+      },
+      "P4": {
+        "mean": 96.47,
+        "n": 15,
+        "se": 2.77,
+        "std": 10.74
+      }
+    },
+    "pool_heuristic": {
+      "P1": {
+        "mean": 79.73,
+        "n": 15,
+        "se": 1.69,
+        "std": 6.55
+      },
+      "P2": {
+        "mean": 78.13,
+        "n": 15,
+        "se": 2.36,
+        "std": 9.14
+      },
+      "P3": {
+        "mean": 79.6,
+        "n": 15,
+        "se": 1.99,
+        "std": 7.7
+      },
+      "P4": {
+        "mean": 72.0,
+        "n": 15,
+        "se": 2.61,
+        "std": 10.09
+      }
+    },
+    "pool_l45_100ms": {
+      "P1": {
+        "mean": 78.73,
+        "n": 15,
+        "se": 2.13,
+        "std": 8.23
+      },
+      "P2": {
+        "mean": 72.2,
+        "n": 15,
+        "se": 1.84,
+        "std": 7.12
+      },
+      "P3": {
+        "mean": 74.93,
+        "n": 15,
+        "se": 2.42,
+        "std": 9.37
+      },
+      "P4": {
+        "mean": 73.73,
+        "n": 15,
+        "se": 1.67,
+        "std": 6.49
+      }
+    },
+    "pool_peer_500ms": {
+      "P1": {
+        "mean": 93.93,
+        "n": 15,
+        "se": 2.39,
+        "std": 9.26
+      },
+      "P2": {
+        "mean": 97.4,
+        "n": 15,
+        "se": 2.66,
+        "std": 10.31
+      },
+      "P3": {
+        "mean": 96.4,
+        "n": 15,
+        "se": 1.97,
+        "std": 7.62
+      },
+      "P4": {
+        "mean": 91.53,
+        "n": 15,
+        "se": 2.63,
+        "std": 10.17
+      }
+    }
+  },
+  "score_margins": {
+    "max_margin": 61.0,
+    "mean_margin": 30.58,
+    "median_margin": 29.5,
+    "min_margin": 6.0,
+    "n_games": 60,
+    "std_margin": 12.53
+  },
+  "score_stats": {
+    "champ_v3": {
+      "count": 60,
+      "max": 124.0,
+      "mean": 98.35,
+      "median": 98.5,
+      "min": 76.0,
+      "p25": 91.75,
+      "p75": 102.5,
+      "std": 10.796334254427903
+    },
+    "pool_heuristic": {
+      "count": 60,
+      "max": 101.0,
+      "mean": 77.36666666666666,
+      "median": 78.5,
+      "min": 60.0,
+      "p25": 71.0,
+      "p75": 84.0,
+      "std": 8.780597296818076
+    },
+    "pool_l45_100ms": {
+      "count": 60,
+      "max": 95.0,
+      "mean": 74.9,
+      "median": 75.0,
+      "min": 58.0,
+      "p25": 70.0,
+      "p75": 81.0,
+      "std": 7.986864215698174
+    },
+    "pool_peer_500ms": {
+      "count": 60,
+      "max": 122.0,
+      "mean": 94.81666666666666,
+      "median": 94.0,
+      "min": 76.0,
+      "p25": 89.75,
+      "p75": 98.0,
+      "std": 9.363923085734717
+    }
+  },
+  "seat_policy": "round_robin",
+  "seed": 20260604,
+  "snapshot_diagnostics": {
+    "feature_distributions": {
+      "blocking_exposure_legal_moves_opp_sum": {
+        "max": 2323.0,
+        "mean": 691.534375,
+        "min": 0.0,
+        "p25": 96.0,
+        "p75": 1310.5,
+        "std": 650.9859964456681
+      },
+      "center_proximity": {
+        "max": 9.0,
+        "mean": 2.675520833333333,
+        "min": 0.0,
+        "p25": 0.0,
+        "p75": 4.0,
+        "std": 3.003890661081498
+      },
+      "corner_differential": {
+        "max": -7.0,
+        "mean": -35.76354166666667,
+        "min": -76.0,
+        "p25": -45.0,
+        "p75": -26.0,
+        "std": 14.309245407192648
+      },
+      "deadzone_count": {
+        "max": 60.0,
+        "mean": 16.34375,
+        "min": 0.0,
+        "p25": 3.0,
+        "p75": 28.0,
+        "std": 14.882895751079491
+      },
+      "deadzone_fraction": {
+        "max": 0.15,
+        "mean": 0.040859375,
+        "min": 0.0,
+        "p25": 0.0075,
+        "p75": 0.07,
+        "std": 0.03720723937769873
+      },
+      "frontier_size": {
+        "max": 36.0,
+        "mean": 17.881770833333334,
+        "min": 4.0,
+        "p25": 12.0,
+        "p75": 24.0,
+        "std": 7.154622703596324
+      },
+      "mobility_bucket_1": {
+        "max": 27.0,
+        "mean": 12.2296875,
+        "min": 0.0,
+        "p25": 9.0,
+        "p75": 17.0,
+        "std": 6.502792181235977
+      },
+      "mobility_bucket_2": {
+        "max": 33.0,
+        "mean": 12.791145833333333,
+        "min": 0.0,
+        "p25": 6.0,
+        "p75": 19.0,
+        "std": 8.48403063233504
+      },
+      "mobility_bucket_3": {
+        "max": 87.75,
+        "mean": 27.053125,
+        "min": 0.0,
+        "p25": 4.5,
+        "p75": 42.75,
+        "std": 22.95776756997237
+      },
+      "mobility_bucket_4": {
+        "max": 311.5,
+        "mean": 81.22005208333333,
+        "min": 0.0,
+        "p25": 3.875,
+        "p75": 153.5,
+        "std": 83.07590742681631
+      },
+      "mobility_bucket_5": {
+        "max": 411.875,
+        "mean": 91.701171875,
+        "min": 0.0,
+        "p25": 0.0,
+        "p75": 189.375,
+        "std": 113.63543541902543
+      },
+      "mobility_total_cell_weighted": {
+        "max": 848.375,
+        "mean": 224.99518229166668,
+        "min": 0.0,
+        "p25": 27.1875,
+        "p75": 415.3125,
+        "std": 221.7471951293933
+      },
+      "mobility_total_orientation_normalized": {
+        "max": 217.25,
+        "mean": 66.28821614583333,
+        "min": 0.0,
+        "p25": 18.5,
+        "p75": 113.5,
+        "std": 55.10686909062707
+      },
+      "mobility_total_placements": {
+        "max": 881.0,
+        "mean": 230.51145833333334,
+        "min": 0.0,
+        "p25": 26.0,
+        "p75": 420.0,
+        "std": 231.56733153744563
+      },
+      "opponent_adjacency": {
+        "max": 73.0,
+        "mean": 20.5734375,
+        "min": 0.0,
+        "p25": 3.0,
+        "p75": 35.0,
+        "std": 18.52101347839602
+      },
+      "phase_board_occupancy": {
+        "max": 0.7325,
+        "mean": 0.4243125,
+        "min": 0.1,
+        "p25": 0.269375,
+        "p75": 0.59125,
+        "std": 0.20049527542750226
+      },
+      "phase_piece_usage_ratio": {
+        "max": 0.9047619047619048,
+        "mean": 0.4285714285714286,
+        "min": 0.09523809523809523,
+        "p25": 0.26190476190476186,
+        "p75": 0.5714285714285714,
+        "std": 0.21910907522983286
+      },
+      "phase_ply": {
+        "max": 64.0,
+        "mean": 36.0,
+        "min": 8.0,
+        "p25": 22.0,
+        "p75": 50.0,
+        "std": 18.33030277982336
+      },
+      "phase_progress_placement_ratio": {
+        "max": 0.0256,
+        "mean": 0.014400000000000001,
+        "min": 0.0032,
+        "p25": 0.008799999999999999,
+        "p75": 0.019999999999999997,
+        "std": 0.007332121111929344
+      },
+      "phase_progress_turn_ratio": {
+        "max": 0.03,
+        "mean": 0.014519166666666668,
+        "min": 0.0032,
+        "p25": 0.008799999999999999,
+        "p75": 0.019999999999999997,
+        "std": 0.007521533485415207
+      },
+      "phase_turn_index": {
+        "max": 75.0,
+        "mean": 36.297916666666666,
+        "min": 8.0,
+        "p25": 22.0,
+        "p75": 50.0,
+        "std": 18.803833713538015
+      },
+      "pieces_remaining_count": {
+        "max": 19.0,
+        "mean": 12.0,
+        "min": 2.0,
+        "p25": 9.0,
+        "p75": 15.5,
+        "std": 4.6012905798264905
+      },
+      "pieces_used_count": {
+        "max": 19.0,
+        "mean": 9.0,
+        "min": 2.0,
+        "p25": 5.5,
+        "p75": 12.0,
+        "std": 4.6012905798264905
+      },
+      "player_board_occupancy": {
+        "max": 0.2125,
+        "mean": 0.10607812500000001,
+        "min": 0.025,
+        "p25": 0.065,
+        "p75": 0.1475,
+        "std": 0.05042975870605611
+      },
+      "remaining_key_piece_17": {
+        "max": 1.0,
+        "mean": 0.4171875,
+        "min": 0.0,
+        "p25": 0.0,
+        "p75": 1.0,
+        "std": 0.4930944025678551
+      },
+      "remaining_key_piece_19": {
+        "max": 1.0,
+        "mean": 0.11302083333333333,
+        "min": 0.0,
+        "p25": 0.0,
+        "p75": 0.0,
+        "std": 0.3166182631592376
+      },
+      "remaining_key_piece_20": {
+        "max": 1.0,
+        "mean": 0.121875,
+        "min": 0.0,
+        "p25": 0.0,
+        "p75": 0.0,
+        "std": 0.3271413828530411
+      },
+      "remaining_size_1_count": {
+        "max": 1.0,
+        "mean": 0.8692708333333333,
+        "min": 0.0,
+        "p25": 1.0,
+        "p75": 1.0,
+        "std": 0.33710391817554647
+      },
+      "remaining_size_2_count": {
+        "max": 1.0,
+        "mean": 0.8895833333333333,
+        "min": 0.0,
+        "p25": 1.0,
+        "p75": 1.0,
+        "std": 0.31340840191176894
+      },
+      "remaining_size_3_count": {
+        "max": 2.0,
+        "mean": 1.7927083333333333,
+        "min": 0.0,
+        "p25": 2.0,
+        "p75": 2.0,
+        "std": 0.4795277172356382
+      },
+      "remaining_size_4_count": {
+        "max": 6.0,
+        "mean": 4.7,
+        "min": 0.0,
+        "p25": 3.75,
+        "p75": 6.0,
+        "std": 1.5527529316239166
+      },
+      "remaining_size_5_count": {
+        "max": 9.0,
+        "mean": 3.7484375,
+        "min": 0.0,
+        "p25": 1.0,
+        "p75": 7.0,
+        "std": 2.922389799791788
+      },
+      "remaining_squares": {
+        "max": 78.0,
+        "mean": 45.56875,
+        "min": 3.0,
+        "p25": 29.0,
+        "p75": 62.0,
+        "std": 20.171903482422444
+      },
+      "utility_frontier_plus_mobility": {
+        "max": 864.375,
+        "mean": 242.876953125,
+        "min": 4.0,
+        "p25": 48.75,
+        "p75": 431.09375,
+        "std": 219.5145624872568
+      }
+    },
+    "high_correlation_pairs": [
+      {
+        "correlation": -1.0,
+        "feature_a": "pieces_used_count",
+        "feature_b": "pieces_remaining_count"
+      },
+      {
+        "correlation": 0.9999999999999996,
+        "feature_a": "phase_turn_index",
+        "feature_b": "phase_progress_turn_ratio"
+      },
+      {
+        "correlation": -0.999999999999999,
+        "feature_a": "remaining_squares",
+        "feature_b": "player_board_occupancy"
+      },
+      {
+        "correlation": 0.9999999999999987,
+        "feature_a": "pieces_used_count",
+        "feature_b": "phase_piece_usage_ratio"
+      },
+      {
+        "correlation": -0.9999999999999987,
+        "feature_a": "pieces_remaining_count",
+        "feature_b": "phase_piece_usage_ratio"
+      },
+      {
+        "correlation": 0.9999999999999982,
+        "feature_a": "phase_ply",
+        "feature_b": "phase_progress_placement_ratio"
+      },
+      {
+        "correlation": 0.999999999999997,
+        "feature_a": "deadzone_count",
+        "feature_b": "deadzone_fraction"
+      },
+      {
+        "correlation": 0.9995253998221796,
+        "feature_a": "mobility_total_cell_weighted",
+        "feature_b": "utility_frontier_plus_mobility"
+      },
+      {
+        "correlation": 0.9983415570538863,
+        "feature_a": "phase_ply",
+        "feature_b": "phase_turn_index"
+      },
+      {
+        "correlation": 0.998341557053886,
+        "feature_a": "phase_turn_index",
+        "feature_b": "phase_progress_placement_ratio"
+      },
+      {
+        "correlation": 0.9983415570538849,
+        "feature_a": "phase_ply",
+        "feature_b": "phase_progress_turn_ratio"
+      },
+      {
+        "correlation": 0.9983415570538838,
+        "feature_a": "phase_progress_turn_ratio",
+        "feature_b": "phase_progress_placement_ratio"
+      },
+      {
+        "correlation": 0.9965338924633739,
+        "feature_a": "mobility_total_placements",
+        "feature_b": "mobility_total_cell_weighted"
+      },
+      {
+        "correlation": 0.9960847456107055,
+        "feature_a": "phase_board_occupancy",
+        "feature_b": "phase_progress_placement_ratio"
+      },
+      {
+        "correlation": 0.996084745610705,
+        "feature_a": "phase_ply",
+        "feature_b": "phase_board_occupancy"
+      },
+      {
+        "correlation": 0.9959326878957171,
+        "feature_a": "phase_piece_usage_ratio",
+        "feature_b": "phase_progress_placement_ratio"
+      },
+      {
+        "correlation": 0.9959326878957164,
+        "feature_a": "pieces_used_count",
+        "feature_b": "phase_ply"
+      },
+      {
+        "correlation": -0.9959326878957164,
+        "feature_a": "pieces_remaining_count",
+        "feature_b": "phase_ply"
+      },
+      {
+        "correlation": 0.9959326878957151,
+        "feature_a": "pieces_used_count",
+        "feature_b": "phase_progress_placement_ratio"
+      },
+      {
+        "correlation": -0.9959326878957151,
+        "feature_a": "pieces_remaining_count",
+        "feature_b": "phase_progress_placement_ratio"
+      },
+      {
+        "correlation": 0.995932687895715,
+        "feature_a": "phase_ply",
+        "feature_b": "phase_piece_usage_ratio"
+      },
+      {
+        "correlation": 0.9952420722251747,
+        "feature_a": "mobility_total_placements",
+        "feature_b": "utility_frontier_plus_mobility"
+      },
+      {
+        "correlation": 0.9942862585472984,
+        "feature_a": "phase_piece_usage_ratio",
+        "feature_b": "player_board_occupancy"
+      },
+      {
+        "correlation": -0.9942862585472977,
+        "feature_a": "pieces_used_count",
+        "feature_b": "remaining_squares"
+      },
+      {
+        "correlation": 0.9942862585472977,
+        "feature_a": "pieces_remaining_count",
+        "feature_b": "remaining_squares"
+      },
+      {
+        "correlation": -0.9942862585472958,
+        "feature_a": "remaining_squares",
+        "feature_b": "phase_piece_usage_ratio"
+      },
+      {
+        "correlation": 0.9942862585472956,
+        "feature_a": "pieces_used_count",
+        "feature_b": "player_board_occupancy"
+      },
+      {
+        "correlation": -0.9942862585472956,
+        "feature_a": "pieces_remaining_count",
+        "feature_b": "player_board_occupancy"
+      },
+      {
+        "correlation": 0.9942809903546727,
+        "feature_a": "pieces_used_count",
+        "feature_b": "phase_turn_index"
+      },
+      {
+        "correlation": -0.9942809903546727,
+        "feature_a": "pieces_remaining_count",
+        "feature_b": "phase_turn_index"
+      },
+      {
+        "correlation": 0.9942809903546717,
+        "feature_a": "pieces_used_count",
+        "feature_b": "phase_progress_turn_ratio"
+      },
+      {
+        "correlation": -0.9942809903546717,
+        "feature_a": "pieces_remaining_count",
+        "feature_b": "phase_progress_turn_ratio"
+      },
+      {
+        "correlation": 0.9942809903546717,
+        "feature_a": "phase_turn_index",
+        "feature_b": "phase_piece_usage_ratio"
+      },
+      {
+        "correlation": 0.9942809903546703,
+        "feature_a": "phase_piece_usage_ratio",
+        "feature_b": "phase_progress_turn_ratio"
+      },
+      {
+        "correlation": -0.9939333469556368,
+        "feature_a": "remaining_squares",
+        "feature_b": "phase_board_occupancy"
+      },
+      {
+        "correlation": 0.9939333469556355,
+        "feature_a": "phase_board_occupancy",
+        "feature_b": "player_board_occupancy"
+      },
+      {
+        "correlation": 0.9932419890310009,
+        "feature_a": "mobility_total_orientation_normalized",
+        "feature_b": "utility_frontier_plus_mobility"
+      },
+      {
+        "correlation": 0.9920333580679933,
+        "feature_a": "phase_board_occupancy",
+        "feature_b": "phase_piece_usage_ratio"
+      },
+      {
+        "correlation": 0.9920333580679909,
+        "feature_a": "pieces_used_count",
+        "feature_b": "phase_board_occupancy"
+      },
+      {
+        "correlation": -0.9920333580679909,
+        "feature_a": "pieces_remaining_count",
+        "feature_b": "phase_board_occupancy"
+      },
+      {
+        "correlation": 0.9918422920504827,
+        "feature_a": "phase_board_occupancy",
+        "feature_b": "phase_progress_turn_ratio"
+      },
+      {
+        "correlation": 0.9918422920504816,
+        "feature_a": "phase_turn_index",
+        "feature_b": "phase_board_occupancy"
+      },
+      {
+        "correlation": 0.9906999475134085,
+        "feature_a": "mobility_total_orientation_normalized",
+        "feature_b": "mobility_total_cell_weighted"
+      },
+      {
+        "correlation": -0.9900418450563069,
+        "feature_a": "remaining_squares",
+        "feature_b": "phase_progress_placement_ratio"
+      },
+      {
+        "correlation": 0.9900418450563048,
+        "feature_a": "phase_progress_placement_ratio",
+        "feature_b": "player_board_occupancy"
+      },
+      {
+        "correlation": -0.9900418450563039,
+        "feature_a": "remaining_squares",
+        "feature_b": "phase_ply"
+      },
+      {
+        "correlation": 0.9900418450563038,
+        "feature_a": "phase_ply",
+        "feature_b": "player_board_occupancy"
+      },
+      {
+        "correlation": 0.9858542697741587,
+        "feature_a": "mobility_bucket_4",
+        "feature_b": "utility_frontier_plus_mobility"
+      },
+      {
+        "correlation": 0.9858251289898883,
+        "feature_a": "phase_progress_turn_ratio",
+        "feature_b": "player_board_occupancy"
+      },
+      {
+        "correlation": -0.9858251289898871,
+        "feature_a": "remaining_squares",
+        "feature_b": "phase_progress_turn_ratio"
+      },
+      {
+        "correlation": -0.9858251289898864,
+        "feature_a": "remaining_squares",
+        "feature_b": "phase_turn_index"
+      },
+      {
+        "correlation": 0.9858251289898862,
+        "feature_a": "phase_turn_index",
+        "feature_b": "player_board_occupancy"
+      },
+      {
+        "correlation": 0.9857436168061469,
+        "feature_a": "mobility_total_orientation_normalized",
+        "feature_b": "mobility_bucket_4"
+      },
+      {
+        "correlation": 0.9851007591644487,
+        "feature_a": "mobility_total_cell_weighted",
+        "feature_b": "mobility_bucket_4"
+      },
+      {
+        "correlation": 0.9832390032932741,
+        "feature_a": "mobility_total_placements",
+        "feature_b": "mobility_total_orientation_normalized"
+      },
+      {
+        "correlation": 0.9775044803780539,
+        "feature_a": "mobility_total_placements",
+        "feature_b": "mobility_bucket_4"
+      },
+      {
+        "correlation": 0.9743753867650171,
+        "feature_a": "mobility_total_placements",
+        "feature_b": "mobility_bucket_5"
+      },
+      {
+        "correlation": 0.9696663317948171,
+        "feature_a": "mobility_total_cell_weighted",
+        "feature_b": "mobility_bucket_5"
+      },
+      {
+        "correlation": 0.9661631675204716,
+        "feature_a": "mobility_total_orientation_normalized",
+        "feature_b": "mobility_bucket_3"
+      },
+      {
+        "correlation": 0.9648057055848474,
+        "feature_a": "mobility_bucket_5",
+        "feature_b": "utility_frontier_plus_mobility"
+      },
+      {
+        "correlation": -0.9588404944800168,
+        "feature_a": "remaining_size_5_count",
+        "feature_b": "player_board_occupancy"
+      },
+      {
+        "correlation": 0.9588404944800151,
+        "feature_a": "remaining_squares",
+        "feature_b": "remaining_size_5_count"
+      },
+      {
+        "correlation": 0.9537348033832153,
+        "feature_a": "mobility_bucket_3",
+        "feature_b": "mobility_bucket_4"
+      },
+      {
+        "correlation": -0.9530993781327197,
+        "feature_a": "remaining_size_5_count",
+        "feature_b": "phase_board_occupancy"
+      }
+    ],
+    "winner_lead_by_checkpoint": {
+      "0": {
+        "gap": 65.44584517045456,
+        "non_winner_mean": 424.26704545454544,
+        "winner_mean": 489.712890625
+      },
+      "1": {
+        "gap": 134.91779119318187,
+        "non_winner_mean": 562.4083806818181,
+        "winner_mean": 697.326171875
+      },
+      "2": {
+        "gap": 99.44833096590907,
+        "non_winner_mean": 377.96377840909093,
+        "winner_mean": 477.412109375
+      },
+      "3": {
+        "gap": 75.8993252840909,
+        "non_winner_mean": 208.4190340909091,
+        "winner_mean": 284.318359375
+      },
+      "4": {
+        "gap": 64.59943181818181,
+        "non_winner_mean": 108.25994318181819,
+        "winner_mean": 172.859375
+      },
+      "5": {
+        "gap": 47.70525568181818,
+        "non_winner_mean": 60.86505681818182,
+        "winner_mean": 108.5703125
+      },
+      "6": {
+        "gap": 29.299538352272727,
+        "non_winner_mean": 36.15553977272727,
+        "winner_mean": 65.455078125
+      },
+      "7": {
+        "gap": 17.72265625,
+        "non_winner_mean": 22.0,
+        "winner_mean": 39.72265625
+      }
+    }
+  },
+  "snapshots": {
+    "enabled": true,
+    "expected_rows_max": 1920,
+    "parquet_error": null,
+    "parquet_written": true,
+    "path_csv": "arena_runs/20260629_225103_bc53ce62/snapshots.csv",
+    "path_parquet": "arena_runs/20260629_225103_bc53ce62/snapshots.parquet",
+    "rows": 1920
+  },
+  "time_sim_efficiency": {
+    "champ_v3": {
+      "avg_budget_utilization": 5.510767457776157,
+      "avg_simulations_per_move": 250.0,
+      "avg_time_ms_per_move": 2755.3837288880786,
+      "configured_thinking_time_ms": 500.0,
+      "move_time_ms_max": 8225.36826133728,
+      "move_time_ms_p50": 2832.5161933898926,
+      "move_time_ms_p95": 4713.1072998046875,
+      "moves": 1139.0,
+      "score_per_second": 35.69375799416826,
+      "simulations_per_second": 90.73146414379323,
+      "total_simulations": 284750.0,
+      "total_time_ms": 3138382.0672035217,
+      "win_rate_per_second": 0.19658483897821866
+    },
+    "pool_heuristic": {
+      "avg_budget_utilization": null,
+      "avg_simulations_per_move": null,
+      "avg_time_ms_per_move": 22.36708956670797,
+      "configured_thinking_time_ms": null,
+      "move_time_ms_max": 95.6811590003781,
+      "move_time_ms_p50": 11.347653999109752,
+      "move_time_ms_p95": 65.91863304565776,
+      "moves": 974.0,
+      "score_per_second": 3458.950992972378,
+      "simulations_per_second": null,
+      "total_simulations": null,
+      "total_time_ms": 21785.545237973565,
+      "win_rate_per_second": 2.11123678301488
+    },
+    "pool_l45_100ms": {
+      "avg_budget_utilization": 10.407016319445413,
+      "avg_simulations_per_move": 50.0,
+      "avg_time_ms_per_move": 1040.7016319445413,
+      "configured_thinking_time_ms": 100.0,
+      "move_time_ms_max": 2166.977643966675,
+      "move_time_ms_p50": 963.6808633804321,
+      "move_time_ms_p95": 1917.527902126312,
+      "moves": 962.0,
+      "score_per_second": 71.97067603329309,
+      "simulations_per_second": 48.04451003557615,
+      "total_simulations": 48100.0,
+      "total_time_ms": 1001154.9699306488,
+      "win_rate_per_second": 0.02135311557136718
+    },
+    "pool_peer_500ms": {
+      "avg_budget_utilization": 5.607324357976251,
+      "avg_simulations_per_move": 250.0,
+      "avg_time_ms_per_move": 2803.662178988125,
+      "configured_thinking_time_ms": 500.0,
+      "move_time_ms_max": 11144.814729690552,
+      "move_time_ms_p50": 2872.2050189971924,
+      "move_time_ms_p95": 4762.43063211441,
+      "moves": 1122.0,
+      "score_per_second": 33.81886283492511,
+      "simulations_per_second": 89.16908815677213,
+      "total_simulations": 280500.0,
+      "total_time_ms": 3145708.9648246765,
+      "win_rate_per_second": 0.13870747046609
+    }
+  },
+  "trueskill_ratings": {
+    "converged": false,
+    "leaderboard": [
+      {
+        "agent_id": "pool_peer_500ms",
+        "conservative": 28.245887896368814,
+        "games_played": 60,
+        "mu": 49.30341708523087,
+        "rank": 1,
+        "sigma": 7.019176396287352
+      },
+      {
+        "agent_id": "champ_v3",
+        "conservative": 28.152670750780306,
+        "games_played": 60,
+        "mu": 49.45775876629183,
+        "rank": 2,
+        "sigma": 7.101696005170509
+      },
+      {
+        "agent_id": "pool_heuristic",
+        "conservative": -12.076387772818194,
+        "games_played": 60,
+        "mu": 8.297483970658607,
+        "rank": 3,
+        "sigma": 6.7912905811589335
+      },
+      {
+        "agent_id": "pool_l45_100ms",
+        "conservative": -25.770161513019826,
+        "games_played": 60,
+        "mu": -4.989043772481009,
+        "rank": 4,
+        "sigma": 6.927039246846273
+      }
+    ]
+  },
+  "win_stats": {
+    "champ_v3": {
+      "games_played": 60.0,
+      "outright_wins": 32.0,
+      "shared_wins": 1.0,
+      "win_points": 32.5,
+      "win_rate": 0.5416666666666666
+    },
+    "pool_heuristic": {
+      "games_played": 60.0,
+      "outright_wins": 2.0,
+      "shared_wins": 2.0,
+      "win_points": 2.8333333333333335,
+      "win_rate": 0.04722222222222223
+    },
+    "pool_l45_100ms": {
+      "games_played": 60.0,
+      "outright_wins": 1.0,
+      "shared_wins": 1.0,
+      "win_points": 1.3333333333333333,
+      "win_rate": 0.02222222222222222
+    },
+    "pool_peer_500ms": {
+      "games_played": 60.0,
+      "outright_wins": 22.0,
+      "shared_wins": 3.0,
+      "win_points": 23.333333333333332,
+      "win_rate": 0.3888888888888889
+    }
+  },
+  "wins_by_seat": {
+    "champ_v3": {
+      "0": {
+        "games": 15,
+        "win_points": 8.0,
+        "win_rate": 0.5333333333333333
+      },
+      "1": {
+        "games": 15,
+        "win_points": 6.5,
+        "win_rate": 0.43333333333333335
+      },
+      "2": {
+        "games": 15,
+        "win_points": 10.0,
+        "win_rate": 0.6666666666666666
+      },
+      "3": {
+        "games": 15,
+        "win_points": 8.0,
+        "win_rate": 0.5333333333333333
+      }
+    },
+    "pool_heuristic": {
+      "0": {
+        "games": 15,
+        "win_points": 1.0,
+        "win_rate": 0.06666666666666667
+      },
+      "1": {
+        "games": 15,
+        "win_points": 1.0,
+        "win_rate": 0.06666666666666667
+      },
+      "2": {
+        "games": 15,
+        "win_points": 0.8333333333333333,
+        "win_rate": 0.05555555555555555
+      },
+      "3": {
+        "games": 15,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      }
+    },
+    "pool_l45_100ms": {
+      "0": {
+        "games": 15,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "1": {
+        "games": 15,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "2": {
+        "games": 15,
+        "win_points": 1.0,
+        "win_rate": 0.06666666666666667
+      },
+      "3": {
+        "games": 15,
+        "win_points": 0.3333333333333333,
+        "win_rate": 0.02222222222222222
+      }
+    },
+    "pool_peer_500ms": {
+      "0": {
+        "games": 15,
+        "win_points": 7.333333333333333,
+        "win_rate": 0.4888888888888889
+      },
+      "1": {
+        "games": 15,
+        "win_points": 5.0,
+        "win_rate": 0.3333333333333333
+      },
+      "2": {
+        "games": 15,
+        "win_points": 6.0,
+        "win_rate": 0.4
+      },
+      "3": {
+        "games": 15,
+        "win_points": 5.0,
+        "win_rate": 0.3333333333333333
+      }
+    }
+  }
+}
