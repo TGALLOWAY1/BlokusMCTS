@@ -5,6 +5,33 @@ Chronological log of documentation/audit passes. Newest first.
 ---
 
 # Audit Entry
+Date: 2026-06-30
+Scope: Training-failure audit follow-up implementation (Phase 8)
+Agent: Claude Code (blokus-mcts-audit-followup session)
+Summary: Implemented the four remaining recommended fixes from the 2026-06-29
+training-failure audit (PR #180 had landed the promotion-failure reporting fix,
+`benchmark_v2` MCTS anchors, and the `audit_training_state` diagnostic):
+- #5 Fixed-champion measurement-drift reporting — `champion_status` block on the
+  comparison record; drift framing in the markdown trajectory, email subject, and
+  email verdict when `last_promoted_generation` is null.
+- #3 History schema versioning — `schema_version`/`kind` stamps + structural
+  `classify_history_row`; diagnostic validates legacy vs approach rows separately.
+- #2 Per-game play-quality diagnostics — `play_quality` block in each arena game
+  record (legal-move counts, pass/invalid rates, occupancy, piece usage by size,
+  score distribution).
+- #4 Two-stage promotion — opt-in `--two-stage-promotion`: 20-game screen then a
+  60-game confirmation of the leading candidate before promotion.
+Files changed: `training/state_store.py`, `training/nightly_run.py`,
+`training/evaluation/{report,head_to_head,__init__}.py`, `training/email_summary.py`,
+`training/diagnostics/audit_training_state.py`, `analytics/tournament/arena_runner.py`,
+`FEATURES.md`, `docs/06-history/CHANGELOG_NOTES.md`; tests added/updated under
+`tests/test_training_{promotion_gate,email,dryrun}.py`, `tests/test_arena_play_quality.py`.
+Findings: the diagnostic on real state now reports 0 false "missing result-like
+fields" (123 legacy + 8 approach rows distinguished). 132 related tests pass.
+
+---
+
+# Audit Entry
 Date: 2026-05-28
 Scope: Repository-wide documentation infrastructure + audit (this docs pass)
 Agent: Claude Code (docs-infrastructure session)

@@ -30,8 +30,17 @@ def build_comparison_record(
     pool: Optional[Dict[str, Any]],
     trajectory: Optional[Dict[str, Any]],
     seeds: List[int],
+    generation: Optional[int] = None,
+    last_promoted_generation: Optional[int] = None,
+    confirmation: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Assemble the comparison record (one row per attempted approach)."""
+    """Assemble the comparison record (one row per attempted approach).
+
+    ``champion_status`` records whether the champion has *ever* been promoted.
+    When it has not (``last_promoted_generation is None``) the agent under
+    measurement is byte-for-byte fixed, so any Elo movement is rating *drift* of a
+    fixed agent — not a learned strength change. Downstream reports key off
+    ``measurement_drift`` to frame the Elo headline honestly (audit follow-up #5)."""
     rows: List[Dict[str, Any]] = []
     for cand in candidates:
         ce = evals_by_name.get(cand.name)
@@ -53,6 +62,7 @@ def build_comparison_record(
             "runtime_s": getattr(ce, "runtime_s", None) if ce else None,
             "metrics": cand.metrics,
         })
+    ever_promoted = last_promoted_generation is not None
     return {
         "run_id": run_id,
         "generated_at": now_iso,
@@ -60,6 +70,16 @@ def build_comparison_record(
         "pool": pool or {},
         "winner": winner_name,
         "trajectory": trajectory or {},
+        "confirmation": confirmation or {},
+        "champion_status": {
+            "generation": generation,
+            "last_promoted_generation": last_promoted_generation,
+            "ever_promoted": ever_promoted,
+            "promoted_this_run": bool(winner_name),
+            # Fixed champion (never promoted) -> Elo movement is measurement drift,
+            # not a strength change. A promotion this run flips it to a real change.
+            "measurement_drift": (not ever_promoted) and not bool(winner_name),
+        },
         "rows": rows,
     }
 
@@ -81,6 +101,13 @@ def render_markdown(record: Dict[str, Any]) -> str:
     lines.append("")
     winner = record.get("winner")
     lines.append(f"**Promoted this run:** {winner if winner else 'none'}")
+    conf = record.get("confirmation") or {}
+    if conf:
+        verdict = "passed ✅" if conf.get("passed") else "failed ❌ (held)"
+        lines.append(f"**Two-stage promotion:** confirmation {verdict} for "
+                     f"`{conf.get('candidate')}` — screen {conf.get('screen_games')} games → "
+                     f"confirm {conf.get('confirm_games')}/{conf.get('confirm_min_games')} games. "
+                     f"{conf.get('reason', '')}")
     pool = record.get("pool") or {}
     if pool:
         lines.append(f"**Benchmark pool:** {pool.get('version')} — opponents "
@@ -89,11 +116,24 @@ def render_markdown(record: Dict[str, Any]) -> str:
 
     # Trajectory (noise-aware).
     traj = record.get("trajectory") or {}
+    status = record.get("champion_status") or {}
+    drift = bool(status.get("measurement_drift"))
     if traj:
         noise = traj.get("noise", {})
         sig = "yes" if traj.get("significant") else "no (within noise)"
-        lines.append("## Champion Elo trajectory")
-        lines.append("")
+        if drift:
+            lines.append("## Champion Elo trajectory — ⚠️ fixed-champion measurement drift")
+            lines.append("")
+            lines.append("> The champion has **never been promoted** "
+                         f"(`last_promoted_generation` = {status.get('last_promoted_generation')}), "
+                         "so the agent under measurement is byte-for-byte fixed. The Elo numbers "
+                         "below are rating **variance of an unchanged agent**, not a learned "
+                         "strength change. Read them as measurement deltas until a promotion "
+                         "actually changes the champion.")
+            lines.append("")
+        else:
+            lines.append("## Champion Elo trajectory")
+            lines.append("")
         lines.append(f"- Current: **{_fmt(traj.get('current'))}** · Best: "
                      f"{_fmt(traj.get('best'))} · Gap to best: {_fmt(traj.get('gap_to_best'))}")
         lines.append(f"- Rolling avg: {_fmt(traj.get('rolling_last'))} · "

@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterable, List
 
 from analytics.tournament.elo import EloTracker
 from analytics.tournament.trueskill_rating import TrueSkillTracker
-from training import TrainingPaths, ratings_db
+from training import TrainingPaths, ratings_db, state_store
 from training.evaluation.benchmark_pool import build_benchmark_pool
 from training.evaluation.head_to_head import EVAL_MIN_SEEDS, EVAL_MIN_TOTAL_GAMES
 from training.evaluation.rating_analysis import trend_per_step
@@ -83,24 +83,41 @@ def benchmark_pool_health(state: Dict[str, Any], seeds: List[int]) -> Dict[str, 
 
 
 def validate_history(rows: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    """Validate history rows by schema kind so legacy and multi-agent rows are not
+    judged by the same fields.
+
+    Only *approach-comparison* rows are expected to carry result-like fields
+    (``winner``/``promoted``/``champion_elo``); legacy generation rows are a
+    different (valid) shape and must not be flagged as "missing result-like
+    fields" — that false positive is exactly what the audit (#3) called out.
+    """
+    rows = list(rows)
+    by_kind: Counter[str] = Counter()
     missing_result = 0
     malformed = 0
     duplicates = 0
     seen = set()
     by_candidate: Counter[str] = Counter()
-    for i, r in enumerate(rows):
-        if r.get("_malformed"):
+    for r in rows:
+        kind = state_store.classify_history_row(r)
+        by_kind[kind] += 1
+        if kind == state_store.HISTORY_KIND_MALFORMED:
             malformed += 1
             continue
         key = (r.get("run_id"), r.get("generation"), r.get("timestamp"))
         if key in seen:
             duplicates += 1
         seen.add(key)
-        if "winner" not in r and "promoted" not in r and "champion_elo" not in r:
-            missing_result += 1
-        for c in r.get("candidates_created") or []:
-            by_candidate[str(c)] += 1
-    return {"rows": len(list(rows)) if not isinstance(rows, list) else len(rows),
+        if kind == state_store.HISTORY_KIND_APPROACH:
+            if "winner" not in r and "promoted" not in r and "champion_elo" not in r:
+                missing_result += 1
+            for c in r.get("candidates_created") or []:
+                by_candidate[str(c)] += 1
+    return {"rows": len(rows),
+            "by_kind": dict(by_kind),
+            "approach_comparison_rows": by_kind.get(state_store.HISTORY_KIND_APPROACH, 0),
+            "legacy_rows": by_kind.get(state_store.HISTORY_KIND_LEGACY, 0),
+            "unknown_rows": by_kind.get(state_store.HISTORY_KIND_UNKNOWN, 0),
             "malformed_rows": malformed, "duplicate_keys": duplicates,
             "missing_result_like_fields": missing_result,
             "created_counts": dict(by_candidate)}
@@ -192,8 +209,11 @@ def format_markdown(summary: Dict[str, Any]) -> str:
               f"- Stable MCTS anchors: {pool['mcts_anchor_count']}", ""]
     hv = summary["history_validation"]
     lines += ["## State/history validation", f"- History rows: {hv['rows']}",
+              f"- By kind: {hv.get('by_kind')}",
+              f"- Approach-comparison rows: {hv.get('approach_comparison_rows')} · "
+              f"legacy rows: {hv.get('legacy_rows')} · unknown rows: {hv.get('unknown_rows')}",
               f"- Malformed rows: {hv['malformed_rows']}", f"- Duplicate keys: {hv['duplicate_keys']}",
-              f"- Missing result-like fields: {hv['missing_result_like_fields']}"]
+              f"- Missing result-like fields (approach rows only): {hv['missing_result_like_fields']}"]
     return "\n".join(lines) + "\n"
 
 

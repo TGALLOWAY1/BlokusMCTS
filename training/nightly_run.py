@@ -46,13 +46,15 @@ from training.approaches.base import (
     write_candidate_artifact,
 )
 from training.evaluation import (
+    EVAL_CONFIRM_TOTAL_GAMES,
     build_benchmark_pool,
+    confirm_winner as ht_confirm_winner,
     evaluate_candidates,
     select_winner,
     summarize_trajectory,
 )
 from training.evaluation import report as approach_report
-from training.evaluation.promotion_gate import GateThresholds
+from training.evaluation.promotion_gate import GateThresholds, evaluate_gate
 
 # Fraction of the wall-clock budget spent on self-play generations; the remainder
 # is reserved for candidate evaluation, reports, commit, and email.
@@ -294,6 +296,8 @@ def run(
             agent=CHAMPION_ID,
         )
         state_store.append_jsonl(paths.history_jsonl, {
+            "schema_version": state_store.HISTORY_SCHEMA_VERSION,
+            "kind": state_store.HISTORY_KIND_LEGACY,
             "generation": generation,
             "run_id": run_id,
             "timestamp": _utc_now().isoformat(),
@@ -826,6 +830,7 @@ def run_approaches(
     dry_run: bool,
     verbose: bool,
     td_weights_path: Optional[str] = None,
+    two_stage_promotion: bool = False,
 ) -> Dict[str, Any]:
     """One nightly run as an approach-comparison: generate candidates from each
     approach, evaluate the created ones against a fixed benchmark pool with fixed
@@ -902,6 +907,7 @@ def run_approaches(
     promoted = False
     total_eval_games = 0
     eval_samples: List[tuple] = []
+    confirmation_record = None
 
     if created and time.monotonic() < deadline:
         pool = build_benchmark_pool(state, seeds=seeds)
@@ -915,6 +921,44 @@ def run_approaches(
         gates_by_name = sel["gates"]
         winner = sel["winner"]
         total_eval_games = len(ht.all_games)
+
+        # Two-stage promotion (audit #4): the screen above identified a leading
+        # candidate over the cheap 20-game gate. Before promoting, re-evaluate ONLY
+        # that candidate over a larger confirmation sample and require it to clear
+        # the gate again at the higher game floor. A lucky short run can no longer
+        # promote on its own; the extra cost is bounded to one candidate and the
+        # remaining wall-clock budget.
+        if two_stage_promotion and winner is not None and time.monotonic() < deadline:
+            wcand0 = next((c for c in created if c.name == winner.name), None)
+            if wcand0 is not None and getattr(wcand0, "agent_config", None):
+                conf_eval, conf_games, _conf_dirs = ht_confirm_winner(
+                    state, winner.name, winner.approach, wcand0.agent_config, pool, paths,
+                    seeds=seeds, thinking_time_ms=thinking_time_ms,
+                    deadline=deadline, verbose=verbose,
+                )
+                conf_gate = evaluate_gate(
+                    conf_eval, GateThresholds(min_total_games=EVAL_CONFIRM_TOTAL_GAMES))
+                # The champion plays every confirmation game too — fold them into the
+                # pooled game set so ratings and counts reflect the full evidence.
+                ht.all_games.extend(conf_games)
+                total_eval_games = len(ht.all_games)
+                confirmation_record = {
+                    "candidate": winner.name,
+                    "approach": winner.approach,
+                    "screen_games": int(evals_by_name[winner.name].games),
+                    "confirm_games": int(conf_eval.games),
+                    "confirm_min_games": EVAL_CONFIRM_TOTAL_GAMES,
+                    "passed": bool(conf_gate.passed),
+                    "reason": conf_gate.reason,
+                }
+                if conf_gate.passed:
+                    # Promote on the stronger confirmation evidence.
+                    evals_by_name[winner.name] = conf_eval
+                    gates_by_name[winner.name] = conf_gate
+                    winner = conf_eval
+                else:
+                    # The screen result did not hold up over more games — hold.
+                    winner = None
 
         # A real evaluation ran -> advance the durable generation counter now. A
         # skipped/empty cycle must NOT look like a completed generation.
@@ -980,6 +1024,9 @@ def run_approaches(
         winner_name=(winner.name if winner else None),
         pool=(build_benchmark_pool(state, seeds=seeds).describe()),
         trajectory=traj.to_dict(), seeds=seeds,
+        generation=generation,
+        last_promoted_generation=state.get("last_promoted_generation"),
+        confirmation=confirmation_record,
     )
     state["last_approach_comparison"] = record
     state["last_eval"] = None  # superseded by last_approach_comparison
@@ -1022,6 +1069,8 @@ def run_approaches(
     # completed (an evaluation ran), so a skipped cycle does not fabricate a row.
     if eval_ran:
         state_store.append_jsonl(paths.history_jsonl, {
+            "schema_version": state_store.HISTORY_SCHEMA_VERSION,
+            "kind": state_store.HISTORY_KIND_APPROACH,
             "generation": generation, "run_id": run_id, "timestamp": _utc_now().isoformat(),
             "games": total_eval_games, "approaches": approaches,
             "candidates_created": [c.name for c in created],
@@ -1104,6 +1153,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                    help="Games per arena per seed for approach evaluation (approach mode).")
     p.add_argument("--time-budget-minutes", type=float, default=None,
                    help="Wall-clock budget in minutes for an approach-comparison run.")
+    p.add_argument("--two-stage-promotion", action="store_true",
+                   help="Two-stage promotion: after the cheap 20-game screen picks a "
+                        "leading candidate, re-evaluate ONLY that candidate over a larger "
+                        f"confirmation sample ({EVAL_CONFIRM_TOTAL_GAMES} games) and promote "
+                        "only if it clears the gate again (off by default).")
     p.add_argument("--dry-run", action="store_true", help="Print the plan and exit.")
     p.add_argument("--verbose", action="store_true")
     return p.parse_args(argv)
@@ -1137,6 +1191,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 dry_run=args.dry_run,
                 verbose=args.verbose,
                 td_weights_path=args.td_weights_path,
+                two_stage_promotion=args.two_stage_promotion,
             )
             return 0
         run(
