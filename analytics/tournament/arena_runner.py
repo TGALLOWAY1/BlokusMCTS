@@ -33,6 +33,7 @@ from analytics.winprob.features import (
 from engine.board import Player
 from engine.game import BlokusGame
 from engine.move_generator import LegalMoveGenerator, Move
+from engine.pieces import PieceGenerator
 from mcts.champion_profile import CHALLENGE_CHAMPION_PROFILE, build_mcts_kwargs, load_challenge_champion_profile
 from mcts.mcts_agent import MCTSAgent
 from mcts.state_evaluator import BlokusStateEvaluator
@@ -46,6 +47,21 @@ except Exception:  # pragma: no cover - optional dependency path
 
 
 DEFAULT_OUTPUT_ROOT = "arena_runs"
+
+# Piece size (number of squares) by piece_id, cached — used by the per-game
+# play-quality diagnostics (piece usage by size). Lookup is a dict hit after the
+# first miss, so the per-move overhead is negligible.
+_PIECE_SIZE_CACHE: Dict[int, int] = {}
+
+
+def _piece_size(piece_id: int) -> int:
+    """Number of squares in the piece with this id (0 if unknown), cached."""
+    size = _PIECE_SIZE_CACHE.get(piece_id)
+    if size is None:
+        piece = PieceGenerator.get_piece_by_id(piece_id)
+        size = piece.size if piece else 0
+        _PIECE_SIZE_CACHE[piece_id] = size
+    return size
 
 # Shared evaluator instance for snapshot se_ feature extraction (default weights; raw features only)
 _SE_EVALUATOR = BlokusStateEvaluator()
@@ -685,6 +701,14 @@ def run_single_game(
     truncated = False
     error: Optional[str] = None
 
+    # --- Play-quality accumulators (per-game diagnostics) --------------------
+    # Cheap to collect (the values are already on hand each turn): the legal-move
+    # count is computed for selection, the piece size is a cached dict lookup, and
+    # board occupancy is one array scan at the end.
+    legal_move_counts: List[int] = []  # len(legal_moves) at each turn (0 on a pass)
+    piece_size_usage: Dict[int, int] = {}                 # size -> count (all seats)
+    piece_size_usage_by_agent: Dict[str, Dict[int, int]] = {}  # agent -> {size: count}
+
     snapshot_rows: List[Dict[str, Any]] = []
     checkpoint_hits: Set[int] = set()
     checkpoint_to_index = {
@@ -729,6 +753,7 @@ def run_single_game(
             legal_moves = game.get_legal_moves(current_player)
 
             turn_count += 1
+            legal_move_counts.append(len(legal_moves))
             if not legal_moves:
                 passes += 1
                 game.board._update_current_player()
@@ -784,6 +809,12 @@ def run_single_game(
                 game.board._update_current_player()
                 game._check_game_over()
                 continue
+
+            # Play-quality: record the size of the piece just successfully placed.
+            size = _piece_size(getattr(move, "piece_id", 0))
+            piece_size_usage[size] = piece_size_usage.get(size, 0) + 1
+            agent_usage = piece_size_usage_by_agent.setdefault(agent_name, {})
+            agent_usage[size] = agent_usage.get(size, 0) + 1
 
             # Layer 7: Notify all agents of the move for opponent tracking
             if board_before is not None:
@@ -859,6 +890,34 @@ def run_single_game(
             stats_entry["simulations_per_second"] = None
             stats_entry["total_simulations"] = None
 
+    # --- Play-quality summary (per-game) ------------------------------------
+    grid = game.board.grid
+    total_cells = int(grid.size)
+    occupied_cells = int(np.count_nonzero(grid))
+    score_values = [int(v) for v in scores_by_player.values()]
+    play_quality = {
+        "avg_legal_moves_per_turn": (
+            sum(legal_move_counts) / len(legal_move_counts) if legal_move_counts else 0.0
+        ),
+        "min_legal_moves": min(legal_move_counts) if legal_move_counts else 0,
+        "max_legal_moves": max(legal_move_counts) if legal_move_counts else 0,
+        "pass_rate": (passes / turn_count) if turn_count else 0.0,
+        "invalid_move_count": int(invalid_actions),
+        "game_length_turns": int(turn_count),
+        "board_occupancy": (occupied_cells / total_cells) if total_cells else 0.0,
+        # Piece usage by size: keys are the number of squares (1..5), values are
+        # how many pieces of that size were placed across all seats / per agent.
+        "piece_size_usage": {str(k): v for k, v in sorted(piece_size_usage.items())},
+        "piece_size_usage_by_agent": {
+            agent: {str(k): v for k, v in sorted(usage.items())}
+            for agent, usage in piece_size_usage_by_agent.items()
+        },
+        # Final-score distribution across seats (spread = competitiveness signal).
+        "final_score_min": min(score_values) if score_values else 0,
+        "final_score_max": max(score_values) if score_values else 0,
+        "final_score_spread": (max(score_values) - min(score_values)) if score_values else 0,
+    }
+
     record = {
         "run_id": run_id,
         "game_id": game_id,
@@ -880,6 +939,7 @@ def run_single_game(
         "invalid_actions": int(invalid_actions),
         "duration_sec": float(duration_sec),
         "truncated": bool(truncated),
+        "play_quality": play_quality,
         "agent_move_stats": per_agent_stats,
         "snapshot_checkpoints_hit": sorted(checkpoint_hits),
         "error": error,

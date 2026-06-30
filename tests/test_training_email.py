@@ -120,17 +120,27 @@ def test_run_id_mismatch_is_not_fresh():
 # ---------------------------------------------------------------------------
 
 def test_subject_success_is_multi_agent_branded_with_elo_and_delta():
-    view = es.build_run_view(_history(), _state())
-    subj = es.build_subject(_state(), view, failed=False)
+    # A promoted champion (last_promoted_generation set) => the delta is a real change.
+    state = _state(last_promoted_generation=4)
+    view = es.build_run_view(_history(), state)
+    subj = es.build_subject(state, view, failed=False)
     assert subj.startswith("MCTS Lab Multi-Agent Training Report — ")
     assert subj.endswith("ELO 1042.7 (+12.4)")
+
+
+def test_subject_fixed_champion_marks_delta_as_drift():
+    # Default fixture has last_promoted_generation=None -> the delta is measurement
+    # drift of a fixed agent, flagged in the headline so it never reads as progress.
+    view = es.build_run_view(_history(), _state())
+    subj = es.build_subject(_state(), view, failed=False)
+    assert subj.endswith("ELO 1042.7 (+12.4, drift)")
 
 
 def test_subject_regression_shows_negative_delta():
     hist = _history()
     hist.append(_summary_row("run5", "2026-06-24T04:00:00Z", 5, 1030.3))
-    view = es.build_run_view(hist, _state(run_id="run5", generation=5))
-    subj = es.build_subject(_state(run_id="run5"), view, failed=False)
+    view = es.build_run_view(hist, _state(run_id="run5", generation=5, last_promoted_generation=5))
+    subj = es.build_subject(_state(run_id="run5", last_promoted_generation=5), view, failed=False)
     assert subj.startswith("MCTS Lab Multi-Agent Training Report — ")
     assert subj.endswith("ELO 1030.3 (-12.4)")
 
@@ -358,7 +368,8 @@ def test_compose_reads_latest_recorded_elo(tmp_path):
 
     composed = es.compose(paths)
     assert composed["subject"].startswith("MCTS Lab Multi-Agent Training Report — ")
-    assert composed["subject"].endswith("ELO 1025.0 (+25.0)")
+    # Champion never promoted (default state) -> the +25 is fixed-agent drift.
+    assert composed["subject"].endswith("ELO 1025.0 (+25.0, drift)")
     assert "Current ELO: 1025.0" in composed["body"]
     assert composed["view"].fresh is True
 
@@ -433,6 +444,24 @@ def test_alerts_empty_on_clean_run():
     assert alerts == []
     verdict = es.overall_verdict(view, record, alerts)
     assert verdict.emoji == "✅"  # Elo rose +12.4 vs previous
+
+
+def test_verdict_fixed_champion_is_drift_not_going_well():
+    # Elo rose, but the champion has never been promoted -> the rise is measurement
+    # drift of a fixed agent, so the verdict must NOT claim "GOING WELL" (#5).
+    view = es.build_run_view(_history(), _state())
+    record = {"run_id": "run4", "rows": [], "winner": None, "trajectory": {}}
+    verdict = es.overall_verdict(view, record, [], champion_fixed=True)
+    assert verdict.emoji == "➖"
+    assert "drift" in verdict.headline.lower()
+
+
+def test_verdict_promotion_overrides_fixed_champion_drift():
+    # If a candidate was actually promoted this run, that IS a real change.
+    view = es.build_run_view(_history(), _state())
+    record = {"run_id": "run4", "rows": [], "winner": "td", "trajectory": {}}
+    verdict = es.overall_verdict(view, record, [], champion_fixed=True)
+    assert verdict.emoji == "✅"
 
 
 def test_alert_on_crash_is_siren():

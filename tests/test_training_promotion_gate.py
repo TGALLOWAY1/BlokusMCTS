@@ -6,7 +6,12 @@ from types import SimpleNamespace
 
 from training.evaluation.benchmark_pool import build_benchmark_pool
 from training.evaluation.head_to_head import _candidate_arenas
-from training.evaluation.head_to_head import CandidateEval
+from training.evaluation.head_to_head import (
+    EVAL_CONFIRM_TOTAL_GAMES,
+    EVAL_MIN_TOTAL_GAMES,
+    CandidateEval,
+    confirm_games_per_arena,
+)
 from training.evaluation.promotion_gate import (
     GateThresholds,
     evaluate_gate,
@@ -171,6 +176,38 @@ def test_benchmark_pool_includes_best_historical_when_present():
     ]}
     pool = build_benchmark_pool(state)
     assert "best_historical" in pool.opponent_names()
+
+
+def test_confirm_games_per_arena_reaches_target_floor():
+    # Two-stage promotion: the confirmation stage must schedule enough games to
+    # reach the higher confirmation floor over (arenas × seeds) batteries.
+    state = {"champion_params": {"type": "mcts", "thinking_time_ms": 1, "params": {}}}
+    pool = build_benchmark_pool(state)
+    seeds = [1, 2]
+    cfg = {"type": "mcts", "thinking_time_ms": 1, "params": {}}
+    gpa = confirm_games_per_arena(state, cfg, "cand", pool, seeds=seeds)
+    n_arenas = len(_candidate_arenas(state, cfg, "cand", pool))
+    assert gpa * n_arenas * len(seeds) >= EVAL_CONFIRM_TOTAL_GAMES
+    # Confirmation is a strictly larger sample than the cheap screen.
+    assert EVAL_CONFIRM_TOTAL_GAMES > EVAL_MIN_TOTAL_GAMES
+
+
+def test_confirmation_gate_holds_short_winner():
+    # A candidate that passed the 20-game screen but only has 20 confirmation games
+    # must FAIL the confirmation gate (which requires the higher floor).
+    screen_ok = _eval(cand_wins=16, champ_wins=4, elo_delta=90.0, mu_delta=3.0, games=20)
+    assert evaluate_gate(screen_ok, GateThresholds(min_total_games=20)).passed
+    confirm = evaluate_gate(
+        screen_ok, GateThresholds(min_total_games=EVAL_CONFIRM_TOTAL_GAMES))
+    assert not confirm.passed
+    assert "min_total_games" in [c["name"] for c in confirm.criteria if not c["passed"]]
+
+
+def test_confirmation_gate_passes_with_enough_games():
+    strong = _eval(cand_wins=45, champ_wins=15, elo_delta=90.0, mu_delta=3.0,
+                   games=EVAL_CONFIRM_TOTAL_GAMES)
+    assert evaluate_gate(
+        strong, GateThresholds(min_total_games=EVAL_CONFIRM_TOTAL_GAMES)).passed
 
 
 def test_candidate_arenas_cover_weak_and_mcts_anchor_pairs():

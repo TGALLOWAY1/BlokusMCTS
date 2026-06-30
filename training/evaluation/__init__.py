@@ -11,8 +11,11 @@ from training.evaluation.benchmark_pool import (
     build_benchmark_pool,
 )
 from training.evaluation.head_to_head import (
+    EVAL_CONFIRM_TOTAL_GAMES,
+    EVAL_MIN_TOTAL_GAMES,
     CandidateEval,
     HeadToHeadResult,
+    confirm_winner,
     evaluate_candidate_vs_pool,
     evaluate_candidates,
 )
@@ -32,8 +35,11 @@ __all__ = [
     "DEFAULT_BENCHMARK_SEEDS",
     "BenchmarkPool",
     "build_benchmark_pool",
+    "EVAL_CONFIRM_TOTAL_GAMES",
+    "EVAL_MIN_TOTAL_GAMES",
     "CandidateEval",
     "HeadToHeadResult",
+    "confirm_winner",
     "evaluate_candidate_vs_pool",
     "evaluate_candidates",
     "GateResult",

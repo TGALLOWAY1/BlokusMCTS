@@ -91,6 +91,12 @@ class SmtpConfig:
         )
 
 
+def champion_is_fixed(state: Dict[str, Any]) -> bool:
+    """True when the champion has never been promoted (``last_promoted_generation``
+    is null) — Elo movement is then drift of a fixed agent, not a strength change."""
+    return state.get("last_promoted_generation") is None
+
+
 def _fmt(value: Any, spec: str = "", dash: str = "n/a") -> str:
     if value is None:
         return dash
@@ -275,8 +281,11 @@ def build_subject(
     elo = view.current_elo
     if view.elo_delta_previous is None:
         return f"{prefix}MCTS Lab Multi-Agent Training Report — {tag} — ELO {elo:.1f} (baseline)"
+    # A fixed champion (never promoted) means the delta is measurement drift, not a
+    # strength change — say so in the headline rather than implying improvement (#5).
+    drift = ", drift" if champion_is_fixed(state) else ""
     return (f"{prefix}MCTS Lab Multi-Agent Training Report — {tag} — "
-            f"ELO {elo:.1f} ({view.elo_delta_previous:+.1f})")
+            f"ELO {elo:.1f} ({view.elo_delta_previous:+.1f}{drift})")
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +323,11 @@ def _approach_lines(record: Optional[Dict[str, Any]]) -> List[str]:
     if pool:
         lines.append(f"- Benchmark pool: {pool.get('version')} "
                      f"(opponents: {', '.join(pool.get('opponents', []))})")
+    status = record.get("champion_status") or {}
+    if status.get("measurement_drift"):
+        lines.append("- ⚠️ Fixed-champion measurement drift: the champion has never been "
+                     "promoted, so the Elo numbers below are rating variance of an unchanged "
+                     "agent, not a strength change.")
     traj = record.get("trajectory") or {}
     if traj:
         sig = "real (beyond noise)" if traj.get("significant") else "within noise floor"
@@ -596,8 +610,18 @@ def overall_verdict(
     view: RunView,
     approach_record: Optional[Dict[str, Any]],
     alerts: List[Alert],
+    *,
+    champion_fixed: bool = False,
 ) -> Verdict:
-    """Reduce the alerts + Elo direction to a single, explicit good/bad headline."""
+    """Reduce the alerts + Elo direction to a single, explicit good/bad headline.
+
+    ``champion_fixed`` is True when the champion has never been promoted
+    (``last_promoted_generation`` is null). In that regime the agent under
+    measurement is byte-for-byte fixed, so Elo movement is rating *drift*, not a
+    strength change — judging "GOING WELL / NOT WELL" on its sign is the exact
+    misread the audit (#5) called out. We surface a neutral drift verdict instead,
+    unless a candidate was actually promoted this run.
+    """
     if any(a.level == "alert" for a in alerts):
         return Verdict("🚨", "ALERT — the run did not complete cleanly",
                        [f"{a.emoji} {a.title}" for a in alerts])
@@ -611,6 +635,19 @@ def overall_verdict(
     if winner:
         reasons.append(f"A candidate was promoted ({winner}).")
     dp = view.elo_delta_previous
+
+    # Fixed champion + no promotion this run -> the Elo move is measurement drift.
+    if champion_fixed and not winner:
+        if dp is not None:
+            reasons.append(f"Elo moved {dp:+.1f} vs the previous run, but the champion "
+                           "has never been promoted — this is rating drift of a fixed "
+                           "agent, not a strength change.")
+        else:
+            reasons.append("The champion has never been promoted; Elo here is a fixed-agent "
+                           "measurement, not a strength change.")
+        return Verdict("➖", "STEADY — fixed-champion measurement drift "
+                       "(no promotion yet; Elo movement is not a strength change)", reasons)
+
     if dp is not None:
         verb = "rose" if dp > 0 else ("fell" if dp < 0 else "held")
         reasons.append(f"Elo {verb} {dp:+.1f} vs the previous run.")
@@ -682,7 +719,8 @@ def build_body(
     alerts = collect_alerts(
         state, view, approach_record, failed=failed, provenance=prov
     )
-    verdict = overall_verdict(view, approach_record, alerts)
+    verdict = overall_verdict(view, approach_record, alerts,
+                              champion_fixed=champion_is_fixed(state))
 
     lines: List[str] = ["# MCTS Lab Multi-Agent Training Report", ""]
 
@@ -991,7 +1029,8 @@ def compose(
         state, view, state.get("last_approach_comparison"),
         failed=failed, provenance=prov,
     )
-    verdict = overall_verdict(view, state.get("last_approach_comparison"), alerts)
+    verdict = overall_verdict(view, state.get("last_approach_comparison"), alerts,
+                              champion_fixed=champion_is_fixed(state))
     subject = build_subject(
         state, view, failed=failed, provenance=prov, alert=bool(alerts)
     )

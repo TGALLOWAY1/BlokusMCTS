@@ -145,3 +145,52 @@ def test_build_comparison_record_and_markdown():
     assert "no TD weights artifact" in md
     # The vague legacy string must never appear.
     assert "No candidate was learned this cycle" not in md
+
+
+def test_comparison_record_flags_fixed_champion_drift():
+    class _Cand:
+        def __init__(self, name, approach, created, reason):
+            self.name, self.approach, self.created, self.reason = name, approach, created, reason
+            self.metrics = {}
+
+    cands = [_Cand("baseline", "baseline_mcts", True, "ok")]
+    # Never promoted -> Elo movement is fixed-champion measurement drift.
+    rec = rpt.build_comparison_record(
+        run_id="R", now_iso="t", candidates=cands, evals_by_name={}, gates_by_name={},
+        winner_name=None, pool={}, trajectory={"current": 1014.8, "best": 1042.0},
+        seeds=[1, 2], generation=131, last_promoted_generation=None,
+    )
+    assert rec["champion_status"]["measurement_drift"] is True
+    assert rec["champion_status"]["ever_promoted"] is False
+    md = rpt.render_markdown(rec)
+    assert "measurement drift" in md.lower()
+
+    # A promotion this run flips it to a real change (no drift framing).
+    rec2 = rpt.build_comparison_record(
+        run_id="R", now_iso="t", candidates=cands, evals_by_name={}, gates_by_name={},
+        winner_name="baseline", pool={}, trajectory={"current": 1050.0},
+        seeds=[1, 2], generation=132, last_promoted_generation=132,
+    )
+    assert rec2["champion_status"]["measurement_drift"] is False
+    assert "measurement drift" not in rpt.render_markdown(rec2).lower()
+
+
+def test_comparison_record_renders_two_stage_confirmation():
+    class _Cand:
+        def __init__(self, name, approach, created, reason):
+            self.name, self.approach, self.created, self.reason = name, approach, created, reason
+            self.metrics = {}
+
+    cands = [_Cand("td", "td_learning", True, "ok")]
+    rec = rpt.build_comparison_record(
+        run_id="R", now_iso="t", candidates=cands, evals_by_name={}, gates_by_name={},
+        winner_name="td", pool={}, trajectory={}, seeds=[1, 2],
+        generation=10, last_promoted_generation=10,
+        confirmation={"candidate": "td", "approach": "td_learning", "screen_games": 20,
+                      "confirm_games": 60, "confirm_min_games": 60, "passed": True,
+                      "reason": "PROMOTE td: ..."},
+    )
+    assert rec["confirmation"]["passed"] is True
+    md = rpt.render_markdown(rec)
+    assert "Two-stage promotion" in md
+    assert "confirmation passed" in md

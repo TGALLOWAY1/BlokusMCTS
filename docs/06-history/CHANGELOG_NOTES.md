@@ -66,5 +66,39 @@
   **4/4 approaches** within a tight budget (vs 1/4 before the fix), confirming the
   fair split no longer starves any approach. 44 training tests pass.
 
+## Phase 8 — Training-failure audit follow-ups (Jun 2026)
+
+The 2026-06-29 training-failure audit confirmed the champion was never getting
+*worse* — the same `gen0` champion had simply never been promoted, while its Elo
+was updated through small, time-starved samples, so a noisy decline read as a
+regression. PR #180 fixed the promotion-failure reporting bug, added the
+`benchmark_v2` MCTS anchors, and the `audit_training_state` diagnostic. This phase
+implements the four remaining recommended fixes:
+
+- **Fixed-champion measurement-drift reporting (#5).** When `last_promoted_generation`
+  is null the agent under measurement is byte-for-byte fixed, so Elo movement is
+  rating *drift*, not strength. The comparison record now carries a `champion_status`
+  block; the markdown retitles the Elo trajectory as "fixed-champion measurement
+  drift", the email subject annotates the delta `(…, drift)`, and the verdict reports
+  `➖ STEADY — fixed-champion measurement drift` instead of `✅ GOING WELL` on a
+  noise-driven rise (unless a candidate actually promoted this run).
+- **History schema versioning (#3).** Every `history.jsonl` row is stamped with
+  `schema_version`/`kind`; `classify_history_row` classifies older unstamped rows
+  structurally, so the diagnostic validates legacy and approach-comparison rows
+  separately and no longer flags the 123 legacy rows as "missing result-like
+  fields".
+- **Per-game play-quality diagnostics (#2).** Each arena game record now carries a
+  `play_quality` block (avg/min/max legal moves per turn, pass rate, invalid-move
+  count, game length, board occupancy, piece usage by size overall + per agent,
+  final-score min/max/spread), computed at record time with negligible overhead.
+- **Two-stage promotion (#4, opt-in `--two-stage-promotion`).** The 20-game gate
+  is the *screen*; before promoting, only the leading candidate is re-evaluated over
+  a 60-game confirmation sample and must clear the gate again, so a lucky short run
+  can no longer promote on its own. Default behavior is unchanged when the flag is off.
+
+Health-verified: 132 related tests pass; the `audit_training_state` diagnostic on
+the real state shows 0 false "missing result-like fields" (123 legacy + 8
+approach-comparison rows correctly distinguished).
+
 > This file is a high-level summary, not a per-commit changelog. For commit-level
 > history use `git log`; for arena-run-level history see the run registry.

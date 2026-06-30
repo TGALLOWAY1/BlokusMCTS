@@ -40,6 +40,13 @@ from training.evaluation.benchmark_pool import BenchmarkPool
 EVAL_MIN_TOTAL_GAMES = 20
 EVAL_MIN_SEEDS = 2
 
+# Two-stage promotion (audit follow-up #4): the cheap 20-game gate above is the
+# *screen* that identifies a leading candidate. When two-stage promotion is enabled
+# the screen winner is then re-evaluated over a larger confirmation sample before it
+# is allowed to promote, so a lucky 20-game run cannot promote on its own. Only the
+# single leading candidate pays the confirmation cost, keeping the run bounded.
+EVAL_CONFIRM_TOTAL_GAMES = 60
+
 
 def _with_name(cfg: Dict[str, Any], name: str) -> Dict[str, Any]:
     out = copy.deepcopy(cfg)
@@ -278,6 +285,57 @@ def evaluate_candidate_vs_pool(
         pooled_summary=pooled,
     )
     return cand_eval, games, run_dirs
+
+
+def confirm_games_per_arena(
+    state: Dict[str, Any],
+    candidate_cfg: Dict[str, Any],
+    candidate_name: str,
+    pool: BenchmarkPool,
+    *,
+    seeds: List[int],
+    target_total_games: int = EVAL_CONFIRM_TOTAL_GAMES,
+) -> int:
+    """Games/arena needed to reach ``target_total_games`` over this candidate's
+    arenas × seeds (ceil division, at least 1)."""
+    n_arenas = len(_candidate_arenas(state, candidate_cfg, candidate_name, pool))
+    denom = max(1, n_arenas * max(1, len(seeds)))
+    return max(1, -(-target_total_games // denom))
+
+
+def confirm_winner(
+    state: Dict[str, Any],
+    candidate_name: str,
+    candidate_approach: str,
+    candidate_cfg: Dict[str, Any],
+    pool: BenchmarkPool,
+    paths: TrainingPaths,
+    *,
+    seeds: Optional[List[int]] = None,
+    thinking_time_ms: Optional[int] = None,
+    min_mu_margin: float = 0.5,
+    target_total_games: int = EVAL_CONFIRM_TOTAL_GAMES,
+    deadline: Optional[float] = None,
+    verbose: bool = False,
+) -> Tuple[CandidateEval, List[Dict[str, Any]], List[str]]:
+    """Confirmation stage of two-stage promotion: re-evaluate the screen winner over
+    a larger sample (``target_total_games``) against the same fixed pool.
+
+    Returns the same ``(CandidateEval, games, run_dirs)`` tuple as
+    :func:`evaluate_candidate_vs_pool`; the caller gates the result against a
+    confirmation :class:`GateThresholds` (``min_total_games=target_total_games``).
+    """
+    seeds = list(seeds) if seeds else list(pool.seeds)
+    gpa = confirm_games_per_arena(
+        state, candidate_cfg, candidate_name, pool,
+        seeds=seeds, target_total_games=target_total_games,
+    )
+    return evaluate_candidate_vs_pool(
+        state, candidate_name, candidate_approach, candidate_cfg, pool, paths,
+        games_per_arena=gpa, seeds=seeds, thinking_time_ms=thinking_time_ms,
+        min_mu_margin=min_mu_margin, run_label_prefix="confirm",
+        deadline=deadline, verbose=verbose,
+    )
 
 
 def evaluate_candidates(

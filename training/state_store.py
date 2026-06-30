@@ -98,6 +98,45 @@ DEFAULT_HUMAN_TARGET_ELO = 1700
 
 SCHEMA_VERSION = 1
 
+# ``history.jsonl`` carries two shapes of row: the legacy self-play *generation*
+# record (champion-loop era) and the multi-agent *approach-comparison* record.
+# Stamping each row with a schema version + kind lets diagnostics validate only
+# comparable rows together instead of flagging the older shape as "malformed" or
+# "missing result-like fields" (audit follow-up #3). Older rows predate the stamp
+# and are classified structurally by :func:`classify_history_row`.
+HISTORY_SCHEMA_VERSION = 2
+HISTORY_KIND_APPROACH = "approach_comparison"
+HISTORY_KIND_LEGACY = "legacy_generation"
+HISTORY_KIND_MALFORMED = "malformed"
+HISTORY_KIND_UNKNOWN = "unknown"
+
+
+def classify_history_row(row: Dict[str, Any]) -> str:
+    """Classify a ``history.jsonl`` row by schema kind.
+
+    Prefers the explicit ``kind`` stamp (rows written at or after
+    ``HISTORY_SCHEMA_VERSION`` 2). Falls back to structural inference for rows
+    written before the stamp existed:
+
+    * ``approach_comparison`` — carries approach-comparison result fields
+      (``approaches``/``candidates_created``/``winner``);
+    * ``legacy_generation`` — the champion-loop self-play record (``challengers``);
+    * ``malformed`` — a row the reader could not parse (``_malformed`` marker);
+    * ``unknown`` — parseable but matching neither shape.
+    """
+    if not isinstance(row, dict):
+        return HISTORY_KIND_UNKNOWN
+    if row.get("_malformed"):
+        return HISTORY_KIND_MALFORMED
+    kind = row.get("kind")
+    if kind in (HISTORY_KIND_APPROACH, HISTORY_KIND_LEGACY):
+        return kind
+    if any(k in row for k in ("approaches", "candidates_created", "winner")):
+        return HISTORY_KIND_APPROACH
+    if "challengers" in row:
+        return HISTORY_KIND_LEGACY
+    return HISTORY_KIND_UNKNOWN
+
 
 def default_latest_state() -> Dict[str, Any]:
     """A complete ``latest.json`` for a brand-new pipeline.
