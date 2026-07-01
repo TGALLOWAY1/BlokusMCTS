@@ -1,3 +1,0 @@
-"""
-MCTS algorithm implementation
-"""

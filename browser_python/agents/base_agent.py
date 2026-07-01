@@ -1,3 +1,0 @@
-"""
-Base agent class
-"""
