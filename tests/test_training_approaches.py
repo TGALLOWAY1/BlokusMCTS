@@ -40,10 +40,13 @@ def test_baseline_always_created_with_strong_overrides(tmp_path):
     cand = ap.get_approach("baseline").generate(_ctx(tmp_path))
     assert cand.created
     p = cand.agent_config["params"]
-    # The weak settings must be corrected.
-    assert p["rollout_policy"] == "heuristic"
-    assert p["rollout_cutoff_depth"] is None
-    assert p["iterations_per_ms"] >= 1.0
+    # The weak settings must be corrected (greedy_sample rollouts, tactical
+    # cutoff depth, corrupted-pre-maxⁿ features off).
+    assert p["rollout_policy"] == "greedy_sample"
+    assert p["rollout_cutoff_depth"] == 12
+    assert p["rave_enabled"] is False
+    assert p["minimax_backup_alpha"] == 0.0
+    assert p["heuristic_move_ordering"] is True
     ok, why = validate_candidate_artifact(cand.to_artifact("TESTRUN", "t"))
     assert ok, why
 

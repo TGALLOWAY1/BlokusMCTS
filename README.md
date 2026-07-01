@@ -140,4 +140,4 @@ historical gauntlet runs live in `arena_runs/`.
 
 Docs index: [docs/README.md](docs/README.md). Historical layer-by-layer
 experiment narratives predate the maxⁿ fix — their strength conclusions are
-obsolete (see AUDIT_REPORT.md §6.3).
+obsolete (see AUDIT_REPORT.md §6).
