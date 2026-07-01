@@ -52,10 +52,15 @@ def _mcts_anchor(
     base["thinking_time_ms"] = thinking_time_ms
     params = base.setdefault("params", {})
     params.update({
-        "rollout_policy": "heuristic",
-        "rollout_cutoff_depth": None,
+        # greedy_sample + cutoff keeps a single anchor move at ~1s. The old
+        # "heuristic + no cutoff" setting cost ~2s PER ROLLOUT (it scores every
+        # legal move at every rollout step), i.e. minutes per move — anchor
+        # games alone could eat the entire evaluation budget.
+        "rollout_policy": "greedy_sample",
+        "rollout_cutoff_depth": 12,
         "adaptive_rollout_depth_enabled": False,
         "iterations_per_ms": iterations_per_ms,
+        "num_workers": 1,
     })
     return base
 
