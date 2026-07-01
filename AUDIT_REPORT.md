@@ -149,7 +149,20 @@ heuristic rollouts) could only afford 9–15 evaluation games. Added a
 fast move heuristic): ~260ms full rollout, ~17ms with cutoff 12 — near-
 heuristic quality at close to random-rollout cost.
 
-### 3.7 Non-bugs verified
+### 3.7 Evaluation wall-clock sinks in the benchmark pool (high) ✅ fixed
+Two more places quietly burned the evaluation budget (found while running the
+first real promotion gauntlet):
+- The fixed MCTS benchmark anchors hardcoded `rollout_policy="heuristic"` with
+  no cutoff — the exact ~2s-per-rollout pathology of §3.6 — so anchor games
+  alone could consume the whole budget (measured ~11–30+ min/game). Anchors
+  now use `greedy_sample` + cutoff 12 (~1s/move).
+- Uniform thinking-time overrides kept the champion's `num_workers: 2` root
+  parallelization, which forks worker processes on **every move**; at
+  tens-of-iterations budgets the spawn overhead dominates while the split
+  trees are weaker. Overridden evaluations now force single-process search
+  (faster *and* stronger for the incumbent, so never biased pro-candidate).
+
+### 3.8 Non-bugs verified
 - Engine rules (first-move corner, corner-adjacency, no edge-contact),
   scoring (+15 all-pieces bonus, +5 monomino-last), pass/turn order and
   termination are correct (`engine/board.py`).
