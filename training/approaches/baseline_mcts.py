@@ -18,11 +18,18 @@ from training.approaches.base import Approach, ApproachContext, Candidate
 NAME = "baseline"
 
 # Corrected, conventional strong-MCTS search settings (override the weak champion).
+# "greedy_sample" scores a K-move random sample with the fast move heuristic each
+# rollout step: near-heuristic move quality at ~1/8th the cost of full-heuristic
+# rollouts (which score every legal move every step and starve the eval budget).
 STRONG_SEARCH_OVERRIDES: Dict[str, Any] = {
-    "rollout_policy": "heuristic",      # was "random"
-    "rollout_cutoff_depth": None,       # was 5 (shallow) -> full heuristic rollout
+    "rollout_policy": "greedy_sample",  # was "random"
+    "rollout_cutoff_depth": 12,         # was 5 (too shallow to see tactics)
     "adaptive_rollout_depth_enabled": False,  # was True with base=5 (shallow)
-    "iterations_per_ms": 1.0,           # was 0.5 (~250 iters) -> ~500 iters/move
+    "iterations_per_ms": 0.5,           # unchanged budget: strength from search quality
+    "rave_enabled": False,              # RAVE stats were corrupted pre-maxⁿ fix; retest later
+    "minimax_backup_alpha": 0.0,        # plain UCT averaging on the fixed maxⁿ backups
+    "heuristic_move_ordering": True,    # expand strong moves first
+    "num_workers": 1,                   # single-process: deterministic, no fork overhead
 }
 
 
@@ -54,7 +61,7 @@ class BaselineMctsApproach:
             created=True,
             reason=(
                 "baseline: corrected weak-champion search settings "
-                "(heuristic rollouts, no shallow cutoff, ~2x iterations)"
+                "(greedy-sample rollouts, cutoff 12, RAVE/minimax off, move ordering on)"
             ),
             agent_config=cfg,
             metrics={"overrides": changed},

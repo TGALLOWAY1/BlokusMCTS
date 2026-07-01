@@ -280,7 +280,9 @@ class MCTSNode:
         def _ucb(child: 'MCTSNode') -> float:
             h_score = 0.0
             if progressive_history_weight > 0 and history_table and child.move is not None:
-                key = move_action_key(child.move)
+                # History is keyed per (acting player, action): the player
+                # choosing among these children is self.player.
+                key = (self.player, move_action_key(child.move))
                 entry = history_table.get(key)
                 if entry is not None:
                     total, count = entry
@@ -448,6 +450,7 @@ class MCTSAgent:
         heuristic_move_ordering: bool = False,
         # --- Layer 4: Simulation Strategy ---
         rollout_policy: str = "heuristic",
+        greedy_sample_size: int = 12,
         two_ply_top_k: Optional[int] = None,
         rollout_cutoff_depth: Optional[int] = None,
         state_eval_weights: Optional[Dict[str, float]] = None,
@@ -581,11 +584,13 @@ class MCTSAgent:
         self.heuristic_move_ordering = bool(heuristic_move_ordering)
 
         # Layer 4 params
-        if rollout_policy not in {"heuristic", "random", "two_ply"}:
+        if rollout_policy not in {"heuristic", "random", "two_ply", "greedy_sample"}:
             raise ValueError(
-                f"rollout_policy must be 'heuristic', 'random', or 'two_ply', got '{rollout_policy}'"
+                f"rollout_policy must be 'heuristic', 'random', 'two_ply', or "
+                f"'greedy_sample', got '{rollout_policy}'"
             )
         self.rollout_policy = rollout_policy
+        self.greedy_sample_size = int(greedy_sample_size)
         self.two_ply_top_k = int(two_ply_top_k) if two_ply_top_k is not None else None
         self.rollout_cutoff_depth = (
             int(rollout_cutoff_depth) if rollout_cutoff_depth is not None else None
@@ -600,10 +605,10 @@ class MCTSAgent:
         self.nst_weight = float(nst_weight)
 
         # Layer 7 params
-        if opponent_rollout_policy not in {"same", "random", "heuristic"}:
+        if opponent_rollout_policy not in {"same", "random", "heuristic", "greedy_sample"}:
             raise ValueError(
-                f"opponent_rollout_policy must be 'same', 'random', or 'heuristic', "
-                f"got '{opponent_rollout_policy}'"
+                f"opponent_rollout_policy must be 'same', 'random', 'heuristic', or "
+                f"'greedy_sample', got '{opponent_rollout_policy}'"
             )
         self.opponent_rollout_policy = opponent_rollout_policy
         self.opponent_modeling_enabled = bool(opponent_modeling_enabled)
@@ -721,9 +726,10 @@ class MCTSAgent:
         # Track root player for minimax backups
         self._root_player: Optional[Player] = None
 
-        # Progressive history table: {action_key: [total_reward, count]}
-        # Persists across moves within a game.
-        self._history_table: Dict[int, List[float]] = defaultdict(lambda: [0.0, 0])
+        # Progressive history table: {(player, action_key): [total_reward, count]}
+        # Keyed per acting player so each player's move statistics reflect
+        # their own outcomes (maxⁿ). Persists across moves within a game.
+        self._history_table: Dict[Tuple[Player, int], List[float]] = defaultdict(lambda: [0.0, 0])
 
         # Layer 5: NST (N-gram Selection Technique) table.
         # Key: (prev_action_key, current_action_key) — 2-gram of same-player moves.
@@ -1330,7 +1336,7 @@ class MCTSAgent:
                             expanded = True
 
                 # Simulation (no lock — each thread simulates independently)
-                reward, rollout_actions = self._simulation(node)
+                rewards, rollout_actions = self._simulation(node)
 
                 # Remove virtual losses from selection path
                 for vl_node in vl_path:
@@ -1338,7 +1344,7 @@ class MCTSAgent:
 
                 # Backpropagation (minor races on node.visits/total_reward are
                 # tolerable — standard in MCTS literature)
-                self._backpropagation(node, reward, rollout_actions=rollout_actions)
+                self._backpropagation(node, rewards, rollout_actions=rollout_actions)
                 local_iters += 1
 
             with count_lock:
@@ -1465,14 +1471,15 @@ class MCTSAgent:
                     d = d.parent
 
         # Simulation: run rollout (returns rollout action keys when RAVE enabled)
-        reward, rollout_actions = self._simulation(node)
+        rewards, rollout_actions = self._simulation(node)
 
-        # Record rollout result for trace
+        # Record rollout result for trace (root player's perspective)
         if trace:
-            trace.rollout_results.append(round(reward, 4))
+            root_player = self._root_player if self._root_player is not None else node.player
+            trace.rollout_results.append(round(rewards.get(root_player, 0.0), 4))
 
         # Backpropagation: update statistics up the tree
-        self._backpropagation(node, reward, rollout_actions=rollout_actions)
+        self._backpropagation(node, rewards, rollout_actions=rollout_actions)
 
         # Sample iteration record for time-series
         if trace and iteration_idx % trace.sample_rate == 0:
@@ -1555,7 +1562,7 @@ class MCTSAgent:
 
         return node
 
-    def _simulation(self, node: MCTSNode) -> Tuple[float, List[int]]:
+    def _simulation(self, node: MCTSNode) -> Tuple[Dict[Player, float], List[int]]:
         """
         Simulation phase: run rollout from node.
 
@@ -1563,73 +1570,75 @@ class MCTSAgent:
             node: Node to simulate from
 
         Returns:
-            Tuple of (reward, rollout_action_keys). The action key list
-            contains piece_ids played by the root player during the rollout,
-            used for RAVE updates. Empty when RAVE is disabled or on cache hit.
+            Tuple of (per-player reward dict, rollout_action_keys). The action
+            key list contains piece_ids played by the root player during the
+            rollout, used for RAVE updates. Empty when RAVE is disabled or on
+            cache hit.
         """
         # Check transposition table
         if self.transposition_table:
             board_hash = self.zobrist_hash.hash_board(node.board)
             cached_result = self.transposition_table.get(board_hash)
-            if cached_result:
+            if cached_result and "rewards" in cached_result:
                 self.stats["transposition_hits"] += 1
-                return cached_result["reward"], []
+                return cached_result["rewards"], []
 
         # Run leaf evaluation or rollout. The rich leaf evaluator and the
         # learned-model leaf evaluator are both LEAF-ONLY: invoked exactly once
         # per simulation, here at the leaf node — never per rollout step.
         rollout_actions: List[int] = []
         if self.rich_leaf_eval_enabled and self.rich_leaf_evaluator is not None:
-            reward = self._evaluate_rich_leaf(node.board, node.player)
+            rewards = self._evaluate_rich_leaf(node.board, node.player)
         elif self.leaf_evaluation_enabled and self.learned_evaluator is not None:
-            reward = self._evaluate_leaf(node.board, node.player)
+            rewards = self._evaluate_leaf(node.board, node.player)
         else:
-            reward, rollout_actions = self._rollout(node.board, node.player)
+            rewards, rollout_actions = self._rollout(node.board, node.player)
 
         # Cache result
         if self.transposition_table:
-            self.transposition_table.put(board_hash, {"reward": reward})
+            self.transposition_table.put(board_hash, {"rewards": rewards})
 
-        self.stats["rollout_rewards"].append(reward)
-        return reward, rollout_actions
+        root = self._root_player
+        if root is not None and root in rewards:
+            self.stats["rollout_rewards"].append(rewards[root])
+        return rewards, rollout_actions
 
-    def _evaluate_rich_leaf(self, board: Board, player: Player) -> float:
+    def _evaluate_rich_leaf(self, board: Board, player: Player) -> Dict[Player, float]:
         """Evaluate a leaf with the 45-feature TD-learned linear value model.
 
         LEAF-ONLY: called once per simulation (in place of the rollout), so the
-        richer feature extraction never runs per rollout step. The value is
-        computed from the **root player's** perspective for consistent
-        backpropagation, matching the rollout/learned-leaf reward semantics, and
-        is scaled by ``_eval_reward_scale`` to sit on the same magnitude as the
-        static-evaluation reward path.
+        richer feature extraction never runs per rollout step. Returns a
+        per-player reward vector scaled by ``_eval_reward_scale`` to sit on the
+        same magnitude as the static-evaluation reward path.
         """
-        reward_player = self._root_player if self._root_player is not None else player
         try:
-            value = self.rich_leaf_evaluator.evaluate(board, reward_player)
+            rewards = {
+                p: float(self.rich_leaf_evaluator.evaluate(board, p)) * self._eval_reward_scale
+                for p in _PLAYERS
+            }
             self.stats["rich_leaf_eval_calls"] += 1
-            return float(value) * self._eval_reward_scale
+            return rewards
         except Exception:
             self.stats["evaluator_errors"] += 1
-            reward, _ = self._rollout(board, player)
-            return reward
+            rewards, _ = self._rollout(board, player)
+            return rewards
 
-    def _evaluate_leaf(self, board: Board, player: Player) -> float:
-        """Evaluate leaf with learned model-backed win probability.
-
-        Uses root player perspective for consistent reward semantics.
-        """
+    def _evaluate_leaf(self, board: Board, player: Player) -> Dict[Player, float]:
+        """Evaluate leaf with learned model-backed win probability per player."""
         if self.learned_evaluator is None:
-            return self._rollout(board, player)
-        reward_player = self._root_player if self._root_player is not None else player
+            rewards, _ = self._rollout(board, player)
+            return rewards
         try:
-            probability = self.learned_evaluator.predict_player_win_probability(
-                board, reward_player
-            )
+            rewards = {
+                p: float(self.learned_evaluator.predict_player_win_probability(board, p))
+                for p in _PLAYERS
+            }
             self.stats["leaf_eval_calls"] += 1
-            return float(probability)
+            return rewards
         except Exception:
             self.stats["evaluator_errors"] += 1
-            return self._rollout(board, player)
+            rewards, _ = self._rollout(board, player)
+            return rewards
 
     def _update_progressive_bias(self, parent: MCTSNode, child: MCTSNode) -> None:
         """Set child prior bias from learned value delta."""
@@ -1648,12 +1657,30 @@ class MCTSAgent:
             child.prior_bias = 0.0
             self.stats["evaluator_errors"] += 1
 
-    def _rollout(self, board: Board, player: Player) -> Tuple[float, List[int]]:
+    def _evaluate_all_players(
+        self, board: Board, defensive_adj: Optional[Dict[str, float]] = None
+    ) -> Dict[Player, float]:
+        """Static-evaluate a board once per player (maxⁿ reward vector).
+
+        Defensive adjustments (Layer 7) only apply to the root player's own
+        evaluation — opponents are scored with the unmodified weights.
+        """
+        root = self._root_player
+        return {
+            p: self.state_evaluator.evaluate(
+                board, p, defensive_adj if p == root else None
+            ) * self._eval_reward_scale
+            for p in _PLAYERS
+        }
+
+    def _rollout(self, board: Board, player: Player) -> Tuple[Dict[Player, float], List[int]]:
         """
         Run rollout simulation with configurable policy and early termination.
 
-        All rewards are computed from the root player's perspective so that
-        backpropagation can propagate a single consistent value up the tree.
+        Returns a **per-player reward vector** (maxⁿ). Backpropagation credits
+        each node with the reward of the player who made the move into it, so
+        every player in the tree optimizes their own outcome rather than the
+        root player's.
 
         Layer 4 enhancements:
         - rollout_policy: "heuristic" (default), "random", or "two_ply"
@@ -1667,9 +1694,8 @@ class MCTSAgent:
             player: Player whose turn it is
 
         Returns:
-            Tuple of (reward, rollout_action_keys)
+            Tuple of (per-player reward dict, rollout_action_keys)
         """
-        # All rewards must be from the root player's perspective.
         reward_player = self._root_player if self._root_player is not None else player
 
         # Layer 7: Get defensive weight adjustments from opponent model
@@ -1678,14 +1704,14 @@ class MCTSAgent:
         # Layer 4: depth-0 cutoff — pure static evaluation, no rollout at all
         if self._effective_rollout_cutoff_depth is not None and self._effective_rollout_cutoff_depth <= 0:
             self.stats["cutoff_evals"] += 1
-            return self.state_evaluator.evaluate(board, reward_player, defensive_adj) * self._eval_reward_scale, []
+            return self._evaluate_all_players(board, defensive_adj), []
 
         # Create copy for simulation
         sim_board = board.copy()
         current_player = player
 
-        # Get initial score from root player's perspective
-        initial_score = sim_board.get_score(reward_player)
+        # Initial scores for every player (rewards are score deltas per player)
+        initial_scores = {p: sim_board.get_score(p) for p in _PLAYERS}
         initial_potential = None
         if self.potential_shaping_enabled and self.learned_evaluator is not None:
             try:
@@ -1714,10 +1740,7 @@ class MCTSAgent:
                 and moves_made >= self._effective_rollout_cutoff_depth
             ):
                 self.stats["cutoff_evals"] += 1
-                return (
-                    self.state_evaluator.evaluate(sim_board, reward_player, defensive_adj) * self._eval_reward_scale,
-                    rollout_actions,
-                )
+                return self._evaluate_all_players(sim_board, defensive_adj), rollout_actions
 
             # Get legal moves
             legal_moves = self.move_generator.get_legal_moves(sim_board, current_player)
@@ -1746,6 +1769,8 @@ class MCTSAgent:
                     move = self._two_ply_select(sim_board, current_player, legal_moves)
                 elif self.rollout_policy == "random":
                     move = legal_moves[self._rng.randint(len(legal_moves))]
+                elif self.rollout_policy == "greedy_sample":
+                    move = self._greedy_sample_select(sim_board, current_player, legal_moves)
                 else:
                     move = self.rollout_agent.select_action(sim_board, current_player, legal_moves)
             else:
@@ -1783,27 +1808,22 @@ class MCTSAgent:
             current_player = _PLAYERS[(current_idx + 1) % num_players]
             moves_made += 1
 
-        # Calculate reward from root player's perspective
-        final_score = sim_board.get_score(reward_player)
-        reward = final_score - initial_score
+        # Per-player reward: score delta over the rollout
+        final_scores = {p: sim_board.get_score(p) for p in _PLAYERS}
+        rewards = {p: float(final_scores[p] - initial_scores[p]) for p in _PLAYERS}
 
         # Determine if rollout reached a natural game end (all players passed)
         game_ended = consecutive_passes >= num_players
 
-        # Add bonus for winning/tying (from root player's perspective)
+        # Add win/tie bonus to each winner's own reward
         if game_ended:
-            # Compute actual game result from scores
-            scores = {p: sim_board.get_score(p) for p in _PLAYERS}
-            max_score = max(scores.values())
-            root_score = scores[reward_player]
-            if root_score == max_score:
-                winners = [p for p, s in scores.items() if s == max_score]
-                if len(winners) == 1:
-                    reward += 100  # outright win
-                else:
-                    reward += 10   # tie (shared win)
+            max_score = max(final_scores.values())
+            winners = [p for p, s in final_scores.items() if s == max_score]
+            bonus = 100.0 if len(winners) == 1 else 10.0
+            for p in winners:
+                rewards[p] += bonus
 
-        # Apply potential-based shaping only on truncated rollouts.
+        # Apply potential-based shaping (root player only) on truncated rollouts.
         if (
             self.potential_shaping_enabled
             and self.learned_evaluator is not None
@@ -1816,13 +1836,13 @@ class MCTSAgent:
                 shaping_term = self.potential_shaping_weight * (
                     (self.potential_shaping_gamma * final_potential) - initial_potential
                 )
-                reward += shaping_term
+                rewards[reward_player] += shaping_term
                 if len(self.stats["potential_shaping_terms"]) < 2048:
                     self.stats["potential_shaping_terms"].append(float(shaping_term))
             except Exception:
                 self.stats["evaluator_errors"] += 1
 
-        return reward, rollout_actions
+        return rewards, rollout_actions
 
     def _two_ply_select(
         self, board: Board, player: Player, legal_moves: List[Move]
@@ -1986,10 +2006,38 @@ class MCTSAgent:
             return legal_moves[self._rng.randint(len(legal_moves))]
         elif policy == "two_ply":
             return self._two_ply_select(board, player, legal_moves)
+        elif policy == "greedy_sample":
+            return self._greedy_sample_select(board, player, legal_moves)
         else:
             # "heuristic" (or fallback)
             self.stats["opponent_heuristic_rollouts"] += 1
             return self.rollout_agent.select_action(board, player, legal_moves)
+
+    def _greedy_sample_select(
+        self, board: Board, player: Player, legal_moves: List[Move]
+    ) -> Move:
+        """Cheap semi-informed rollout policy: sample K moves uniformly, play
+        the best by the fast move heuristic.
+
+        Full-heuristic rollouts score *every* legal move at *every* rollout
+        step (~2s per rollout early game); pure random rollouts are cheap but
+        nearly signal-free. Sampling K candidates keeps per-step cost bounded
+        while retaining most of the heuristic's move-quality signal.
+        """
+        k = self.greedy_sample_size
+        if len(legal_moves) > k:
+            idx = self._rng.choice(len(legal_moves), size=k, replace=False)
+            candidates = [legal_moves[i] for i in idx]
+        else:
+            candidates = legal_moves
+        best_move = candidates[0]
+        best_score = -float("inf")
+        for m in candidates:
+            s = compute_move_heuristic(board, player, m, self.move_generator)
+            if s > best_score:
+                best_score = s
+                best_move = m
+        return best_move
 
     def notify_move(
         self,
@@ -2025,72 +2073,82 @@ class MCTSAgent:
     def _backpropagation(
         self,
         node: MCTSNode,
-        reward: float,
+        rewards: Dict[Player, float],
         rollout_actions: Optional[List[int]] = None,
     ):
         """
-        Backpropagation phase: update statistics up the tree.
+        Backpropagation phase: update statistics up the tree (maxⁿ).
 
-        Also updates the progressive history table with move performance,
-        implicit minimax values when minimax_backup_alpha > 0, and per-node
-        RAVE tables when rave_enabled is True.
+        Each node accumulates the reward of the **player who made the move
+        into it** (its parent's player). Children of any node therefore carry
+        Q-values from the perspective of the player choosing among them, so
+        UCB selection correctly has every player optimize their own outcome.
+
+        Also updates the per-player progressive history table, implicit
+        minimax values when minimax_backup_alpha > 0, and per-node RAVE
+        tables when rave_enabled is True.
 
         Args:
             node: Node to start backpropagation from
-            reward: Reward to propagate
-            rollout_actions: Action keys (piece_ids) played by root player
+            rewards: Per-player reward vector from the simulation
+            rollout_actions: Action keys (piece_ids) played by the root player
                 during rollout, for RAVE updates (Layer 5)
         """
         use_minimax = self.minimax_backup_alpha > 0.0
         root_player = self._root_player
+        root_reward = rewards.get(root_player, 0.0) if root_player is not None else 0.0
 
-        # Layer 5: Build the full set of action keys seen in the simulation.
-        # As we walk up the tree, we collect tree-move action keys and combine
-        # them with rollout actions. Each node gets RAVE updates for all
-        # actions seen *below* it.
+        # Layer 5: RAVE tracks the root player's actions; updates apply the
+        # root player's own reward at nodes where the root player is to move.
         use_rave = self.rave_enabled and rollout_actions is not None
         if use_rave:
-            # Start with rollout actions as a set
             rave_action_set: set = set(rollout_actions)
         else:
             rave_action_set = set()
 
-        # Layer 9: Loss avoidance — mark nodes that led to catastrophic results
+        # Layer 9: Loss avoidance — mark nodes catastrophic for the root player
         use_loss_avoidance = (
-            self.loss_avoidance_enabled and reward < self.loss_avoidance_threshold
+            self.loss_avoidance_enabled and root_reward < self.loss_avoidance_threshold
         )
 
         while node is not None:
-            node.update(reward)
+            # Reward perspective: the player who made the move into this node.
+            mover = node.parent.player if node.parent is not None else (
+                root_player if root_player is not None else node.player
+            )
+            node.update(rewards.get(mover, 0.0))
 
             # Layer 9: Flag this node so selection prefers siblings next time
             if use_loss_avoidance and node.parent is not None:
                 node.loss_detected = True
                 self.stats["loss_avoidance_triggers"] += 1
 
-            # Update progressive history for the move that led to this node
+            # Update progressive history for the move that led to this node,
+            # keyed by (mover, action) and credited with the mover's reward.
             if self.progressive_history_enabled and node.move is not None:
-                key = move_action_key(node.move)
+                key = (mover, move_action_key(node.move))
                 entry = self._history_table[key]
-                entry[0] += reward
+                entry[0] += rewards.get(mover, 0.0)
                 entry[1] += 1
 
-            # Layer 5: Update RAVE tables at this node for all actions below
-            if use_rave and rave_action_set:
+            # Layer 5: Update RAVE tables where the root player is to move,
+            # using the root player's own reward.
+            if use_rave and rave_action_set and node.player == root_player:
                 for akey in rave_action_set:
                     if akey in node.rave_visits:
-                        node.rave_total[akey] += reward
+                        node.rave_total[akey] += root_reward
                         node.rave_visits[akey] += 1
                     else:
-                        node.rave_total[akey] = reward
+                        node.rave_total[akey] = root_reward
                         node.rave_visits[akey] = 1
                 self.stats["rave_updates"] += 1
-                # Add this node's own move to the set so that ancestors
-                # see it as part of the "actions below"
-                if node.move is not None:
-                    rave_action_set.add(move_action_key(node.move))
+            if use_rave and node.move is not None and mover == root_player:
+                # Ancestors should see this tree move as an "action below"
+                rave_action_set.add(move_action_key(node.move))
 
-            # Layer 4: Update implicit minimax values
+            # Layer 4: Update implicit minimax values. Children Q-values are
+            # already from the acting player's perspective, so every node
+            # maximizes (maxⁿ) — there is no "minimizing opponent".
             if use_minimax and node.children:
                 visited_children_q = [
                     c.total_reward / c.visits
@@ -2098,23 +2156,18 @@ class MCTSAgent:
                     if c.visits > 0
                 ]
                 if visited_children_q:
-                    if node.player == root_player:
-                        # Root player maximises
-                        node.minimax_value = max(visited_children_q)
-                    else:
-                        # Opponents minimise (from root's perspective)
-                        node.minimax_value = min(visited_children_q)
+                    node.minimax_value = max(visited_children_q)
                     self.stats["minimax_updates"] += 1
             node = node.parent
 
-        # Layer 5: Update NST 2-gram table from rollout action sequence.
-        # rollout_actions is the sequence of root player's action keys.
+        # Layer 5: Update NST 2-gram table from the root player's rollout
+        # action sequence, credited with the root player's reward.
         if self.nst_enabled and rollout_actions and len(rollout_actions) >= 2:
             prev_key = self._last_root_action_key
             for akey in rollout_actions:
                 if prev_key is not None:
                     entry = self._nst_table[(prev_key, akey)]
-                    entry[0] += reward
+                    entry[0] += root_reward
                     entry[1] += 1
                 prev_key = akey
 

@@ -32,8 +32,8 @@ class TestRewardPerspective(unittest.TestCase):
         agent.select_action(game.board, player, legal_moves)
         self.assertEqual(agent._root_player, player)
 
-    def test_rollout_uses_root_player_for_reward(self):
-        """Rollout reward must be from root player's perspective."""
+    def test_rollout_returns_per_player_rewards(self):
+        """Rollout rewards are a per-player vector (maxⁿ), finite for everyone."""
         from mcts.mcts_agent import MCTSAgent, MCTSNode
 
         game = BlokusGame()
@@ -48,11 +48,12 @@ class TestRewardPerspective(unittest.TestCase):
 
         legal_moves = game.get_legal_moves(root_player)
         if legal_moves:
-            reward, _ = agent._rollout(node_board, root_player)
-            # Reward should be a finite number (basic sanity)
+            rewards, _ = agent._rollout(node_board, root_player)
+            # Per-player rewards (maxⁿ) should be finite for every player
             import math
-            self.assertFalse(math.isnan(float(reward)), "Reward should not be NaN")
-            self.assertFalse(math.isinf(float(reward)), "Reward should not be infinite")
+            for p, reward in rewards.items():
+                self.assertFalse(math.isnan(float(reward)), f"{p} reward should not be NaN")
+                self.assertFalse(math.isinf(float(reward)), f"{p} reward should not be infinite")
 
     def test_select_action_returns_valid_move(self):
         """MCTSAgent.select_action returns a move from the legal set."""
@@ -122,9 +123,9 @@ class TestPassHandling(unittest.TestCase):
         # Run a normal rollout from game start — should complete without error
         game = BlokusGame()
         board = game.board.copy()
-        reward, actions = agent._rollout(board, Player.RED)
+        rewards, actions = agent._rollout(board, Player.RED)
         import math
-        self.assertFalse(math.isnan(float(reward)), "Reward should not be NaN")
+        self.assertFalse(math.isnan(float(rewards[Player.RED])), "Reward should not be NaN")
 
     def test_tree_pass_node_expansion(self):
         """Pass nodes in tree should expand to next player with same board."""
