@@ -6,9 +6,9 @@
 - Last promoted generation: None
 
 ## Latest generation
-- Generation: 136
-- Run: 20260701T023158Z (48 games, Elo 1223.1148284169697)
-- Recent Elo trend per recorded game/run point: 23.798
+- Generation: 137
+- Run: 20260701T092936Z (48 games, Elo 1223.8853285819887)
+- Recent Elo trend per recorded game/run point: 28.429
 
 ## Promotion decisions
 - baseline_mcts / baseline: games=10 promoted=False reason=HOLD baseline: failed ['conservative_promotes_candidate', 'conservative:win_rate_ci_conclusive', 'conservative:enough_games', 'beats_champion_head_to_head', 'elo_improvement', 'min_total_games'].
@@ -30,9 +30,9 @@
 - Stable MCTS anchors: 2
 
 ## State/history validation
-- History rows: 136
-- By kind: {'legacy_generation': 123, 'approach_comparison': 13}
-- Approach-comparison rows: 13 · legacy rows: 123 · unknown rows: 0
+- History rows: 137
+- By kind: {'legacy_generation': 123, 'approach_comparison': 14}
+- Approach-comparison rows: 14 · legacy rows: 123 · unknown rows: 0
 - Malformed rows: 0
 - Duplicate keys: 0
 - Missing result-like fields (approach rows only): 0
