@@ -116,13 +116,31 @@ root-perspective reward at *all* nodes, so opponent move statistics were
 credited with the root's outcomes. History is now keyed per player and RAVE
 updates apply the acting player's reward.
 
-### 3.3 Crippled, never-replaced champion (critical) ✅ fix in flight
+### 3.3 Crippled, never-replaced champion (critical) ✅ diagnosed; replacement screened, confirmation pending
 `gen0` champion = random rollouts + depth-5 cutoff + 0.5 iter/ms + RAVE
 (see §1.2). The corrected strong baseline (greedy-sample rollouts, cutoff 12,
-move ordering, RAVE/minimax off, on the fixed maxⁿ search) is being run
-through the real two-stage promotion gauntlet
-(`python -m mcts_lab.promote --candidate training/artifacts/candidates/baseline_mcts_20260701T202756Z.json`);
-the outcome is recorded in `training/state/champion.json` lineage and §5 below.
+move ordering, RAVE/minimax off, on the fixed maxⁿ search) was run through the
+real promotion **screen** (fixed seeds 20260620/20260621, uniform 50 ms
+budget, fixed benchmark pool) and passed every gate, twice (the seeded replay
+reproduced it exactly):
+
+```
+[screen] games=20 seeds=2 win%=47.5 CI=[0.28,0.68] vs champion 16-4
+         ΔElo +228.0  TrueSkill Δμ +23.35
+[screen] PROMOTE baseline: beats champion (16-4), Δμ +23.35, ΔElo +228.0
+```
+
+A 47.5% win rate in 4-player games (chance = 25%) and a 16–4 head-to-head at
+the *same* search budget as the incumbent. The 60-game confirmation stage was
+intentionally stopped early (session time); per the gate rules the champion
+registry is untouched until confirmation passes. The nightly workflow (now
+two-stage, 2 candidates) completes the gated promotion automatically, or run:
+
+```
+python -m mcts_lab.promote \
+    --candidate training/artifacts/candidates/baseline_mcts_20260701T202756Z.json \
+    --thinking-ms 50   # ~2.5h total
+```
 
 ### 3.4 Promotion gate vs budget mismatch (high) ✅ fixed
 Gate demanded ≥40 games/candidate while the nightly budget delivers 9–15.

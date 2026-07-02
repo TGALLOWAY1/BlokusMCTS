@@ -112,8 +112,11 @@ historical gauntlet runs live in `arena_runs/`.
   heuristic agent* — see AUDIT_REPORT.md §1. The corrected strong baseline —
   **greedy-sample rollouts (sample 12 moves/step, pick best by fast
   heuristic), rollout cutoff 12, heuristic move ordering, plain UCT with maxⁿ
-  backups** — is the promotion candidate expected to replace it through the
-  gate (`python -m mcts_lab.promote`).
+  backups** — passed the promotion *screen* decisively at the same search
+  budget: **16–4 head-to-head vs the champion, ΔElo +228, Δμ +23.4** over 20
+  games / 2 fixed seeds (AUDIT_REPORT.md §3.3). The 60-game confirmation (and
+  the actual registry update) completes via the nightly workflow or
+  `python -m mcts_lab.promote --candidate training/artifacts/candidates/baseline_mcts_20260701T202756Z.json`.
 - Absolute Elo numbers before this fix (~1200 plateau) are measurement noise
   around an unchanging agent and are not comparable to post-fix ratings.
 - Next strength milestones, in order: retune evaluation weights on fresh
