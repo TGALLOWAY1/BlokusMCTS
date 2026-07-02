@@ -1,0 +1,40 @@
+{
+  "generation": 140,
+  "id": "ckpt_gen140",
+  "params": {
+    "params": {
+      "adaptive_rollout_depth_avg_bf": 80.0,
+      "adaptive_rollout_depth_base": 5,
+      "adaptive_rollout_depth_enabled": true,
+      "deterministic_time_budget": true,
+      "exploration_constant": 1.414,
+      "iterations_per_ms": 0.5,
+      "minimax_backup_alpha": 0.25,
+      "num_workers": 2,
+      "parallel_strategy": "root",
+      "rave_enabled": true,
+      "rave_k": 1000,
+      "rollout_cutoff_depth": 5,
+      "rollout_policy": "random",
+      "state_eval_weights": {
+        "accessible_corners": 0.243,
+        "center_proximity": 0.0,
+        "largest_remaining_piece_size": -0.231,
+        "opponent_avg_mobility": -0.3,
+        "reachable_empty_squares": 0.081,
+        "remaining_piece_area": -0.0295,
+        "squares_placed": 0.0295,
+        "territory_enclosure_area": 0.0
+      },
+      "use_transposition_table": true
+    },
+    "thinking_time_ms": 500,
+    "type": "mcts"
+  },
+  "promoted_at": "2026-07-02T07:13:08.398392+00:00",
+  "rating": {
+    "elo": 1200.5590404407358,
+    "mu": 27.772429541696518,
+    "sigma": 5.034799084333367
+  }
+}

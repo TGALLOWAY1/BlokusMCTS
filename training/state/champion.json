@@ -2,19 +2,18 @@
   "flat_config": {
     "adaptive_rollout_depth_avg_bf": 80.0,
     "adaptive_rollout_depth_base": 5,
-    "adaptive_rollout_depth_enabled": true,
-    "champion_version": "key_findings_best",
-    "description": "The 'Best Configuration' described literally in KEY_FINDINGS.md (the layer-by-layer experimental verdict doc). No standalone config existed for it, so this wrapper was created for the champion gauntlet. It combines ONLY the explicitly-listed winning ingredients: random rollout, cutoff depth 5, minimax backup alpha 0.25, ML-calibrated state-eval weights, RAVE k=1000, root 2-worker parallelization, and adaptive rollout depth. It deliberately OMITS progressive widening (champion_minimal adds that on top), so the gauntlet's key_findings_best vs champion_minimal head-to-head measures whether progressive widening earns its place on the validated stack. Same 500 ms / 0.5 iter-per-ms budget as the other candidates for an apples-to-apples comparison.",
+    "adaptive_rollout_depth_enabled": false,
     "deterministic_time_budget": true,
     "exploration_constant": 1.414,
+    "heuristic_move_ordering": true,
     "iterations_per_ms": 0.5,
-    "minimax_backup_alpha": 0.25,
-    "num_workers": 2,
+    "minimax_backup_alpha": 0.0,
+    "num_workers": 1,
     "parallel_strategy": "root",
-    "rave_enabled": true,
+    "rave_enabled": false,
     "rave_k": 1000,
-    "rollout_cutoff_depth": 5,
-    "rollout_policy": "random",
+    "rollout_cutoff_depth": 12,
+    "rollout_policy": "greedy_sample",
     "state_eval_weights": {
       "accessible_corners": 0.243,
       "center_proximity": 0.0,
@@ -26,6 +25,7 @@
       "territory_enclosure_area": 0.0
     },
     "thinking_time_ms": 500,
+    "type": "mcts",
     "use_transposition_table": true
   },
   "lineage": [
@@ -33,6 +33,15 @@
       "promoted_at": "2026-06-21T21:28:46.948571+00:00",
       "reason": "Cold-start seed from config/key_findings_best_params.json",
       "version": "gen0"
+    },
+    {
+      "approach": "baseline_mcts",
+      "learning_method": null,
+      "promoted_at": "2026-07-02T07:13:08.398392+00:00",
+      "reason": "PROMOTE baseline: beats champion (48-12), \u0394\u03bc +20.12, \u0394Elo +94.7, 60 games over 2 seeds.",
+      "td_loss": null,
+      "training_rows": null,
+      "version": "gen140"
     }
   ],
   "name": "champion",
@@ -40,17 +49,18 @@
     "params": {
       "adaptive_rollout_depth_avg_bf": 80.0,
       "adaptive_rollout_depth_base": 5,
-      "adaptive_rollout_depth_enabled": true,
+      "adaptive_rollout_depth_enabled": false,
       "deterministic_time_budget": true,
       "exploration_constant": 1.414,
+      "heuristic_move_ordering": true,
       "iterations_per_ms": 0.5,
-      "minimax_backup_alpha": 0.25,
-      "num_workers": 2,
+      "minimax_backup_alpha": 0.0,
+      "num_workers": 1,
       "parallel_strategy": "root",
-      "rave_enabled": true,
+      "rave_enabled": false,
       "rave_k": 1000,
-      "rollout_cutoff_depth": 5,
-      "rollout_policy": "random",
+      "rollout_cutoff_depth": 12,
+      "rollout_policy": "greedy_sample",
       "state_eval_weights": {
         "accessible_corners": 0.243,
         "center_proximity": 0.0,
@@ -66,12 +76,12 @@
     "thinking_time_ms": 500,
     "type": "mcts"
   },
-  "promoted_at": "2026-06-21T21:28:46.948571+00:00",
+  "promoted_at": "2026-07-02T07:13:08.398392+00:00",
   "rating": {
-    "conservative": 7.1275478522138975,
-    "elo": 1224.2437881304859,
-    "trueskill_mu": 22.309041698450518,
-    "trueskill_sigma": 5.06049794874554
+    "conservative": 2.7724295416965177,
+    "elo": 1200.5590404407358,
+    "trueskill_mu": 27.772429541696518,
+    "trueskill_sigma": 8.333333333333334
   },
-  "version": "gen0"
+  "version": "gen140"
 }
