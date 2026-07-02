@@ -84,6 +84,13 @@ than a broken champion — to win.
 - `training/reports/approach_comparison.md` has the full per-approach detail.
 - `training/reports/elo_trend.png` adds a rolling average, best-historical line,
   human target, and promotion markers.
+- The email also embeds a **Champion Composition** summary (search budget, rollout
+  policy, RAVE/TD/heuristics, learned evaluator, promotion source) plus three extra
+  graphics rendered by `training/report_visuals.py`
+  (`python -m training.report_visuals`): `matchup_matrix.png` (champion vs each
+  benchmark opponent + candidate), `approach_comparison.png` (per-candidate win% /
+  Elo Δ vs champion, colour-coded by promotion outcome), and `recent_deltas.png`
+  (per-generation Elo change). Raw tables remain in the body as the secondary view.
 
 ### Reporting era (post-bug-fix filtering)
 

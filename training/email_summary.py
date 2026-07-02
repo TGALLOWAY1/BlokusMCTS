@@ -694,6 +694,7 @@ def build_body(
     plot_game_count: Optional[int] = None,
     provenance: Optional[Provenance] = None,
     era: Optional[reporting_era.ReportingEra] = None,
+    graphics: Optional[Dict[str, Optional[Path]]] = None,
 ) -> str:
     """Render the full markdown email body.
 
@@ -702,9 +703,12 @@ def build_body(
     Elo-progression table. ``plot_game_count`` is the number of per-game points
     behind the plot (for the callout text). ``era`` is the reporting era every
     filtered figure is derived from (banner printed under the verdict).
+    ``graphics`` maps ``{name: png_path}`` for the matchup matrix / approach
+    comparison / recent-deltas images embedded alongside the Elo plot.
     """
     if era is None:
         era = reporting_era.resolve_era()
+    graphics = graphics or {}
     if view is None:
         view = build_run_view([], state)
     if paths is None:
@@ -815,6 +819,41 @@ def build_body(
         "",
     ]
 
+    # --- Champion Composition (what the agent actually is) -------------------
+    lines += ["## Champion Composition", ""]
+    try:
+        from training import report_visuals
+
+        lines += report_visuals.champion_composition_lines(state)
+    except Exception as exc:  # noqa: BLE001 — composition is best-effort
+        lines.append(f"_Champion composition unavailable ({type(exc).__name__})._")
+    lines.append("")
+
+    # --- Report Graphics -----------------------------------------------------
+    # Named callouts for the extra images so text-only clients know they exist and
+    # where to find them (attached + inline in HTML clients).
+    graphic_titles = {
+        "matchup_matrix": ("Champion matchup matrix",
+                           "how the champion compares to each benchmark opponent + "
+                           "candidate (Elo gap, expected and measured win rates)"),
+        "approach_comparison": ("Approach comparison chart",
+                                "each candidate's win rate and Elo Δ vs the champion, "
+                                "colour-coded by promotion outcome"),
+        "recent_deltas": ("Recent Elo change by generation",
+                          "per-generation Elo delta across the reporting era"),
+    }
+    present = [(graphics.get(k), t, d) for k, (t, d) in graphic_titles.items()
+               if graphics.get(k) is not None]
+    if present:
+        lines += ["## Report Graphics", ""]
+        lines.append("Additional images are attached (and shown inline in HTML mail "
+                     "clients):")
+        lines.append("")
+        for path, title, desc in present:
+            fname = Path(path).name
+            lines.append(f"- **{title}** (`{fname}`) — {desc}.")
+        lines.append("")
+
     # --- ELO Trend -----------------------------------------------------------
     lines += ["## ELO Trend", ""]
     if plot_attached:
@@ -900,25 +939,66 @@ def build_body(
 
 _PLOT_CID = "elo-plot"
 
+# Inline image order (headline first). Each entry: (graphics-dict key, cid, alt).
+# The Elo plot is passed separately (it predates the graphics dict) under _PLOT_CID.
+_GRAPHIC_IMAGES = [
+    ("matchup_matrix", "matchup-matrix", "Champion matchup matrix"),
+    ("approach_comparison", "approach-comparison", "Approach comparison chart"),
+    ("recent_deltas", "recent-deltas", "Recent Elo change by generation"),
+]
 
-def _html_body(text_body: str, *, plot_inline: bool) -> str:
-    """Wrap the plain-text body in minimal HTML, embedding the plot inline on top.
 
-    Kept deliberately simple (a leading ``<img>`` + the escaped text in a ``<pre>``)
-    so it renders consistently across mail clients without a markdown dependency.
+def _inline_images(*, plot_inline: bool, graphics: Dict[str, Any]) -> List[tuple]:
+    """Resolve the ordered list of ``(cid, alt, path)`` images to embed inline."""
+    imgs: List[tuple] = []
+    if plot_inline:
+        imgs.append((_PLOT_CID, "Champion Elo trajectory", None))  # path filled by caller
+    for key, cid, alt in _GRAPHIC_IMAGES:
+        path = graphics.get(key)
+        if path is not None:
+            imgs.append((cid, alt, Path(path)))
+    return imgs
+
+
+def _html_body(
+    text_body: str, *, plot_inline: bool, graphics: Optional[Dict[str, Any]] = None
+) -> str:
+    """Wrap the plain-text body in minimal HTML, embedding all images inline on top.
+
+    Images are stacked responsively (``max-width:100%``) with a caption above each,
+    then the escaped text follows in a ``<pre>``. Kept dependency-free so it renders
+    across desktop and mobile-width mail clients.
     """
-    img = (
-        f'<img src="cid:{_PLOT_CID}" alt="Champion Elo trajectory" '
-        'style="max-width:100%;height:auto;margin-bottom:16px;" />'
-        if plot_inline else ""
-    )
+    graphics = graphics or {}
+    blocks: List[str] = []
+    if plot_inline:
+        blocks.append(
+            f'<figure style="margin:0 0 18px 0;"><img src="cid:{_PLOT_CID}" '
+            'alt="Champion Elo trajectory" '
+            'style="max-width:100%;height:auto;display:block;" /></figure>'
+        )
+    for key, cid, alt in _GRAPHIC_IMAGES:
+        if graphics.get(key) is not None:
+            blocks.append(
+                f'<figure style="margin:0 0 18px 0;">'
+                f'<figcaption style="font:600 13px -apple-system,Segoe UI,Roboto,'
+                f'Helvetica,Arial,sans-serif;color:#374151;margin:0 0 6px 0;">'
+                f'{_html.escape(alt)}</figcaption>'
+                f'<img src="cid:{cid}" alt="{_html.escape(alt)}" '
+                'style="max-width:100%;height:auto;display:block;'
+                'border:1px solid #e5e7eb;border-radius:6px;" /></figure>'
+            )
+    images_html = "".join(blocks)
     escaped = _html.escape(text_body)
     return (
-        "<!DOCTYPE html><html><body "
-        'style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
-        f"{img}"
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "</head><body "
+        'style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
+        'margin:0;padding:12px;max-width:900px;">'
+        f"{images_html}"
         '<pre style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
-        'white-space:pre-wrap;font-size:13px;line-height:1.45;">'
+        'white-space:pre-wrap;word-wrap:break-word;font-size:13px;line-height:1.45;">'
         f"{escaped}</pre></body></html>"
     )
 
@@ -930,44 +1010,57 @@ def build_message(
     email_from: str,
     email_to: str,
     plot_path: Optional[Path | str] = None,
+    graphics: Optional[Dict[str, Any]] = None,
 ) -> EmailMessage:
-    """Assemble the email, embedding the Elo plot inline and as an attachment.
+    """Assemble the email, embedding the Elo plot + extra graphics inline + attached.
 
-    Structure when a plot is present::
+    Structure when images are present::
 
         multipart/mixed
         ├── multipart/alternative
         │   ├── text/plain                (the markdown body)
         │   └── multipart/related
-        │       ├── text/html             (escaped body + inline <img>)
-        │       └── image/png             (inline, cid:elo-plot)
-        └── image/png                     (downloadable attachment)
+        │       ├── text/html             (escaped body + inline <img> per graphic)
+        │       └── image/png × N         (inline, cid per graphic)
+        └── image/png × N                 (downloadable attachments)
 
     The plain-text part is always present, so text-only clients still get the full
-    report. Any failure attaching the image degrades to text-only rather than
-    raising.
+    report. Any failure attaching an image degrades gracefully rather than raising.
     """
+    graphics = graphics or {}
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = email_from
     msg["To"] = email_to
     msg.set_content(body)  # plain-text fallback (always)
 
+    # Collect (cid, filename, path) for every image that exists on disk.
+    to_embed: List[tuple] = []
     png = Path(plot_path) if plot_path else None
     if png and png.exists():
+        to_embed.append((_PLOT_CID, "elo_trend.png", png))
+    for key, cid, _alt in _GRAPHIC_IMAGES:
+        p = graphics.get(key)
+        if p is not None and Path(p).exists():
+            to_embed.append((cid, f"{key}.png", Path(p)))
+
+    if to_embed:
         try:
-            img = png.read_bytes()
-            msg.add_alternative(_html_body(body, plot_inline=True), subtype="html")
-            # The HTML part is the last payload; embed the image inside it (cid).
-            msg.get_payload()[1].add_related(
-                img, maintype="image", subtype="png", cid=f"<{_PLOT_CID}>"
+            msg.add_alternative(
+                _html_body(body, plot_inline=png is not None and png.exists(),
+                           graphics=graphics),
+                subtype="html",
             )
-            # Also attach as a normal file so text-only clients can open it.
-            msg.add_attachment(
-                img, maintype="image", subtype="png", filename="elo_trend.png"
-            )
-        except Exception as exc:  # noqa: BLE001 — never fail the email over the plot
-            print(f"[email] Could not attach plot ({type(exc).__name__}: {exc}); "
+            related = msg.get_payload()[1]  # the HTML part
+            for cid, filename, path in to_embed:
+                data = path.read_bytes()
+                related.add_related(data, maintype="image", subtype="png",
+                                    cid=f"<{cid}>")
+                # Also attach as a normal file so text-only clients can open it.
+                msg.add_attachment(data, maintype="image", subtype="png",
+                                   filename=filename)
+        except Exception as exc:  # noqa: BLE001 — never fail the email over an image
+            print(f"[email] Could not attach graphics ({type(exc).__name__}: {exc}); "
                   "sending text-only.")
     return msg
 
@@ -978,12 +1071,14 @@ def send_email(
     *,
     config: SmtpConfig,
     plot_path: Optional[Path | str] = None,
+    graphics: Optional[Dict[str, Any]] = None,
     send_fn: Optional[Callable[[SmtpConfig, EmailMessage], None]] = None,
 ) -> None:
     """Send the digest. ``send_fn`` is injectable so tests never open a socket."""
     msg = build_message(
         subject, body,
         email_from=config.email_from, email_to=config.email_to, plot_path=plot_path,
+        graphics=graphics,
     )
     (send_fn or _smtp_send)(config, msg)
 
@@ -1031,6 +1126,7 @@ def compose(
         )
         findings = diagnostics.collect_findings(conn, state)
         plot_path, plot_game_count = _render_plot(conn, paths, state, era=era)
+        graphics = _render_extra_graphics(conn, paths, state, era=era)
     finally:
         conn.close()
 
@@ -1048,13 +1144,35 @@ def compose(
     body = build_body(
         state, view, failed=failed, promoted=promoted, findings=findings, paths=paths,
         plot_attached=plot_path is not None, plot_game_count=plot_game_count,
-        provenance=prov, era=era,
+        provenance=prov, era=era, graphics=graphics,
     )
     return {
         "subject": subject, "body": body, "view": view, "state": state,
         "plot_path": plot_path, "provenance": prov, "era": era,
+        "graphics": graphics,
         "alerts": alerts, "verdict": verdict,
     }
+
+
+def _render_extra_graphics(
+    conn, paths: TrainingPaths, state: Dict[str, Any],
+    *, era: reporting_era.ReportingEra,
+) -> Dict[str, Optional[Path]]:
+    """Render the matchup matrix / approach comparison / recent-deltas PNGs.
+
+    Never raises — a failure yields ``None`` slots so the email ships with whatever
+    graphics succeeded.
+    """
+    try:
+        from training import report_visuals
+
+        return report_visuals.render_all(
+            conn, paths.reports_dir, state,
+            since_run_id=era.since_run_id, era_label=era.label,
+        )
+    except Exception as exc:  # noqa: BLE001 — extra graphics must never break the email
+        print(f"[email] Extra graphics skipped ({type(exc).__name__}: {exc}).")
+        return {}
 
 
 def _render_plot(
@@ -1143,6 +1261,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     composed = compose(failed=args.failed, era=era)
     subject, body = composed["subject"], composed["body"]
     plot_path = composed.get("plot_path")
+    graphics = composed.get("graphics") or {}
 
     print("=" * 70)
     print(f"Subject: {subject}")
@@ -1150,6 +1269,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(body)
     print("=" * 70)
     print(f"[email] Plot: {plot_path if plot_path else 'none (text-only)'}")
+    for name, path in graphics.items():
+        print(f"[email] Graphic {name}: {path if path else 'none'}")
 
     # Mirror the verdict/alerts onto the Actions run page (no-op off-CI).
     _emit_github_outputs(composed)
@@ -1161,7 +1282,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if config is None:
         return 0  # graceful skip; body already printed
     try:
-        send_email(subject, body, config=config, plot_path=plot_path)
+        send_email(subject, body, config=config, plot_path=plot_path, graphics=graphics)
         print(f"[email] Sent to {config.email_to}")
     except Exception as exc:  # noqa: BLE001 — never fail the workflow on email
         print(f"[email] Send failed: {type(exc).__name__}: {exc}")

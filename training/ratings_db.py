@@ -336,6 +336,33 @@ def latest_ratings(conn: sqlite3.Connection) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def ratings_for_run(conn: sqlite3.Connection, run_id: str) -> Dict[str, Dict[str, Any]]:
+    """Every agent's rating snapshot recorded by a single run.
+
+    Returns ``{agent: {elo, mu, sigma, conservative, games_played}}`` for the given
+    ``run_id`` (empty dict if the run recorded nothing). Used by the matchup matrix
+    so the champion and its opponents are compared on ratings measured in the *same*
+    run rather than across differently-aged snapshots.
+    """
+    rows = conn.execute(
+        """
+        SELECT agent, elo, trueskill_mu, trueskill_sigma, conservative, games_played
+        FROM rating_history WHERE run_id = ?
+        """,
+        (run_id,),
+    ).fetchall()
+    return {
+        row["agent"]: {
+            "elo": float(row["elo"]),
+            "mu": float(row["trueskill_mu"]),
+            "sigma": float(row["trueskill_sigma"]),
+            "conservative": float(row["conservative"]),
+            "games_played": int(row["games_played"]),
+        }
+        for row in rows
+    }
+
+
 def champion_elo_series(
     conn: sqlite3.Connection, *, agent: str = "champion",
     since_run_id: Optional[str] = None,
