@@ -34,7 +34,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from training import TrainingPaths, diagnostics, ratings_db, reporting_era, state_store
+from training import (
+    TrainingPaths, diagnostics, human_estimate, ratings_db, reporting_era, state_store,
+)
 
 # ---------------------------------------------------------------------------
 # Canonical pipeline identity (see docs/training_workflows.md). The email always
@@ -387,25 +389,157 @@ def _learning_lines(last_eval: Optional[Dict[str, Any]]) -> List[str]:
     return out
 
 
-def _match_breakdown(last_eval: Optional[Dict[str, Any]]) -> List[str]:
-    if not last_eval:
-        return [
-            "_No candidate evaluation ran this cycle (the evaluator could not "
-            "re-fit yet, or the time budget was exhausted). No fresh head-to-head "
-            "win rates are available._",
+def _match_breakdown(
+    last_eval: Optional[Dict[str, Any]],
+    approach_record: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    """Head-to-head breakdown, kept consistent with the approach-comparison section.
+
+    Historically this only understood the legacy ``last_eval`` shape and, since the
+    multi-agent framework always sets ``last_eval=None``, it unconditionally printed
+    "No candidate evaluation ran this cycle" — directly contradicting the Approach
+    Comparison table that *does* list candidates with head-to-head win rates. It now
+    distinguishes the real cases:
+
+    * a legacy standalone eval with recorded baselines,
+    * head-to-head games that ran under the approach-comparison arena,
+    * candidates generated but with no completed games,
+    * genuinely no head-to-head this cycle.
+    """
+    # 1. Legacy standalone evaluation with its own baseline table.
+    if last_eval and last_eval.get("baselines"):
+        lines = [
+            f"Evaluation games: {_fmt(last_eval.get('total_games'), ',')} "
+            f"across {_fmt(last_eval.get('n_seeds'))} seed(s) "
+            f"{last_eval.get('seeds')}",
+            "",
+            "| Agent | Win rate | Games |",
+            "|---|---:|---:|",
         ]
-    lines = [
-        f"Evaluation games: {_fmt(last_eval.get('total_games'), ',')} "
-        f"across {_fmt(last_eval.get('n_seeds'))} seed(s) "
-        f"{last_eval.get('seeds')}",
-        "",
-        "| Agent | Win rate | Games |",
-        "|---|---:|---:|",
+        for b in last_eval.get("baselines", []):
+            lines.append(
+                f"| `{b['agent']}` | {b['win_rate'] * 100:.1f}% | {b.get('games', 0)} |"
+            )
+        return lines
+
+    # 2. Multi-agent framework: derive the breakdown from the approach comparison so
+    #    it never contradicts the Approach Comparison section above.
+    record = approach_record or {}
+    rows = record.get("rows") or []
+    created = [r for r in rows if r.get("created")]
+    played = [r for r in created if int(r.get("games") or 0) > 0]
+    if played:
+        seeds = record.get("seeds")
+        lines = [
+            "Head-to-head games ran under the **approach-comparison** arena (the "
+            "candidates each played the champion + a fixed benchmark pool). "
+            f"Seeds: {seeds}.",
+            "",
+            "| Candidate | Games | Win% vs champion |",
+            "|---|---:|---:|",
+        ]
+        for r in played:
+            wr = r.get("win_rate_vs_champion")
+            wr_txt = f"{wr * 100:.0f}%" if wr is not None else "—"
+            lines.append(f"| `{r.get('approach')}` | {int(r.get('games') or 0)} | {wr_txt} |")
+        lines += [
+            "",
+            "_This is the same evidence summarised in **Approach Comparison** above. "
+            "A separate standalone evaluator re-fit did not run as its own step this "
+            "cycle — these head-to-head results come from the approach-comparison "
+            "arena, not a distinct evaluation._",
+        ]
+        return lines
+
+    # 3. Candidates were generated but no games completed (budget/timeout).
+    if created:
+        return [
+            "_Candidates were generated but no head-to-head games completed this "
+            "cycle (see the **Alerts** and **Approach Comparison** sections for why). "
+            "No fresh win rates are available._",
+        ]
+
+    # 4. Nothing ran.
+    return [
+        "_No head-to-head games ran this cycle (no candidate was created, or the run "
+        "did not reach the evaluation arena). No fresh win rates are available._",
     ]
-    for b in last_eval.get("baselines", []):
-        lines.append(
-            f"| `{b['agent']}` | {b['win_rate'] * 100:.1f}% | {b.get('games', 0)} |"
-        )
+
+
+def _noise_suffix(
+    delta: Optional[float], approach_record: Optional[Dict[str, Any]]
+) -> str:
+    """Return " _(within noise floor)_" when a delta is smaller than the measured
+    Elo noise stddev, so small run-to-run wiggles are not read as real movement."""
+    if delta is None:
+        return ""
+    noise = ((approach_record or {}).get("trajectory") or {}).get("noise") or {}
+    stddev = noise.get("stddev")
+    if isinstance(stddev, (int, float)) and stddev > 0 and abs(delta) < stddev:
+        return f" _(within noise floor ±{stddev:.0f})_"
+    return ""
+
+
+def _human_estimate_lines(
+    state: Dict[str, Any],
+    view: RunView,
+    cur_elo: Optional[float],
+    era: reporting_era.ReportingEra,
+    champion_fixed: bool,
+) -> List[str]:
+    """Human-strength projection computed from the **era-filtered** timeline.
+
+    The old section echoed ``state['estimated_days_to_target']`` verbatim — a value
+    computed elsewhere over the full history, presented with no assumptions. This
+    recomputes the estimate from the reporting era alone and always labels it as
+    approximate: the repo has no measured human-vs-MCTS anchor, so the target is an
+    assumption, and post-fix data is still limited so the confidence is stated up
+    front and the projection is only shown when the trend actually supports one.
+    """
+    target = float(state.get("human_target_elo", 1700) or 1700)
+    elo = float(cur_elo) if cur_elo is not None else float(state.get("elo", 1200.0))
+    # Series from the era-filtered run window (oldest-first) — same slice as the plot.
+    series = [
+        {"elo": float(h["champion_elo"]), "total_games": int(h.get("total_games", 0))}
+        for h in view.history
+    ]
+    est = human_estimate.summarize(elo, series, target=target)
+    strength = est.get("strength", "n/a")
+    confidence = est.get("confidence", "none")
+    gap = est.get("gap")
+
+    lines = [
+        f"- **Approximate** — the {target:.0f} Elo target is an *assumed* human "
+        "anchor (no measured human-vs-MCTS games exist), so treat this as a rough "
+        "guide, not a calibrated rating.",
+        f"- Current strength bucket: **{strength}** (Elo {elo:.0f})",
+        f"- Target: {target:.0f} Elo · gap {_fmt(gap, '+.0f')} Elo",
+        f"- Estimate confidence: **{confidence}** "
+        f"(based on {len(series)} post-fix run(s) in the {era.label}).",
+    ]
+
+    if champion_fixed:
+        lines.append("- ⚠️ The champion has never been promoted, so the trend is "
+                     "fixed-agent measurement drift — no time-to-target projection is "
+                     "shown.")
+        return lines
+
+    days = est.get("days_remaining")
+    if confidence in ("none",) or days is None:
+        caveat = est.get("caveat") or ("No measurable upward trend in the reporting "
+                                       "era yet; no projection shown.")
+        lines.append(f"- Projected time to target: **not shown** — {caveat}")
+        return lines
+
+    lo, hi = est.get("lower_bound"), est.get("upper_bound")
+    range_txt = (f" (range {lo}–{hi} days)" if lo is not None and hi is not None else "")
+    lines.append(f"- Projected days remaining: ~{days}{range_txt} "
+                 f"[confidence: {confidence}]")
+    lines.append("- Assumptions: constant recent Elo-gain rate, one run ≈ one day, "
+                 "and the assumed human anchor above. Small post-fix samples make "
+                 "this volatile — expect it to move run-to-run.")
+    if est.get("caveat"):
+        lines.append(f"- _{est['caveat']}_")
     return lines
 
 
@@ -809,8 +943,10 @@ def build_body(
         f"- Agent evaluated: {champ.get('name')} ({champ.get('version')})",
         f"- Games played (this run): {_fmt(state.get('games_today'), ',')}",
         f"- Current ELO: {_fmt(cur_elo, '.1f')}",
-        f"- Change vs previous run: {_fmt(view.elo_delta_previous, '+.1f', dash='— (first run)')}",
-        f"- Change vs best historical run: {_fmt(view.elo_delta_best, '+.1f', dash='— (first run)')}",
+        f"- Change vs previous run: {_fmt(view.elo_delta_previous, '+.1f', dash='— (first run)')}"
+        + _noise_suffix(view.elo_delta_previous, approach_record),
+        f"- Change vs best historical run: {_fmt(view.elo_delta_best, '+.1f', dash='— (first run)')}"
+        + " _(era best)_",
         f"- Best historical ELO: {_fmt(best_elo, '.1f')}",
         f"- TrueSkill: {_fmt(state.get('trueskill_mu'), '.1f')} ± "
         f"{_fmt(state.get('trueskill_sigma'), '.1f')}",
@@ -906,19 +1042,13 @@ def build_body(
 
     # --- Match Breakdown -----------------------------------------------------
     lines += ["## Match Breakdown", ""]
-    lines += _match_breakdown(last_eval)
+    lines += _match_breakdown(last_eval, approach_record)
     lines.append("")
 
     # --- Human Estimate -------------------------------------------------------
-    lines += [
-        "## Human Strength Estimate",
-        "",
-        f"- Target: {_fmt(state.get('human_target_elo'), '.0f')} Elo",
-        f"- Current gap: {_fmt((state.get('human_target_elo') or 0) - (cur_elo or 0), '+.0f')} Elo",
-        f"- Projected days remaining: {_fmt(state.get('estimated_days_to_target'))}",
-        f"- Estimate confidence: {state.get('estimate_confidence')}",
-        "",
-    ]
+    lines += ["## Human Strength Estimate", ""]
+    lines += _human_estimate_lines(state, view, cur_elo, era, champion_is_fixed(state))
+    lines.append("")
 
     # --- Diagnostics ---------------------------------------------------------
     lines += ["## Diagnostics", ""]

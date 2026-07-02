@@ -140,10 +140,18 @@ def render_status(data: Dict[str, Any]) -> str:
 
     # --- Baseline Results ----------------------------------------------------
     lines += ["## Baseline Results", ""]
+    approach = data.get("approach_comparison")
     if baselines:
         lines += ["| Agent | Win rate | Games |", "|---|---|---|"]
         for b in baselines:
             lines.append(f"| `{b['agent']}` | {b['win_rate'] * 100:.1f}% | {b['games']} |")
+    elif approach and approach.get("rows"):
+        # A standalone baseline re-fit did not run, but the approach-comparison arena
+        # DID play head-to-head games — say that instead of the contradictory
+        # "no candidate evaluation ran this cycle".
+        lines.append("_No standalone baseline re-fit ran this cycle. Head-to-head "
+                     "results came from the **Approach Comparison** arena above "
+                     "(candidates vs champion + benchmark pool)._")
     else:
         lines.append("_No candidate evaluation ran this cycle (insufficient snapshot data "
                      "for a re-fit, or out of time budget)._")
