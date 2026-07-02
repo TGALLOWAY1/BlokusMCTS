@@ -167,6 +167,35 @@ def test_build_matchup_rows_skips_agents_without_ratings(tmp_path):
     assert champ_elo == 1377.0
 
 
+def test_matchup_fallback_stays_inside_era(tmp_path):
+    """An opponent whose only rating is pre-cutoff must NOT be pulled into an
+    era-scoped matrix via the latest-rating fallback (Codex P2 finding)."""
+    conn = ratings_db.connect(tmp_path / "r.sqlite")
+    # 'stale_bench' only ever rated in a PRE-cutoff run; champion + heuristic are
+    # rated in-era at POST2 but 'stale_bench' sat out every post-fix run.
+    _record(conn, PRE, 100, 1600.0, 500, agents={"stale_bench": 1550.0})
+    _record(conn, POST2, 142, 1377.0, 1500, agents={"heuristic": 950.0})
+    record = {"pool": {"opponents": ["heuristic", "stale_bench"]}, "rows": []}
+    _champ, rows = report_visuals.build_matchup_rows(
+        conn, record, run_id=POST2, since_run_id=CUTOFF
+    )
+    names = {r["agent"] for r in rows}
+    assert "heuristic" in names
+    # stale_bench has no in-era rating -> omitted, not shown with its pre-fix 1550.
+    assert "stale_bench" not in names
+
+
+def test_latest_ratings_since_run_id_excludes_pre_cutoff(tmp_path):
+    conn = ratings_db.connect(tmp_path / "r.sqlite")
+    _record(conn, PRE, 100, 1600.0, 500, agents={"stale_bench": 1550.0})
+    _record(conn, POST2, 142, 1377.0, 1500, agents={"heuristic": 950.0})
+    era_latest = ratings_db.latest_ratings(conn, since_run_id=CUTOFF)
+    all_latest = ratings_db.latest_ratings(conn)
+    assert "stale_bench" in all_latest
+    assert "stale_bench" not in era_latest
+    assert "heuristic" in era_latest
+
+
 def test_approach_comparison_no_candidates_returns_none(tmp_path):
     out = report_visuals.render_approach_comparison(
         tmp_path / "a.png", {"rows": [{"approach": "x", "created": False}]}

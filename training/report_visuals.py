@@ -91,7 +91,10 @@ def build_matchup_rows(
     latest era rating so an opponent that sat out this run still appears.
     """
     run_ratings = ratings_db.ratings_for_run(conn, run_id) if run_id else {}
-    latest = ratings_db.latest_ratings(conn)
+    # Fall back to the latest *in-era* rating (not all-time) for agents that sat out
+    # this run — otherwise a benchmark capped out of the pool could drag a pre-cutoff
+    # rating into an era-scoped matrix that claims earlier runs are excluded.
+    latest = ratings_db.latest_ratings(conn, since_run_id=since_run_id)
 
     def rating_of(agent: str) -> Optional[Dict[str, Any]]:
         return run_ratings.get(agent) or latest.get(agent)

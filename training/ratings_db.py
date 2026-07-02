@@ -308,22 +308,40 @@ def champion_game_elo_series(
     ]
 
 
-def latest_ratings(conn: sqlite3.Connection) -> Dict[str, Dict[str, Any]]:
+def latest_ratings(
+    conn: sqlite3.Connection, *, since_run_id: Optional[str] = None
+) -> Dict[str, Dict[str, Any]]:
     """Most-recent rating row per agent — the cross-run seed for both trackers.
 
     Returns ``{agent: {elo, mu, sigma, conservative, games_played}}``. Elo has no
     serialization of its own, so this is how Elo (and TrueSkill) persist across
-    runs.
+    runs. With ``since_run_id`` set, only rows from runs at/after that run id are
+    considered (see :data:`MULTI_AGENT_EPOCH_RUN_ID` / the reporting era), so an
+    era-scoped caller never falls back to a pre-cutoff rating for an agent that sat
+    out the current run.
     """
-    rows = conn.execute(
-        """
-        SELECT agent, elo, trueskill_mu, trueskill_sigma, conservative, games_played
-        FROM rating_history
-        WHERE id IN (
-            SELECT MAX(id) FROM rating_history GROUP BY agent
-        )
-        """
-    ).fetchall()
+    if since_run_id:
+        rows = conn.execute(
+            """
+            SELECT agent, elo, trueskill_mu, trueskill_sigma, conservative, games_played
+            FROM rating_history
+            WHERE id IN (
+                SELECT MAX(id) FROM rating_history
+                WHERE run_id >= ? GROUP BY agent
+            )
+            """,
+            (since_run_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT agent, elo, trueskill_mu, trueskill_sigma, conservative, games_played
+            FROM rating_history
+            WHERE id IN (
+                SELECT MAX(id) FROM rating_history GROUP BY agent
+            )
+            """
+        ).fetchall()
     out: Dict[str, Dict[str, Any]] = {}
     for row in rows:
         out[row["agent"]] = {
