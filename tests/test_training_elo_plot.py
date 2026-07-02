@@ -20,12 +20,13 @@ from training import elo_plot
 matplotlib = pytest.importorskip("matplotlib")  # in requirements.txt; skip if absent
 
 
-def _seed_run_summary(conn, gen, elo, total):
+def _seed_run_summary(conn, gen, elo, total, *, promoted=False, run_id=None):
+    run_id = run_id or f"run{gen}"
     ratings_db.record_run(
-        conn, run_id=f"run{gen}", timestamp=f"2026-06-2{gen}T03:00:00Z",
+        conn, run_id=run_id, timestamp=f"2026-06-2{gen}T03:00:00Z",
         generation=gen,
         agent_rows=[ratings_db.AgentRatingRow("champion", elo, 26.0, 7.0, 5.0, total)],
-        run_summary=ratings_db.RunSummaryRow(gen, 12, total, elo, 26.0, 7.0, False, gen),
+        run_summary=ratings_db.RunSummaryRow(gen, 12, total, elo, 26.0, 7.0, promoted, gen),
     )
 
 
@@ -67,6 +68,62 @@ def test_load_series_prefers_per_game(tmp_path):
     x, y, granularity = elo_plot._load_series(conn)
     assert granularity == "per-game"
     assert y == [1300.0, 1305.0]
+
+
+def test_promotion_markers_use_per_game_coordinates(tmp_path):
+    """A promotion must be plotted in the per-game (game_number) system, never at the
+    much larger run_summary.total_games — the historical off-axis-triangle bug."""
+    conn = ratings_db.connect(tmp_path / "r.sqlite")
+    # run_summary records total_games=2296 for the promoted run (games across ALL
+    # agents), but the per-game curve only reaches game_number 100.
+    _seed_run_summary(conn, 1, 1200.0, 2296, promoted=True, run_id="20260702T022345Z")
+    ratings_db.record_game_elos(
+        conn, run_id="20260702T022345Z", timestamp="t", generation=1,
+        samples=[(i, 1200.0 + i) for i in range(1, 101)],
+    )
+    x, y, granularity = elo_plot._load_series(conn)
+    assert granularity == "per-game"
+    x_domain = (min(x), max(x))
+    markers, dropped = elo_plot._promotion_markers(
+        conn, granularity="per-game", x_domain=x_domain,
+    )
+    assert not dropped
+    assert len(markers) == 1
+    mx, my = markers[0]
+    # The marker is at the run's last per-game index (100), NOT total_games (2296),
+    # and every marker x is inside the plotted data range (the acceptance criterion).
+    assert mx == 100.0
+    assert x_domain[0] <= mx <= x_domain[1]
+
+
+def test_promotion_marker_out_of_range_is_dropped_not_plotted(tmp_path):
+    """A promotion whose mapped x falls outside the plotted range is reported as
+    dropped (with a reason), never silently plotted off-axis."""
+    conn = ratings_db.connect(tmp_path / "r.sqlite")
+    # Promoted run has NO per-game rows -> cannot be mapped onto the per-game curve.
+    _seed_run_summary(conn, 1, 1200.0, 500, promoted=True, run_id="promo_no_games")
+    ratings_db.record_game_elos(
+        conn, run_id="other", timestamp="t", generation=1,
+        samples=[(i, 1200.0 + i) for i in range(1, 51)],
+    )
+    x, _, granularity = elo_plot._load_series(conn)
+    markers, dropped = elo_plot._promotion_markers(
+        conn, granularity="per-game", x_domain=(min(x), max(x)),
+    )
+    assert markers == []
+    assert dropped and dropped[0][0] == "promo_no_games"
+
+
+def test_render_with_promotion_does_not_raise(tmp_path):
+    """End-to-end: a per-game plot with a promotion renders without error."""
+    conn = ratings_db.connect(tmp_path / "r.sqlite")
+    _seed_run_summary(conn, 1, 1200.0, 2296, promoted=True, run_id="20260702T022345Z")
+    ratings_db.record_game_elos(
+        conn, run_id="20260702T022345Z", timestamp="t", generation=1,
+        samples=[(i, 1200.0 + i * 0.5) for i in range(1, 61)],
+    )
+    out = elo_plot.render_elo_plot(conn, tmp_path / "elo.png", target_elo=1700)
+    assert out is not None and out.exists()
 
 
 def test_render_default_uses_repo_paths(tmp_path, monkeypatch):
