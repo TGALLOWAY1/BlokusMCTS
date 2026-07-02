@@ -118,13 +118,14 @@ def render_elo_plot(
     agent: str = "champion",
     target_elo: Optional[float] = None,
     since_run_id: Optional[str] = None,
+    era_label: Optional[str] = None,
 ) -> Optional[Path]:
     """Render the champion Elo trajectory to ``out_path`` (PNG). Returns the path.
 
     Returns ``None`` — without raising — when there is nothing to plot or
     matplotlib is unavailable, so callers can treat a missing plot as "ship the
-    email without it". ``since_run_id`` restricts the plot to the multi-agent era
-    (see :data:`ratings_db.MULTI_AGENT_EPOCH_RUN_ID`).
+    email without it". ``since_run_id`` restricts the plot to a reporting era (see
+    :mod:`training.reporting_era`); ``era_label`` names that era in the title.
     """
     out_path = Path(out_path)
     x, y, granularity = _load_series(conn, agent=agent, since_run_id=since_run_id)
@@ -192,8 +193,12 @@ def render_elo_plot(
     xlabel = "Cumulative game" if granularity == "per-game" else "Cumulative games played"
     ax.set_xlabel(xlabel, fontsize=10)
     ax.set_ylabel("Champion Elo", fontsize=10)
-    title = ("Champion Elo trajectory (multi-agent era)" if since_run_id
-             else "Champion Elo trajectory")
+    if era_label:
+        title = f"Champion Elo trajectory ({era_label})"
+    elif since_run_id:
+        title = "Champion Elo trajectory (filtered era)"
+    else:
+        title = "Champion Elo trajectory"
     if caption_bits:
         title += "  —  " + ", ".join(caption_bits)
     ax.set_title(title, fontsize=12, fontweight="bold")
@@ -209,14 +214,20 @@ def render_elo_plot(
 def render_default(
     target_elo: Optional[float] = None,
     *,
-    since_run_id: Optional[str] = ratings_db.MULTI_AGENT_EPOCH_RUN_ID,
+    since_run_id: Optional[str] = None,
+    era_label: Optional[str] = None,
 ) -> Optional[Path]:
     """Render the plot for the real repo DB into ``training/reports/elo_trend.png``.
 
     Convenience entry point for the workflow's report step and the email composer.
-    Defaults to the multi-agent era so the committed PNG matches the email.
+    Defaults to the active reporting era (:func:`reporting_era.resolve_era`) so the
+    committed PNG matches the email.
     """
-    from training import TrainingPaths
+    from training import TrainingPaths, reporting_era
+
+    if since_run_id is None and era_label is None:
+        era = reporting_era.resolve_era()
+        since_run_id, era_label = era.since_run_id, era.label
 
     paths = TrainingPaths.default()
     paths.ensure_dirs()
@@ -224,7 +235,7 @@ def render_default(
     try:
         return render_elo_plot(
             conn, paths.reports_dir / "elo_trend.png", target_elo=target_elo,
-            since_run_id=since_run_id,
+            since_run_id=since_run_id, era_label=era_label,
         )
     finally:
         conn.close()

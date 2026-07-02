@@ -34,7 +34,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from training import TrainingPaths, diagnostics, ratings_db, state_store
+from training import TrainingPaths, diagnostics, ratings_db, reporting_era, state_store
 
 # ---------------------------------------------------------------------------
 # Canonical pipeline identity (see docs/training_workflows.md). The email always
@@ -693,14 +693,18 @@ def build_body(
     plot_attached: bool = False,
     plot_game_count: Optional[int] = None,
     provenance: Optional[Provenance] = None,
+    era: Optional[reporting_era.ReportingEra] = None,
 ) -> str:
     """Render the full markdown email body.
 
     ``plot_attached`` toggles the "see the attached Elo plot" callout; the plot
     itself (per-game trajectory) is the headline visualisation and replaces the old
     Elo-progression table. ``plot_game_count`` is the number of per-game points
-    behind the plot (for the callout text).
+    behind the plot (for the callout text). ``era`` is the reporting era every
+    filtered figure is derived from (banner printed under the verdict).
     """
+    if era is None:
+        era = reporting_era.resolve_era()
     if view is None:
         view = build_run_view([], state)
     if paths is None:
@@ -726,6 +730,8 @@ def build_body(
 
     # --- Verdict banner + Alerts (lead the report) ---------------------------
     lines += _verdict_lines(verdict)
+    # Reporting-era banner — every filtered figure below is scoped to this slice.
+    lines += [f"> 📅 {era.banner()}", ""]
     lines += _alert_lines(alerts)
 
     # --- Run provenance (always — proves which pipeline produced this) -------
@@ -996,14 +1002,19 @@ def _smtp_send(config: SmtpConfig, msg: EmailMessage) -> None:
 
 
 def compose(
-    paths: Optional[TrainingPaths] = None, *, failed: bool = False
+    paths: Optional[TrainingPaths] = None, *, failed: bool = False,
+    era: Optional[reporting_era.ReportingEra] = None,
 ) -> Dict[str, Any]:
     """Load state + timeline and return ``{subject, body, view, ...}`` (pure-ish).
 
     Factored out of :func:`main` so a local preview / test can render the exact
-    email without touching SMTP.
+    email without touching SMTP. ``era`` selects the reporting slice (defaults to
+    :func:`reporting_era.resolve_era`, i.e. the debugged-backprop era) so trend,
+    deltas, best historical, plot, and matchup graphics are all filtered to the
+    debugged arena runs.
     """
     paths = paths or TrainingPaths.default()
+    era = era or reporting_era.resolve_era()
     state = state_store.load_latest(paths)
     failed = failed or bool(state.get("last_error"))
     promoted = (
@@ -1013,13 +1024,13 @@ def compose(
 
     conn = ratings_db.connect(paths.ratings_db)
     try:
-        # Restrict the trend, deltas, and plot to the multi-agent era so the report
-        # reflects the current approach and never drags in pre-multi-agent runs.
+        # Restrict the trend, deltas, and plot to the active reporting era so the
+        # report reflects the debugged arena only and never drags in pre-fix runs.
         history = ratings_db.recent_window(
-            conn, limit=30, since_run_id=ratings_db.MULTI_AGENT_EPOCH_RUN_ID
+            conn, limit=30, since_run_id=era.since_run_id
         )
         findings = diagnostics.collect_findings(conn, state)
-        plot_path, plot_game_count = _render_plot(conn, paths, state)
+        plot_path, plot_game_count = _render_plot(conn, paths, state, era=era)
     finally:
         conn.close()
 
@@ -1037,20 +1048,24 @@ def compose(
     body = build_body(
         state, view, failed=failed, promoted=promoted, findings=findings, paths=paths,
         plot_attached=plot_path is not None, plot_game_count=plot_game_count,
-        provenance=prov,
+        provenance=prov, era=era,
     )
     return {
         "subject": subject, "body": body, "view": view, "state": state,
-        "plot_path": plot_path, "provenance": prov,
+        "plot_path": plot_path, "provenance": prov, "era": era,
         "alerts": alerts, "verdict": verdict,
     }
 
 
-def _render_plot(conn, paths: TrainingPaths, state: Dict[str, Any]):
+def _render_plot(
+    conn, paths: TrainingPaths, state: Dict[str, Any],
+    *, era: Optional[reporting_era.ReportingEra] = None,
+):
     """Render the Elo trajectory PNG; return ``(path_or_None, game_count)``.
 
     Failure is non-fatal — a missing plot just means the email ships text-only.
     """
+    era = era or reporting_era.resolve_era()
     try:
         from training import elo_plot
 
@@ -1058,12 +1073,12 @@ def _render_plot(conn, paths: TrainingPaths, state: Dict[str, Any]):
         out = elo_plot.render_elo_plot(
             conn, paths.reports_dir / "elo_trend.png",
             target_elo=float(state.get("human_target_elo", 1700) or 0) or None,
-            since_run_id=ratings_db.MULTI_AGENT_EPOCH_RUN_ID,
+            since_run_id=era.since_run_id, era_label=era.label,
         )
-        # Count only the multi-agent-era games the plot actually drew, for the callout.
+        # Count only the era's games the plot actually drew, for the callout.
         count = (
             len(ratings_db.champion_game_elo_series(
-                conn, since_run_id=ratings_db.MULTI_AGENT_EPOCH_RUN_ID))
+                conn, since_run_id=era.since_run_id))
             if out is not None else None
         )
         return (out, count)
@@ -1116,9 +1131,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Compose a failure email (used by the workflow when training errored).")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print subject/body, never send.")
+    parser.add_argument("--era", default=None,
+                        help="Reporting era to scope the report to "
+                             f"({', '.join(reporting_era.known_eras())}). "
+                             "Defaults to the debugged-backprop era.")
+    parser.add_argument("--all-time", action="store_true",
+                        help="Shortcut for --era all-time (include pre-fix history; debugging).")
     args = parser.parse_args(argv)
 
-    composed = compose(failed=args.failed)
+    era = reporting_era.resolve_era("all-time" if args.all_time else args.era)
+    composed = compose(failed=args.failed, era=era)
     subject, body = composed["subject"], composed["body"]
     plot_path = composed.get("plot_path")
 
