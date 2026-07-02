@@ -19,3 +19,7 @@ state/ratings.sqlite-shm
 
 # Atomic-write temp files (should never persist, but never commit them).
 *.tmp
+
+# Local report preview output (python -m training.reports.generate_latest_report).
+# Transient — the committed report artifacts live directly under reports/.
+reports/preview/

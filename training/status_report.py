@@ -13,7 +13,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from training import TrainingPaths, human_estimate, ratings_db
+from training import TrainingPaths, human_estimate, ratings_db, reporting_era
 
 
 def _fmt(value: Any, spec: str = "", dash: str = "—") -> str:
@@ -101,6 +101,7 @@ def render_status(data: Dict[str, Any]) -> str:
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     champ = state.get("champion", {})
+    era = data.get("era") or reporting_era.resolve_era()
     lines: List[str] = []
 
     # --- Summary -------------------------------------------------------------
@@ -108,6 +109,8 @@ def render_status(data: Dict[str, Any]) -> str:
         "# MCTS Nightly Training — Status",
         "",
         f"_Updated {now} · run `{state.get('run_id')}`_",
+        "",
+        f"> 📅 {era.banner()}",
         "",
         "## Summary",
         "",
@@ -137,10 +140,18 @@ def render_status(data: Dict[str, Any]) -> str:
 
     # --- Baseline Results ----------------------------------------------------
     lines += ["## Baseline Results", ""]
+    approach = data.get("approach_comparison")
     if baselines:
         lines += ["| Agent | Win rate | Games |", "|---|---|---|"]
         for b in baselines:
             lines.append(f"| `{b['agent']}` | {b['win_rate'] * 100:.1f}% | {b['games']} |")
+    elif approach and approach.get("rows"):
+        # A standalone baseline re-fit did not run, but the approach-comparison arena
+        # DID play head-to-head games — say that instead of the contradictory
+        # "no candidate evaluation ran this cycle".
+        lines.append("_No standalone baseline re-fit ran this cycle. Head-to-head "
+                     "results came from the **Approach Comparison** arena above "
+                     "(candidates vs champion + benchmark pool)._")
     else:
         lines.append("_No candidate evaluation ran this cycle (insufficient snapshot data "
                      "for a re-fit, or out of time budget)._")
@@ -279,9 +290,15 @@ def render_status(data: Dict[str, Any]) -> str:
 
 
 def _strength_summary(
-    conn: sqlite3.Connection, state: Dict[str, Any], series: List[Dict[str, Any]]
+    conn: sqlite3.Connection, state: Dict[str, Any], series: List[Dict[str, Any]],
+    *, since_run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Champion strength over time from the durable rating timeline."""
+    """Champion strength over time from the durable rating timeline.
+
+    ``series`` is already filtered to the reporting era by the caller, so best
+    historical / improvement rate come from the era alone. ``since_run_id`` scopes
+    the ``best_mu`` query to the same era.
+    """
     best_elo = max((p["elo"] for p in series), default=None)
     runs = len(series)
     promotions = sum(1 for p in series if p.get("promoted"))
@@ -290,9 +307,16 @@ def _strength_summary(
         improvement_rate = (series[-1]["elo"] - series[0]["elo"]) / (runs - 1)
     best_mu = None
     try:
-        row = conn.execute(
-            "SELECT MAX(trueskill_mu) AS m FROM rating_history WHERE agent='champion'"
-        ).fetchone()
+        if since_run_id:
+            row = conn.execute(
+                "SELECT MAX(trueskill_mu) AS m FROM rating_history "
+                "WHERE agent='champion' AND run_id >= ?",
+                (since_run_id,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT MAX(trueskill_mu) AS m FROM rating_history WHERE agent='champion'"
+            ).fetchone()
         if row and row["m"] is not None:
             best_mu = float(row["m"])
     except sqlite3.Error:
@@ -363,9 +387,17 @@ def write_status(
     *,
     findings: Optional[List[Any]] = None,
     eval_result: Any = None,
+    era: Optional[reporting_era.ReportingEra] = None,
 ) -> str:
-    """Assemble the data bundle, render, and write status.md (+ a snapshot copy)."""
-    series = ratings_db.champion_elo_series(conn)
+    """Assemble the data bundle, render, and write status.md (+ a snapshot copy).
+
+    ``era`` scopes trend, best historical, rolling average, promotion markers, and
+    the human-target projection to the debugged reporting era (default) so the
+    status report never mixes pre-fix history into its numbers.
+    """
+    era = era or reporting_era.resolve_era()
+    since = era.since_run_id
+    series = ratings_db.champion_elo_series(conn, since_run_id=since)
     est = human_estimate.summarize(
         float(state.get("elo", 1200.0)),
         series,
@@ -374,15 +406,16 @@ def write_status(
     last_eval = state.get("last_eval") or {}
     data = {
         "state": state,
+        "era": era,
         "human_estimate": est,
         "elo_series": series,
-        "window7": ratings_db.recent_window(conn, limit=7),
-        "window30": ratings_db.recent_window(conn, limit=30),
+        "window7": ratings_db.recent_window(conn, limit=7, since_run_id=since),
+        "window30": ratings_db.recent_window(conn, limit=30, since_run_id=since),
         "findings": findings or [],
         "baselines": _baseline_rows(eval_result),
         "learning": last_eval.get("learning"),
         "promotion_failure": last_eval.get("promotion_failure"),
-        "strength": _strength_summary(conn, state, series),
+        "strength": _strength_summary(conn, state, series, since_run_id=since),
         "loss_trend": _loss_trend(),
         "experiment": _latest_experiment(),
         "approach_comparison": state.get("last_approach_comparison"),

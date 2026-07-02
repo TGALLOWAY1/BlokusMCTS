@@ -100,6 +100,9 @@ jobs:
           # Render the champion per-game Elo trajectory PNG so it is committed with
           # the rest of the report artifacts and ready for the email to attach.
           python -m training.elo_plot || true
+          # Render the extra report graphics (matchup matrix, approach comparison,
+          # recent Elo deltas) so they are committed and embedded in the email too.
+          python -m training.report_visuals || true
 
       - name: Optional Claude Code diagnostics augmentation
         if: always()

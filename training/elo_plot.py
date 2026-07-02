@@ -89,26 +89,89 @@ def _rolling_average(y: List[float], window: int) -> List[float]:
     return out
 
 
-def _promotion_points(
-    conn: sqlite3.Connection, *, since_run_id: Optional[str] = None
-) -> List[Tuple[float, float]]:
-    """``(total_games, champion_elo)`` for each promoted run (for plot markers)."""
+def _in_range(x: float, x_domain: Tuple[float, float]) -> bool:
+    """True iff ``x`` falls within the plotted x-domain (inclusive)."""
+    lo, hi = x_domain
+    return lo <= x <= hi
+
+
+def _promotion_markers(
+    conn: sqlite3.Connection,
+    *,
+    granularity: str,
+    x_domain: Tuple[float, float],
+    agent: str = "champion",
+    since_run_id: Optional[str] = None,
+) -> Tuple[List[Tuple[float, float]], List[Tuple[str, str]]]:
+    """Promotion markers **in the same x-coordinate system as the plotted curve**.
+
+    The champion trajectory is drawn either per-game (x = cumulative ``game_number``
+    from the ``game_elo`` table) or per-generation (x = ``total_games`` from
+    ``run_summary``). The historical bug plotted every promotion at its
+    ``run_summary.total_games`` regardless of granularity — so on the per-game plot
+    the triangle landed far to the right of the curve (``total_games`` counts games
+    across *all* agents, while ``game_number`` counts only the champion's per-game
+    samples). This maps each promotion into the *plotted* coordinate system:
+
+    * **per-game** — the promotion is placed at the champion's **last per-game
+      sample recorded by that run** (``MAX(game_number)`` for the run), with the Elo
+      of that sample, so the marker sits directly on the curve.
+    * **per-generation** — ``total_games`` matches the fallback series' x, so it is
+      used directly.
+
+    Returns ``(markers, dropped)`` where ``markers`` are ``(x, y)`` pairs already
+    validated to lie inside ``x_domain`` and ``dropped`` is ``(run_id, reason)`` for
+    every promotion that could not be mapped in-range (e.g. its games were trimmed
+    by the point cap, or it has no per-game rows). Callers surface ``dropped`` as a
+    diagnostic note rather than silently plotting an off-axis marker.
+    """
     try:
         if since_run_id:
             rows = conn.execute(
-                "SELECT total_games, champion_elo FROM run_summary "
+                "SELECT run_id, total_games, champion_elo FROM run_summary "
                 "WHERE promoted=1 AND run_id >= ? ORDER BY total_games ASC",
                 (since_run_id,),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT total_games, champion_elo FROM run_summary WHERE promoted=1 "
-                "ORDER BY total_games ASC"
+                "SELECT run_id, total_games, champion_elo FROM run_summary "
+                "WHERE promoted=1 ORDER BY total_games ASC"
             ).fetchall()
     except sqlite3.Error:
-        return []
-    return [(float(r["total_games"]), float(r["champion_elo"])) for r in rows
-            if r["total_games"] is not None and r["champion_elo"] is not None]
+        return [], []
+
+    markers: List[Tuple[float, float]] = []
+    dropped: List[Tuple[str, str]] = []
+    for r in rows:
+        run_id = r["run_id"]
+        if granularity == "per-game":
+            try:
+                g = conn.execute(
+                    "SELECT game_number, elo FROM game_elo "
+                    "WHERE agent = ? AND run_id = ? "
+                    "ORDER BY game_number DESC, id DESC LIMIT 1",
+                    (agent, run_id),
+                ).fetchone()
+            except sqlite3.Error:
+                g = None
+            if g is None:
+                dropped.append((str(run_id), "no per-game rows recorded for this run"))
+                continue
+            x, y = float(g["game_number"]), float(g["elo"])
+        else:  # per-generation fallback — total_games matches the plotted x-axis
+            if r["total_games"] is None or r["champion_elo"] is None:
+                continue
+            x, y = float(r["total_games"]), float(r["champion_elo"])
+
+        if not _in_range(x, x_domain):
+            dropped.append((
+                str(run_id),
+                f"x={x:.0f} outside plotted range "
+                f"[{x_domain[0]:.0f}, {x_domain[1]:.0f}]",
+            ))
+            continue
+        markers.append((x, y))
+    return markers, dropped
 
 
 def render_elo_plot(
@@ -118,13 +181,14 @@ def render_elo_plot(
     agent: str = "champion",
     target_elo: Optional[float] = None,
     since_run_id: Optional[str] = None,
+    era_label: Optional[str] = None,
 ) -> Optional[Path]:
     """Render the champion Elo trajectory to ``out_path`` (PNG). Returns the path.
 
     Returns ``None`` — without raising — when there is nothing to plot or
     matplotlib is unavailable, so callers can treat a missing plot as "ship the
-    email without it". ``since_run_id`` restricts the plot to the multi-agent era
-    (see :data:`ratings_db.MULTI_AGENT_EPOCH_RUN_ID`).
+    email without it". ``since_run_id`` restricts the plot to a reporting era (see
+    :mod:`training.reporting_era`); ``era_label`` names that era in the title.
     """
     out_path = Path(out_path)
     x, y, granularity = _load_series(conn, agent=agent, since_run_id=since_run_id)
@@ -158,8 +222,15 @@ def render_elo_plot(
     ax.axhline(best, color="#16a34a", linewidth=1.0, linestyle="--", alpha=0.7,
                label=f"Best historical ({best:.0f})")
 
-    # Promotion markers — where the champion actually changed.
-    promos = _promotion_points(conn, since_run_id=since_run_id)
+    # Promotion markers — where the champion actually changed. Mapped into the SAME
+    # x-coordinate system as the curve above (per-game game_number, or per-generation
+    # total_games); any promotion that cannot be placed in-range is dropped and noted
+    # rather than plotted off-axis.
+    x_domain = (min(x), max(x))
+    promos, dropped_promos = _promotion_markers(
+        conn, granularity=granularity, x_domain=x_domain, agent=agent,
+        since_run_id=since_run_id,
+    )
     if promos:
         px = [p[0] for p in promos]
         py = [p[1] for p in promos]
@@ -167,6 +238,10 @@ def render_elo_plot(
                    label=f"Promotions ({len(promos)})")
         for gx in px:
             ax.axvline(gx, color="#9333ea", linewidth=0.7, linestyle=":", alpha=0.4)
+    if dropped_promos:
+        # Diagnostic: a promotion could not be mapped onto the plotted x-axis.
+        for run_id, why in dropped_promos:
+            print(f"[elo_plot] Promotion marker for run {run_id} not plotted: {why}.")
 
     # Linear trend line — the headline "is it moving up?" signal.
     caption_bits: List[str] = []
@@ -178,6 +253,8 @@ def render_elo_plot(
                 label=f"Trend ({direction})")
         caption_bits.append(f"trend {slope:+.2f} Elo/game" if granularity == "per-game"
                             else f"trend {slope:+.2f} Elo/game-of-progress")
+    if dropped_promos:
+        caption_bits.append(f"{len(dropped_promos)} promotion(s) off-range (not shown)")
 
     if target_elo:
         ax.axhline(float(target_elo), color="#9333ea", linewidth=1.0,
@@ -192,8 +269,12 @@ def render_elo_plot(
     xlabel = "Cumulative game" if granularity == "per-game" else "Cumulative games played"
     ax.set_xlabel(xlabel, fontsize=10)
     ax.set_ylabel("Champion Elo", fontsize=10)
-    title = ("Champion Elo trajectory (multi-agent era)" if since_run_id
-             else "Champion Elo trajectory")
+    if era_label:
+        title = f"Champion Elo trajectory ({era_label})"
+    elif since_run_id:
+        title = "Champion Elo trajectory (filtered era)"
+    else:
+        title = "Champion Elo trajectory"
     if caption_bits:
         title += "  —  " + ", ".join(caption_bits)
     ax.set_title(title, fontsize=12, fontweight="bold")
@@ -209,14 +290,20 @@ def render_elo_plot(
 def render_default(
     target_elo: Optional[float] = None,
     *,
-    since_run_id: Optional[str] = ratings_db.MULTI_AGENT_EPOCH_RUN_ID,
+    since_run_id: Optional[str] = None,
+    era_label: Optional[str] = None,
 ) -> Optional[Path]:
     """Render the plot for the real repo DB into ``training/reports/elo_trend.png``.
 
     Convenience entry point for the workflow's report step and the email composer.
-    Defaults to the multi-agent era so the committed PNG matches the email.
+    Defaults to the active reporting era (:func:`reporting_era.resolve_era`) so the
+    committed PNG matches the email.
     """
-    from training import TrainingPaths
+    from training import TrainingPaths, reporting_era
+
+    if since_run_id is None and era_label is None:
+        era = reporting_era.resolve_era()
+        since_run_id, era_label = era.since_run_id, era.label
 
     paths = TrainingPaths.default()
     paths.ensure_dirs()
@@ -224,7 +311,7 @@ def render_default(
     try:
         return render_elo_plot(
             conn, paths.reports_dir / "elo_trend.png", target_elo=target_elo,
-            since_run_id=since_run_id,
+            since_run_id=since_run_id, era_label=era_label,
         )
     finally:
         conn.close()

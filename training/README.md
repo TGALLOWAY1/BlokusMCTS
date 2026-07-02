@@ -84,6 +84,46 @@ than a broken champion — to win.
 - `training/reports/approach_comparison.md` has the full per-approach detail.
 - `training/reports/elo_trend.png` adds a rolling average, best-historical line,
   human target, and promotion markers.
+- The email also embeds a **Champion Composition** summary (search budget, rollout
+  policy, RAVE/TD/heuristics, learned evaluator, promotion source) plus three extra
+  graphics rendered by `training/report_visuals.py`
+  (`python -m training.report_visuals`): `matchup_matrix.png` (champion vs each
+  benchmark opponent + candidate), `approach_comparison.png` (per-candidate win% /
+  Elo Δ vs champion, colour-coded by promotion outcome), and `recent_deltas.png`
+  (per-generation Elo change). Raw tables remain in the body as the secondary view.
+
+### Reporting era (post-bug-fix filtering)
+
+The report is scoped to a **reporting era** so it never mixes trustworthy runs
+with runs invalidated by a since-fixed bug. `training/reporting_era.py` is the
+single source of truth for the cut-off.
+
+- **Default:** the *Debugged MCTS backprop era* — runs at/after
+  `20260701T204805Z` (generation 139), the first nightly run whose checkout
+  started after the maxⁿ per-player backprop fix (commit `732bd9c`,
+  2026-07-01 20:36 UTC). Trend, rolling average, best historical, promotion
+  markers, recent generations, and the human-target projection are all computed
+  from this slice. Older rows are **preserved** in `ratings.sqlite`, just excluded.
+- **Change the cut-off:** edit `DEBUGGED_BACKPROP_EPOCH_RUN_ID` in
+  `training/reporting_era.py` (one constant re-bases every report), or override at
+  runtime without editing code:
+  - `MCTS_REPORTING_ERA=all-time` (or `multi-agent` / `debugged-backprop`)
+  - `MCTS_REPORTING_ERA_RUN_ID=<run_id>` to pin an arbitrary custom cut-off.
+- **All-time debugging view:** `python -m training.email_summary --all-time --dry-run`
+  (or `--era all-time`) renders the report over the full history.
+
+### Preview the report locally (no email)
+
+```bash
+# Renders preview.md + preview.html + all charts into training/reports/preview/
+python -m training.reports.generate_latest_report --preview
+python -m training.reports.generate_latest_report --preview --all-time   # full history
+python -m training.reports.generate_latest_report --preview --out /tmp/r  # custom dir
+```
+
+Open the generated `preview.html` in a browser to see the report exactly as it
+will be emailed (inline Elo plot, matchup matrix, approach comparison, recent
+deltas). No SMTP credentials are needed and nothing is sent.
 
 ## Durability
 
