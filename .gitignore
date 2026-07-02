@@ -86,3 +86,12 @@ frontier_output/
 
 # Experiment harness per-run arena outputs (heavy games.jsonl); keep manifest/report/result only
 training/reports/experiments/*/runs/
+
+# Generated Pyodide bundle sources (rebuilt by scripts/build_browser_core.sh)
+browser_python/engine/
+browser_python/mcts/
+browser_python/agents/
+browser_python/config/
+
+# Local arena outputs (canonical gauntlet runs are explicitly tracked)
+arena_runs/2*/

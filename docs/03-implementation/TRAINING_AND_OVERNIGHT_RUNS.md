@@ -1,10 +1,11 @@
 # Training & Overnight Runs
 
+> **July 2026 audit:** the canonical workflow is now the `mcts_lab` CLIs (see root `README.md` and `AUDIT_REPORT.md`). Pre-audit strength conclusions predate the maxⁿ MCTS reward fix and are not valid evidence. Details below may lag the cleanup.
+
 > Status of this document: **Implemented pipeline + proposed automation.**
 > Sections marked **(Implemented)** describe scripts and artifacts that exist
 > today. Sections marked **(Proposed)** describe wrappers / automation added by
-> this phase or still to be wired up. Manual setup steps live in the repo-root
-> [`TODO.md`](../../TODO.md) under *Manual Setup Required for Overnight MCTS Runs*.
+> this phase or still to be wired up. 
 
 ---
 

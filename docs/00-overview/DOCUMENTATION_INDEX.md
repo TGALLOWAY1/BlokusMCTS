@@ -1,6 +1,7 @@
 # Documentation Index
 
-> Master map of all documentation. Last audited: 2026-05-28.
+> Master map of all documentation. Last audited: 2026-07-01.
+> **July 2026 audit:** the canonical workflow is now the `mcts_lab` CLIs (see root `README.md` and `AUDIT_REPORT.md`). Pre-audit strength conclusions predate the maxⁿ MCTS reward fix and are not valid evidence. Details below may lag the cleanup.
 > AI agents: load only the bundle you need — see
 > [Context Loading Protocol](../07-ai-context/CONTEXT_LOADING_PROTOCOL.md).
 
@@ -12,7 +13,7 @@
 - [Architecture](../02-architecture/ARCHITECTURE.md) + [System Map](../02-architecture/SYSTEM_MAP.md)
 - [Known Issues](../04-quality/KNOWN_ISSUES.md) + [Risk Register](../04-quality/RISK_REGISTER.md)
 - [Next Agent Tasks](../05-planning/NEXT_AGENT_TASKS.md) — ready-to-run prompts
-- Root: [`README.md`](../../README.md) · [`KEY_FINDINGS.md`](../../KEY_FINDINGS.md) · [`CLAUDE.md`](../../CLAUDE.md)
+- Root: [`README.md`](../../README.md) · [`AUDIT_REPORT.md`](../../AUDIT_REPORT.md) · [`CLAUDE.md`](../../CLAUDE.md)
 
 ## New numbered docs (this system)
 

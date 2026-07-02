@@ -1,1 +1,0 @@
-"""League and Elo utilities."""

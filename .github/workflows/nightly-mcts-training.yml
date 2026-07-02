@@ -18,9 +18,10 @@ on:
       approaches:
         description: "Comma-separated candidate-generation approaches to compare (or 'all')."
         required: false
-        # baseline first: it is the candidate that can lift the champion off the
-        # sub-heuristic floor, so it gets the first (and largest) fair time slice.
-        default: "baseline,td,mcts_sweep,heuristic_tune,hybrid"
+        # Two approaches, not four: the audit showed the budget split four ways
+        # left every candidate 9-15 games against a 20-game gate. Two candidates
+        # each get enough games to actually clear the screen + confirmation.
+        default: "baseline,heuristic_tune"
       games:
         description: "Games per arena per seed for approach evaluation."
         required: false
@@ -83,10 +84,11 @@ jobs:
           # only a candidate that passes the statistical gate. See
           # docs/03-implementation/NIGHTLY_TRAINING.md and training/README.md.
           python -m training.nightly_run \
-            --approaches "${{ github.event.inputs.approaches || 'baseline,td,mcts_sweep,heuristic_tune' }}" \
+            --approaches "${{ github.event.inputs.approaches || 'baseline,heuristic_tune' }}" \
             --games "${{ github.event.inputs.games || '5' }}" \
             --time-budget-minutes "${{ github.event.inputs.time_budget_minutes || '330' }}" \
             --thinking-time-ms "${{ github.event.inputs.thinking_time_ms || '100' }}" \
+            --two-stage-promotion \
             --resume training/state/latest.json
 
       - name: Generate reports (always)

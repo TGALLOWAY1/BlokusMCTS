@@ -123,12 +123,23 @@ def _checkpoint_agent(checkpoint: Dict[str, Any], name: Optional[str] = None) ->
 
 
 def _apply_thinking_override(agents: List[Dict[str, Any]], thinking_time_ms: Optional[int]) -> None:
-    """Force every MCTS agent's thinking budget (used to keep smoke tests fast)."""
+    """Force every MCTS agent's thinking budget (used to keep evaluations fast).
+
+    Also forces ``num_workers`` to 1: root parallelization forks worker
+    processes on *every move*, and at reduced uniform budgets (tens of
+    iterations) the per-move spawn overhead dominates wall-clock (~11 min/game
+    measured) while the split trees are *weaker* than one tree with the same
+    iteration total. Single-process search is both faster and stronger here,
+    so the override never biases an evaluation in the candidate's favour.
+    """
     if thinking_time_ms is None:
         return
     for a in agents:
         if a.get("type", "mcts") == "mcts":
             a["thinking_time_ms"] = int(thinking_time_ms)
+            params = a.get("params")
+            if isinstance(params, dict) and int(params.get("num_workers", 1) or 1) > 1:
+                params["num_workers"] = 1
 
 
 # ---------------------------------------------------------------------------
