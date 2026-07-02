@@ -112,6 +112,19 @@ single source of truth for the cut-off.
 - **All-time debugging view:** `python -m training.email_summary --all-time --dry-run`
   (or `--era all-time`) renders the report over the full history.
 
+### Preview the report locally (no email)
+
+```bash
+# Renders preview.md + preview.html + all charts into training/reports/preview/
+python -m training.reports.generate_latest_report --preview
+python -m training.reports.generate_latest_report --preview --all-time   # full history
+python -m training.reports.generate_latest_report --preview --out /tmp/r  # custom dir
+```
+
+Open the generated `preview.html` in a browser to see the report exactly as it
+will be emailed (inline Elo plot, matchup matrix, approach comparison, recent
+deltas). No SMTP credentials are needed and nothing is sent.
+
 ## Durability
 
 State still resumes from disk every run: `state/latest.json`, `state/champion.json`,
