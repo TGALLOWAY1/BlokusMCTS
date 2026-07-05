@@ -456,10 +456,21 @@ def champion_composition_lines(state: Dict[str, Any]) -> List[str]:
         "- **Enhancements:** "
         f"RAVE {_on_off(params.get('rave_enabled'))}, "
         f"heuristic move-ordering {_on_off(params.get('heuristic_move_ordering'))}, "
+        f"learned policy prior {_on_off(params.get('policy_prior_enabled'))}, "
         f"minimax-backup α {params.get('minimax_backup_alpha', 0.0)}, "
         f"transposition table {_on_off(params.get('use_transposition_table'))}, "
         f"adaptive rollout depth {_on_off(params.get('adaptive_rollout_depth_enabled'))}"
     )
+
+    # Learned move policy (PUCT prior) — surface it as its own line when active,
+    # mirroring how the learned evaluator is called out below.
+    if params.get("policy_prior_enabled") and isinstance(params.get("policy_weights"), dict):
+        pol = params["policy_weights"]
+        n_bias = len(pol.get("piece_bias") or {})
+        lines.append(
+            "- **Learned move policy:** visit-count-distilled PUCT prior "
+            f"(c={params.get('policy_prior_c', 1.5)}, {n_bias} per-piece biases)"
+        )
 
     # Learned evaluator (Layer-6 weights) — the "brain" if present.
     weights = params.get("state_eval_weights")

@@ -183,7 +183,6 @@ def play_and_collect(
     game = BlokusGame()
     stats = _CollectStats()
     decision_idx: Dict[int, int] = {p.value: 0 for p in _PLAYERS}
-    pending_rows: List[Dict[str, Any]] = []
 
     turn_count = 0
     while not game.is_game_over() and turn_count < max_turns:
@@ -209,7 +208,11 @@ def play_and_collect(
                 decision_idx=decision_idx[cur_id],
             )
             if rows:
-                pending_rows.extend(rows)
+                # Flush each decision immediately: a wall-clock timeout mid-game
+                # (the nightly hard-caps collection) then only loses the current
+                # decision, not the whole game's data. Each decision_id is unique,
+                # so incremental writes group correctly at load time.
+                stats.rows += append_policy_rows(rows, output_path)
                 stats.decisions += 1
                 decision_idx[cur_id] += 1
 
@@ -218,8 +221,6 @@ def play_and_collect(
             game._check_game_over()
             continue
 
-    if pending_rows:
-        stats.rows = append_policy_rows(pending_rows, output_path)
     return stats
 
 
