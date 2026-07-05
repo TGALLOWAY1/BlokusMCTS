@@ -235,9 +235,13 @@ def collect_policy_targets(
     """Play ``num_games`` games and append policy-target rows. Returns rows written."""
     total = 0
     for g in range(num_games):
+        game_seed = seed + g
+        # Bake the game seed into the id so re-running collection with a different
+        # seed under the same run-id never produces colliding decision_ids (which
+        # load_policy_samples groups on) — that would merge unrelated positions.
         stats = play_and_collect(
-            agents, run_id=run_id, game_id=f"{run_id}_g{g:04d}",
-            seed=seed + g, output_path=output_path,
+            agents, run_id=run_id, game_id=f"{run_id}_s{game_seed}_g{g:04d}",
+            seed=game_seed, output_path=output_path,
         )
         total += stats.rows
         if verbose:
@@ -285,13 +289,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     p.add_argument("--num-games", type=int, default=20)
     p.add_argument("--seed", type=int, default=2026)
-    p.add_argument("--run-id", default="policycollect")
+    p.add_argument("--run-id", default=None,
+                   help="Collection run id (default: a unique timestamped id so "
+                        "separate runs never collide in data/policy_targets.csv).")
     p.add_argument("--output", default=str(DEFAULT_POLICY_CSV))
     p.add_argument("--thinking-time-ms", type=int, default=None,
                    help="Override every MCTS agent's thinking budget (small ⇒ fast collection).")
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args(argv)
 
+    run_id = args.run_id or (
+        "policycollect_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    )
     agents = _default_agents()
     if args.thinking_time_ms is not None:
         for a in agents:
@@ -299,7 +308,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 a["thinking_time_ms"] = int(args.thinking_time_ms)
 
     total = collect_policy_targets(
-        agents, run_id=args.run_id, num_games=args.num_games, seed=args.seed,
+        agents, run_id=run_id, num_games=args.num_games, seed=args.seed,
         output_path=args.output, verbose=args.verbose,
     )
     print(f"[policy_selfplay] wrote {total} rows to {args.output} "

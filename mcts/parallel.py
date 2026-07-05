@@ -58,6 +58,11 @@ def _extract_agent_config(agent) -> dict:
         "progressive_history_enabled": agent.progressive_history_enabled,
         "progressive_history_weight": agent.progressive_history_weight,
         "heuristic_move_ordering": agent.heuristic_move_ordering,
+        # Learned move policy (PUCT prior + rollout/ordering): serialise so each
+        # root-parallel worker rebuilds the same policy instead of dropping it.
+        "policy_prior_enabled": agent.policy_prior_enabled,
+        "policy_prior_c": agent.policy_prior_c,
+        "policy_weights": agent.move_policy.to_dict() if agent.move_policy is not None else None,
         # Layer 4
         "rollout_policy": agent.rollout_policy,
         "two_ply_top_k": agent.two_ply_top_k,
