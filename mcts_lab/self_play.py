@@ -24,6 +24,9 @@ def main(argv=None) -> int:
     ap.add_argument("--seed", type=int, default=None, help="base RNG seed (default: random)")
     ap.add_argument("--thinking-ms", type=int, default=None,
                     help="override MCTS thinking budget (smaller = faster, noisier data)")
+    ap.add_argument("--collect-policy-games", type=int, default=0,
+                    help="also collect this many games of MCTS visit-count policy targets "
+                         "into data/policy_targets.csv (feeds the 'policy' approach)")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -53,6 +56,28 @@ def main(argv=None) -> int:
 
     state_store.save_latest(paths, state)
     print(f"\nsnapshot corpus: {total_rows} rows (data/champion_snapshots.csv)")
+
+    if args.collect_policy_games > 0:
+        import copy
+        from training.policy_selfplay import collect_policy_targets
+
+        champ = copy.deepcopy(state["champion_params"])
+        champ["name"] = "champion"
+        champ2 = copy.deepcopy(champ)
+        champ2["name"] = "champion2"
+        roster = [champ, {"name": "heuristic", "type": "heuristic"},
+                  champ2, {"name": "random", "type": "random"}]
+        if args.thinking_ms is not None:
+            for a in roster:
+                if a.get("type", "mcts") == "mcts":
+                    a["thinking_time_ms"] = int(args.thinking_ms)
+        rows = collect_policy_targets(
+            roster, run_id=f"selfplay_{base_seed}", num_games=args.collect_policy_games,
+            seed=base_seed, verbose=args.verbose,
+        )
+        print(f"policy targets: +{rows} rows (data/policy_targets.csv)")
+        print("next: python -m training.policy_learning")
+
     print("next: python -m mcts_lab.train")
     return 0
 

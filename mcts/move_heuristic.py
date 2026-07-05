@@ -58,20 +58,25 @@ def _get_piece_positions(move: Move, move_generator: LegalMoveGenerator) -> List
     return positions
 
 
-def compute_move_heuristic(
+# Ordered names of the move-level features returned by ``compute_move_features``.
+# The learned move policy (``mcts/move_policy.py``) consumes this exact vector, so
+# the order here is the canonical feature order for that model — do not reorder
+# without bumping the policy artifact's feature-set version.
+MOVE_FEATURE_NAMES = ("piece_size", "corners", "center", "blocking")
+
+
+def compute_move_features(
     board: Board,
     player: Player,
     move: Move,
     move_generator: LegalMoveGenerator,
-    *,
-    w_piece_size: float = 1.0,
-    w_corners: float = 2.0,
-    w_center: float = 0.5,
-    w_blocking: float = 1.0,
-) -> float:
-    """Score a single move using domain-specific Blokus features.
+) -> Tuple[float, float, float, float]:
+    """Compute the four normalised move-level features for a single move.
 
-    Returns a raw (un-normalised) heuristic score.  Higher is better.
+    Returns ``(h_size, h_corners, h_center, h_blocking)``, each roughly in
+    ``[0, 1]``. This is the single source of truth shared by the fixed-weight
+    :func:`compute_move_heuristic` and the learned :class:`mcts.move_policy.MovePolicy`
+    — both score a move as a (possibly weighted) combination of these features.
     """
     sizes = _get_piece_sizes()
     piece_size = sizes.get(move.piece_id, 3)
@@ -124,6 +129,29 @@ def compute_move_heuristic(
                     h_blocking += 0.25  # Each adjacency contributes a bit
     h_blocking = min(h_blocking, 1.0)
 
+    return (float(h_size), float(h_corners), float(h_center), float(h_blocking))
+
+
+def compute_move_heuristic(
+    board: Board,
+    player: Player,
+    move: Move,
+    move_generator: LegalMoveGenerator,
+    *,
+    w_piece_size: float = 1.0,
+    w_corners: float = 2.0,
+    w_center: float = 0.5,
+    w_blocking: float = 1.0,
+) -> float:
+    """Score a single move using domain-specific Blokus features.
+
+    Returns a raw (un-normalised) heuristic score.  Higher is better. This is the
+    fixed-weight combination of :func:`compute_move_features`; the learned policy
+    replaces the fixed weights with trained ones.
+    """
+    h_size, h_corners, h_center, h_blocking = compute_move_features(
+        board, player, move, move_generator
+    )
     raw = (
         w_piece_size * h_size
         + w_corners * h_corners

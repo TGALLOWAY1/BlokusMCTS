@@ -30,6 +30,7 @@ def _register() -> None:
         heuristic_tuning,
         hybrid_td_mcts,
         mcts_param_sweep,
+        policy_prior,
         td_learning,
     )
 
@@ -39,6 +40,7 @@ def _register() -> None:
         mcts_param_sweep.NAME: mcts_param_sweep.make,
         td_learning.NAME: td_learning.make,
         hybrid_td_mcts.NAME: hybrid_td_mcts.make,
+        policy_prior.NAME: policy_prior.make,
     })
 
 

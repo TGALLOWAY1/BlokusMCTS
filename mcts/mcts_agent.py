@@ -45,10 +45,12 @@ from engine.pieces import PieceGenerator
 
 from .learned_evaluator import LearnedWinProbabilityEvaluator
 from .move_heuristic import (
+    compute_move_features,
     compute_move_heuristic,
     move_action_key,
     rank_moves_by_heuristic,
 )
+from .move_policy import MovePolicy, default_move_policy
 from .opponent_model import OpponentModelManager
 from .search_trace import (
     IterationRecord,
@@ -95,6 +97,9 @@ class MCTSNode:
         self.visits = 0
         self.total_reward = 0.0
         self.prior_bias = 0.0
+        # Learned move-policy prior P(s, a) for PUCT selection (set at expansion
+        # from the parent's MovePolicy; 0.0 when the policy prior is disabled).
+        self.policy_prior = 0.0
         self.untried_moves: List[Move] = []
         self._heuristic_sorted = heuristic_sorted
         # Track the total legal move count (before any widening)
@@ -203,6 +208,7 @@ class MCTSNode:
         minimax_alpha: float = 0.0,
         rave_q: float = 0.0,
         rave_beta: float = 0.0,
+        policy_prior_weight: float = 0.0,
     ) -> float:
         """
         Calculate UCB1 value with optional progressive bias, progressive history, and RAVE.
@@ -243,7 +249,20 @@ class MCTSNode:
 
         bias_term = progressive_bias_weight * (self.prior_bias / (1.0 + self.visits))
         history_term = progressive_history_weight * (history_score / (1.0 + self.visits))
-        return exploitation + exploration + bias_term + history_term
+
+        # PUCT prior term (AlphaZero-style): grows with parent visits so the
+        # learned prior guides exploration among visited children, then washes
+        # out as a child accrues its own statistics.
+        #   U = c_puct * P(s,a) * sqrt(N_parent) / (1 + N_child)
+        puct_term = 0.0
+        if policy_prior_weight > 0.0 and self.parent is not None:
+            puct_term = (
+                policy_prior_weight
+                * self.policy_prior
+                * math.sqrt(max(self.parent.visits, 1))
+                / (1.0 + self.visits)
+            )
+        return exploitation + exploration + bias_term + history_term + puct_term
 
     def select_child(
         self,
@@ -255,6 +274,7 @@ class MCTSNode:
         rave_enabled: bool = False,
         rave_k: float = 1000.0,
         loss_avoidance: bool = False,
+        policy_prior_weight: float = 0.0,
     ) -> 'MCTSNode':
         """
         Select child node using UCB1 + progressive history + minimax + RAVE.
@@ -306,6 +326,7 @@ class MCTSNode:
                 minimax_alpha=minimax_alpha,
                 rave_q=child_rave_q,
                 rave_beta=child_rave_beta,
+                policy_prior_weight=policy_prior_weight,
             )
 
         # Layer 9: Loss avoidance — prefer children not flagged as catastrophic
@@ -448,6 +469,10 @@ class MCTSAgent:
         progressive_history_enabled: bool = False,
         progressive_history_weight: float = 1.0,
         heuristic_move_ordering: bool = False,
+        # --- Learned move policy (PUCT prior + rollout/ordering) ---
+        policy_prior_enabled: bool = False,
+        policy_prior_c: float = 1.5,
+        policy_weights: Optional[Dict[str, Any]] = None,
         # --- Layer 4: Simulation Strategy ---
         rollout_policy: str = "heuristic",
         greedy_sample_size: int = 12,
@@ -582,6 +607,27 @@ class MCTSAgent:
         self.progressive_history_enabled = bool(progressive_history_enabled)
         self.progressive_history_weight = float(progressive_history_weight)
         self.heuristic_move_ordering = bool(heuristic_move_ordering)
+
+        # Learned move policy (PUCT prior + rollout/ordering). Loads a MovePolicy
+        # from the serialised ``policy_weights`` dict; when enabled but no weights
+        # are supplied it falls back to the default policy, whose ranking is
+        # identical to the fixed move heuristic (so enabling it is behaviour-safe).
+        self.policy_prior_enabled = bool(policy_prior_enabled)
+        self.policy_prior_c = float(policy_prior_c)
+        self.move_policy = None
+        if policy_weights is not None:
+            try:
+                self.move_policy = MovePolicy.from_dict(policy_weights)
+            except (ValueError, TypeError, KeyError):
+                self.move_policy = None
+        if self.policy_prior_enabled and self.move_policy is None:
+            self.move_policy = default_move_policy()
+        # Active only when the prior is enabled AND a policy is available.
+        self._policy_prior_active = self.policy_prior_enabled and self.move_policy is not None
+        # Optional per-move policy-target capture (self-play collection). When set,
+        # ``select_action`` records the root children's (move, visits) after search.
+        self._capture_root_moves = False
+        self._last_root_move_visits: Optional[List[Tuple[Move, int]]] = None
 
         # Layer 4 params
         if rollout_policy not in {"heuristic", "random", "two_ply", "greedy_sample"}:
@@ -872,8 +918,9 @@ class MCTSAgent:
             self._trace_prev_best_key = None
             self._trace_exploration_grid = [[0] * 20 for _ in range(20)]
 
-        # Heuristic move ordering: sort untried_moves so best are popped last
-        if self.heuristic_move_ordering or self.progressive_widening_enabled:
+        # Heuristic / policy move ordering: sort untried_moves so best are popped
+        # first (and, under the policy prior, cache root children's PUCT priors).
+        if self.heuristic_move_ordering or self.progressive_widening_enabled or self._policy_prior_active:
             self._sort_untried_moves(root)
 
         # Layer 8: Tree parallelization with virtual loss
@@ -906,6 +953,15 @@ class MCTSAgent:
             for c in root.children if c.move is not None and c.visits > 0
         ]
 
+        # Policy-target capture: record (move, visits) for every expanded root
+        # child so self-play can distil the visit distribution into a move policy.
+        # Off by default (only the policy-selfplay collector sets the flag) so the
+        # hot path is untouched during normal play/evaluation.
+        if self._capture_root_moves:
+            self._last_root_move_visits = [
+                (c.move, int(c.visits)) for c in root.children if c.move is not None
+            ]
+
         # Layer 5: Update NST last-action key for cross-move continuity
         if self.nst_enabled and best_move is not None:
             self._last_root_action_key = move_action_key(best_move)
@@ -917,12 +973,45 @@ class MCTSAgent:
         return best_move
 
     def _sort_untried_moves(self, node: MCTSNode) -> None:
-        """Sort a node's untried moves by heuristic score (ascending — best last)."""
+        """Order a node's untried moves best-last (popped first for expansion).
+
+        When the learned move policy prior is active, order by the policy logit
+        and cache each move's softmax prior ``P(a | s)`` on the node, so that
+        newly expanded children receive their PUCT prior (see
+        :meth:`_update_policy_prior`). Otherwise fall back to the fixed heuristic.
+        """
+        if self._policy_prior_active and self.move_policy is not None:
+            moves = list(node.untried_moves)
+            logits = self.move_policy.logits_for_moves(
+                node.board, node.player, moves, self.move_generator
+            )
+            priors = self.move_policy.priors_from_logits(logits)
+            node._policy_prior_by_move_id = {
+                id(m): float(priors[i]) for i, m in enumerate(moves) if m is not None
+            }
+            # Ascending by logit → best move last so pop() expands it first;
+            # pass moves (logit -inf) sort to the front and are popped last.
+            order = sorted(range(len(moves)), key=lambda i: logits[i])
+            node.untried_moves = [moves[i] for i in order]
+            node._heuristic_sorted = True
+            return
         scored = rank_moves_by_heuristic(
             node.board, node.player, node.untried_moves, self.move_generator,
         )
         node.untried_moves = [m for _, m in scored]
         node._heuristic_sorted = True
+
+    def _update_policy_prior(self, parent: MCTSNode, child: MCTSNode) -> None:
+        """Assign a freshly expanded child its learned PUCT prior ``P(s, a)``.
+
+        Reads the softmax priors cached on the parent by :meth:`_sort_untried_moves`.
+        No-op when the policy prior is inactive or the child is a pass node.
+        """
+        if not self._policy_prior_active or child.move is None:
+            return
+        priors = getattr(parent, "_policy_prior_by_move_id", None)
+        if priors:
+            child.policy_prior = priors.get(id(child.move), 0.0)
 
     def _collect_tree_diagnostics(self, root: MCTSNode) -> None:
         """Walk the tree from root to collect diagnostic metrics.
@@ -1017,6 +1106,7 @@ class MCTSAgent:
         Returns (selected_node, selection_depth, avg_exploitation, avg_exploration).
         """
         pw_bias_w = self.progressive_bias_weight if self.progressive_bias_enabled else 0.0
+        policy_w = self.policy_prior_c if self._policy_prior_active else 0.0
         ph_w = self.progressive_history_weight if self.progressive_history_enabled else 0.0
         hist = self._history_table if self.progressive_history_enabled else None
         mm_alpha = self.minimax_backup_alpha
@@ -1043,7 +1133,7 @@ class MCTSAgent:
                         minimax_alpha=mm_alpha,
                         rave_enabled=rave_on,
                         rave_k=rave_k_val,
-                        loss_avoidance=la,
+                        loss_avoidance=la, policy_prior_weight=policy_w,
                     )
                     if chosen.visits > 0 and node.visits > 0:
                         exploit_sum += chosen.blended_q(mm_alpha)
@@ -1066,7 +1156,7 @@ class MCTSAgent:
                     minimax_alpha=mm_alpha,
                     rave_enabled=rave_on,
                     rave_k=rave_k_val,
-                    loss_avoidance=la,
+                    loss_avoidance=la, policy_prior_weight=policy_w,
                 )
                 if chosen.visits > 0 and node.visits > 0:
                     exploit_sum += chosen.blended_q(mm_alpha)
@@ -1327,11 +1417,12 @@ class MCTSAgent:
                     else:
                         expand = not node.is_fully_expanded() and not node.is_terminal()
                     if expand:
-                        if (self.heuristic_move_ordering or self.progressive_widening_enabled) and not node._heuristic_sorted:
+                        if (self.heuristic_move_ordering or self.progressive_widening_enabled or self._policy_prior_active) and not node._heuristic_sorted:
                             self._sort_untried_moves(node)
                         child = node.expand()
                         if child is not None:
                             self._update_progressive_bias(node, child)
+                            self._update_policy_prior(node, child)
                             node = child
                             expanded = True
 
@@ -1373,6 +1464,7 @@ class MCTSAgent:
         node = root
 
         pw_bias_w = self.progressive_bias_weight if self.progressive_bias_enabled else 0.0
+        policy_w = self.policy_prior_c if self._policy_prior_active else 0.0
         ph_w = self.progressive_history_weight if self.progressive_history_enabled else 0.0
         hist = self._history_table if self.progressive_history_enabled else None
         mm_alpha = self.minimax_backup_alpha
@@ -1395,7 +1487,7 @@ class MCTSAgent:
                         minimax_alpha=mm_alpha,
                         rave_enabled=rave_on,
                         rave_k=rave_k,
-                        loss_avoidance=la,
+                        loss_avoidance=la, policy_prior_weight=policy_w,
                     )
                 else:
                     return node, vl_path
@@ -1412,7 +1504,7 @@ class MCTSAgent:
                     minimax_alpha=mm_alpha,
                     rave_enabled=rave_on,
                     rave_k=rave_k,
-                    loss_avoidance=la,
+                    loss_avoidance=la, policy_prior_weight=policy_w,
                 )
 
         return node, vl_path
@@ -1452,12 +1544,13 @@ class MCTSAgent:
         if expand:
             parent = node
             # Sort child moves on first expansion if not done yet
-            if (self.heuristic_move_ordering or self.progressive_widening_enabled) and not node._heuristic_sorted:
+            if (self.heuristic_move_ordering or self.progressive_widening_enabled or self._policy_prior_active) and not node._heuristic_sorted:
                 self._sort_untried_moves(node)
             node = node.expand()
             if node is None:
                 return
             self._update_progressive_bias(parent, node)
+            self._update_policy_prior(parent, node)
 
             # Track explored cells for heatmap
             if trace and self._trace_exploration_grid is not None and node.move is not None:
@@ -1519,6 +1612,7 @@ class MCTSAgent:
             Selected node
         """
         pw_bias_w = self.progressive_bias_weight if self.progressive_bias_enabled else 0.0
+        policy_w = self.policy_prior_c if self._policy_prior_active else 0.0
         ph_w = self.progressive_history_weight if self.progressive_history_enabled else 0.0
         hist = self._history_table if self.progressive_history_enabled else None
         mm_alpha = self.minimax_backup_alpha
@@ -1541,7 +1635,7 @@ class MCTSAgent:
                         minimax_alpha=mm_alpha,
                         rave_enabled=rave_on,
                         rave_k=rave_k,
-                        loss_avoidance=la,
+                        loss_avoidance=la, policy_prior_weight=policy_w,
                     )
                 else:
                     return node
@@ -1557,7 +1651,7 @@ class MCTSAgent:
                     minimax_alpha=mm_alpha,
                     rave_enabled=rave_on,
                     rave_k=rave_k,
-                    loss_avoidance=la,
+                    loss_avoidance=la, policy_prior_weight=policy_w,
                 )
 
         return node
@@ -2032,8 +2126,12 @@ class MCTSAgent:
             candidates = legal_moves
         best_move = candidates[0]
         best_score = -float("inf")
+        use_policy = self._policy_prior_active and self.move_policy is not None
         for m in candidates:
-            s = compute_move_heuristic(board, player, m, self.move_generator)
+            if use_policy:
+                s = self.move_policy.score_move(board, player, m, self.move_generator)
+            else:
+                s = compute_move_heuristic(board, player, m, self.move_generator)
             if s > best_score:
                 best_score = s
                 best_move = m
@@ -2197,6 +2295,10 @@ class MCTSAgent:
                 "progressive_history_enabled": self.progressive_history_enabled,
                 "progressive_history_weight": self.progressive_history_weight,
                 "heuristic_move_ordering": self.heuristic_move_ordering,
+                # Learned move policy (PUCT prior)
+                "policy_prior_enabled": self.policy_prior_enabled,
+                "policy_prior_c": self.policy_prior_c,
+                "policy_prior_active": self._policy_prior_active,
                 # Layer 4
                 "rollout_policy": self.rollout_policy,
                 "two_ply_top_k": self.two_ply_top_k,
