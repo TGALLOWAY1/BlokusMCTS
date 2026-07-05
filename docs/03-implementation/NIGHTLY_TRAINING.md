@@ -26,7 +26,8 @@ compact log-linear model — still no neural net). The nightly runs a dedicated
 approach distils that corpus into the move-policy PUCT prior
 (`training.policy_learning` → `training/state/policy_weights.json`); see
 `training/README.md` → "Learned move policy". The default approach roster is
-`policy,baseline`. Almost everything heavy is imported from existing, tested code:
+`policy,baseline,heuristic_tune`. Almost everything heavy is imported from
+existing, tested code:
 
 | Concern | Reused from |
 |---|---|
