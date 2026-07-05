@@ -19,8 +19,15 @@ workflow state.
 ## What it reuses (it does not reinvent the engine)
 
 The "learning" is **re-fitting the Layer-6 state evaluator** on accumulated
-self-play snapshots (there is no neural net). Almost everything heavy is imported
-from existing, tested code:
+self-play snapshots and **distilling a move policy from MCTS visit counts** (a
+compact log-linear model — still no neural net). The nightly runs a dedicated
+**policy-target collection step** (`training.policy_selfplay` →
+`data/policy_targets.csv`) before the approach comparison, and the `policy`
+approach distils that corpus into the move-policy PUCT prior
+(`training.policy_learning` → `training/state/policy_weights.json`); see
+`training/README.md` → "Learned move policy". The default approach roster is
+`policy,baseline,heuristic_tune`. Almost everything heavy is imported from
+existing, tested code:
 
 | Concern | Reused from |
 |---|---|

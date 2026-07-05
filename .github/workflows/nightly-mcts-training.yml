@@ -18,10 +18,16 @@ on:
       approaches:
         description: "Comma-separated candidate-generation approaches to compare (or 'all')."
         required: false
-        # Two approaches, not four: the audit showed the budget split four ways
-        # left every candidate 9-15 games against a 20-game gate. Two candidates
-        # each get enough games to actually clear the screen + confirmation.
-        default: "baseline,heuristic_tune"
+        # Three approaches (not the audited-bad four): each created candidate is
+        # evaluated one-at-a-time to the same fixed 20-game screen, so more
+        # approaches cost wall-clock rather than games-per-candidate — hence the
+        # 315-min budget below. `policy` = the learned move-policy PUCT prior (fed
+        # by the collection step below), `baseline` = the strong-search control,
+        # `heuristic_tune` = the Layer-6 evaluator re-fit. `policy` produces a
+        # candidate only once enough visit-count targets have accumulated,
+        # otherwise it records a specific "need more data" reason and costs no games
+        # (so early runs are effectively baseline + heuristic_tune).
+        default: "policy,baseline,heuristic_tune"
       games:
         description: "Games per arena per seed for approach evaluation."
         required: false
@@ -33,9 +39,11 @@ on:
       time_budget_minutes:
         description: "Wall-clock budget in minutes for the approach-comparison run."
         required: false
-        # 330 min stays under the 350-min job cap while leaving report/commit/email
-        # headroom. The audit showed 210 min starved later candidates.
-        default: "330"
+        # 315 min stays under the 350-min job cap while leaving headroom for the
+        # policy-target collection step (hard-capped at 15 min) plus report/commit/
+        # email. Bumped from 300 so three candidates' evaluations have room; the
+        # audit showed 210 min starved later candidates.
+        default: "315"
       thinking_time_ms:
         description: "Uniform MCTS thinking-time override for evaluation agents."
         required: false
@@ -75,6 +83,21 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Collect learned-policy targets (visit-count distillation corpus)
+        if: always()
+        continue-on-error: true  # never block training/reports on collection
+        run: |
+          # Grow data/policy_targets.csv with MCTS root visit distributions — the
+          # supervised target the `policy` approach distils into the move-policy
+          # PUCT prior (the expert-iteration loop). Uses a smaller dedicated
+          # thinking budget (not the eval budget) so more decisions are collected
+          # per minute; rows are flushed per-decision. Hard-capped at 15 min so it
+          # never eats the training budget; the corpus accumulates across runs.
+          timeout 900 python -m training.policy_selfplay \
+            --num-games 8 \
+            --thinking-time-ms 40 \
+            --verbose || echo "policy target collection skipped/timed out (non-fatal)"
+
       - name: Run nightly training (approach-comparison framework)
         id: train
         continue-on-error: true  # reports + email must still run if training crashes
@@ -84,9 +107,9 @@ jobs:
           # only a candidate that passes the statistical gate. See
           # docs/03-implementation/NIGHTLY_TRAINING.md and training/README.md.
           python -m training.nightly_run \
-            --approaches "${{ github.event.inputs.approaches || 'baseline,heuristic_tune' }}" \
+            --approaches "${{ github.event.inputs.approaches || 'policy,baseline,heuristic_tune' }}" \
             --games "${{ github.event.inputs.games || '5' }}" \
-            --time-budget-minutes "${{ github.event.inputs.time_budget_minutes || '330' }}" \
+            --time-budget-minutes "${{ github.event.inputs.time_budget_minutes || '315' }}" \
             --thinking-time-ms "${{ github.event.inputs.thinking_time_ms || '100' }}" \
             --two-stage-promotion \
             --resume training/state/latest.json
@@ -121,7 +144,10 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           # Only the durable, bounded-size artifacts (per training/.gitignore the
           # bulky per-game selfplay_runs/ are excluded).
-          git add training/state training/status.md training/reports training/artifacts data/champion_snapshots.csv data/champion_registry.json 2>/dev/null || true
+          # training/state also carries training/state/policy_weights.json (the
+          # distilled move policy); data/policy_targets.csv is the growing
+          # visit-count corpus the `policy` approach learns from.
+          git add training/state training/status.md training/reports training/artifacts data/champion_snapshots.csv data/policy_targets.csv data/champion_registry.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else

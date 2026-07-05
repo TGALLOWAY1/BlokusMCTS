@@ -54,6 +54,13 @@ The learned policy is stored on the champion config as
 like any other parameter. An untrained/default policy reproduces the fixed move
 heuristic exactly, so enabling the prior without weights never changes behaviour.
 
+The nightly workflow does all three steps automatically: a bounded
+policy-target collection step feeds `data/policy_targets.csv`, the default
+approach roster is `policy,baseline`, and the champion's policy-prior status is
+surfaced in the emailed **Champion Composition** summary. The `policy` approach
+records a specific "need more data" reason (and costs no games) until enough
+decisions have accumulated across runs.
+
 ## Architecture (separation of concerns)
 
 ```
