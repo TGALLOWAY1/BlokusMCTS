@@ -50,6 +50,11 @@ Tests: `python -m pytest tests/ -q` (slow — MCTS tests play real games; use
 - `rollout_policy` (`greedy_sample` recommended), `greedy_sample_size` (12),
   `rollout_cutoff_depth` (cut rollout, static-eval all players), `max_rollout_moves`
 - `state_eval_weights` / `state_eval_phase_weights` (Layer-6 evaluator)
+- `policy_prior_enabled` / `policy_prior_c` / `policy_weights` — learned move
+  policy used as a PUCT prior + rollout/ordering policy (off by default; trained
+  from MCTS visit counts by `training.policy_selfplay` → `training.policy_learning`,
+  surfaced as the `policy` approach). Default/untrained policy == the fixed
+  `move_heuristic`, so enabling it without weights is behaviour-safe.
 - Experimental, off by default: `rave_enabled`/`rave_k`, `nst_enabled`,
   `minimax_backup_alpha`, `progressive_widening_enabled`, opponent modeling
   (`opponent_modeling_enabled`, …), parallelization (`num_workers`, …)

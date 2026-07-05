@@ -470,6 +470,10 @@ def build_agent(config: AgentConfig, seed: int) -> _ArenaAgentAdapter:
             progressive_history_enabled=bool(params.get("progressive_history_enabled", False)),
             progressive_history_weight=float(params.get("progressive_history_weight", 1.0)),
             heuristic_move_ordering=bool(params.get("heuristic_move_ordering", False)),
+            # Learned move policy (PUCT prior + rollout/ordering)
+            policy_prior_enabled=bool(params.get("policy_prior_enabled", False)),
+            policy_prior_c=float(params.get("policy_prior_c", 1.5)),
+            policy_weights=params.get("policy_weights"),
             # Layer 4: Simulation Strategy
             rollout_policy=str(params.get("rollout_policy", "heuristic")),
             two_ply_top_k=int(params["two_ply_top_k"]) if params.get("two_ply_top_k") is not None else None,

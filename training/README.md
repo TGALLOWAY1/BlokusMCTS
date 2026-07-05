@@ -28,6 +28,32 @@ python -m training.nightly_run --approaches all --games 100 --time-budget-minute
 The legacy self-play generation loop is still available when `--approaches` is
 omitted (`python -m training.nightly_run --hours 5 --games-per-arena 12`).
 
+### Learned move policy (expert iteration)
+
+The `policy` approach learns a compact log-linear move policy by distilling the
+MCTS **root visit distribution** collected during self-play, then searches with it
+as a PUCT prior *and* the rollout / move-ordering policy — the first candidate
+pathway that improves *how the tree is searched*, not just the leaf evaluator (see
+`AUDIT_REPORT.md` §6.4). Like TD, it trains from an already-collected corpus, so
+collect targets first:
+
+```bash
+# 1. Collect MCTS visit-count targets into data/policy_targets.csv
+python -m training.policy_selfplay --num-games 40 --thinking-time-ms 50
+#    (or piggyback on a snapshot run: mcts_lab.self_play --collect-policy-games 40)
+
+# 2. Distil them into training/state/policy_weights.json
+python -m training.policy_learning
+
+# 3. The `policy` approach then builds a candidate that searches with the prior
+python -m training.nightly_run --approaches policy,baseline --games 40
+```
+
+The learned policy is stored on the champion config as
+`params.policy_prior_enabled` + `params.policy_weights` and flows through the arena
+like any other parameter. An untrained/default policy reproduces the fixed move
+heuristic exactly, so enabling the prior without weights never changes behaviour.
+
 ## Architecture (separation of concerns)
 
 ```
@@ -39,6 +65,7 @@ training/
     heuristic_tuning.py#   regression re-fit of Layer-6 weights
     mcts_param_sweep.py#   search-parameter variant
     hybrid_td_mcts.py  #   strong search + TD-learned evaluator
+    policy_prior.py    #   learned move policy (PUCT prior + rollout/ordering)
   evaluation/          # measurement + promotion
     benchmark_pool.py  #   fixed, versioned opponent roster + fixed seeds
     head_to_head.py    #   pooled 4-agent battery vs the pool (per candidate)

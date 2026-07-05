@@ -242,5 +242,12 @@ python -m mcts_lab.promote      # candidate vs champion gauntlet + gated promoti
 4. Once eval-weight learning saturates, the highest-leverage next feature is
    a stronger rollout/move-ordering policy learned from MCTS visit counts
    (supervised, cheap), then progressive widening at high branching factors.
+   **Implemented (2026-07):** a learned move policy (`mcts/move_policy.py`)
+   distilled from the MCTS root visit distribution
+   (`training/policy_selfplay.py` → `training/policy_learning.py`) and used as a
+   PUCT prior + rollout/ordering policy (`policy_prior_enabled`), surfaced as the
+   `policy` candidate approach. This turns the pipeline into an expert-iteration
+   loop: search generates the policy target, the policy sharpens the next search.
+   Off by default; default policy == the fixed move heuristic.
 5. Consider migrating Elo to placement-based updates (§3.5) with a one-time
    ratings reset.
