@@ -920,94 +920,94 @@ def run_approaches(
     confirmation_record = None
     sprt_results: Dict[str, Any] = {}
 
-    if created and time.monotonic() < deadline and sequential_eval:
-        # Variance-reduced sequential screen (SPRT on the paired champion-vs-candidate
-        # outcome, seat-balanced). Decisive candidates — clearly better OR clearly not —
-        # resolve in few games; only genuinely borderline ones cost many. A candidate is
-        # promotable only if the SPRT accepts H1 *and* it clears the conservative gate on
-        # those same games, so the SPRT evidence doubles as the confirmation battery.
+    if created and time.monotonic() < deadline:
         pool = build_benchmark_pool(state, seeds=seeds)
-        ht, sprt_results = evaluate_candidates_sequential(
-            state, created, pool, paths, seeds=seeds, thinking_time_ms=thinking_time_ms,
-            elo1=sprt_elo1, min_games=sprt_min_games, max_games=sprt_max_games,
-            deadline=deadline, verbose=verbose,
-        )
-        evals_by_name = {e.name: e for e in ht.candidate_evals}
-        gates_by_name = {ce.name: evaluate_gate(ce, GateThresholds())
-                         for ce in ht.candidate_evals}
-        improved = [ce for ce in ht.candidate_evals
-                    if sprt_results.get(ce.name) is not None
-                    and sprt_results[ce.name].is_improvement]
-        sel = select_winner(improved, GateThresholds())
-        gates_by_name.update(sel["gates"])  # authoritative gate for the winner subset
-        winner = sel["winner"]
-        total_eval_games = len(ht.all_games)
-        # Fold the SPRT verdict into each candidate's report reason for visibility.
-        for c in created:
-            sr = sprt_results.get(c.name)
-            if sr is not None:
-                c.reason = f"{c.reason} — {sr.summary_line()}"
-        if winner is not None:
-            sr = sprt_results.get(winner.name)
-            confirmation_record = {
-                "candidate": winner.name, "approach": winner.approach,
-                "method": "sprt_sequential",
-                "screen_games": int(sr.n_games) if sr else 0,
-                "confirm_games": int(sr.n_games) if sr else 0,
-                "confirm_min_games": sprt_min_games,
-                "passed": True,
-                "reason": (sr.summary_line() if sr else ""),
-            }
-    elif created and time.monotonic() < deadline:
-        pool = build_benchmark_pool(state, seeds=seeds)
-        ht = evaluate_candidates(
-            state, created, pool, paths,
-            games_per_arena=games_per_arena, seeds=seeds,
-            thinking_time_ms=thinking_time_ms, deadline=deadline, verbose=verbose,
-        )
-        evals_by_name = {e.name: e for e in ht.candidate_evals}
-        sel = select_winner(ht.candidate_evals, GateThresholds())
-        gates_by_name = sel["gates"]
-        winner = sel["winner"]
-        total_eval_games = len(ht.all_games)
-
-        # Two-stage promotion (audit #4): the screen above identified a leading
-        # candidate over the cheap 20-game gate. Before promoting, re-evaluate ONLY
-        # that candidate over a larger confirmation sample and require it to clear
-        # the gate again at the higher game floor. A lucky short run can no longer
-        # promote on its own; the extra cost is bounded to one candidate and the
-        # remaining wall-clock budget.
-        if two_stage_promotion and winner is not None and time.monotonic() < deadline:
-            wcand0 = next((c for c in created if c.name == winner.name), None)
-            if wcand0 is not None and getattr(wcand0, "agent_config", None):
-                conf_eval, conf_games, _conf_dirs = ht_confirm_winner(
-                    state, winner.name, winner.approach, wcand0.agent_config, pool, paths,
-                    seeds=seeds, thinking_time_ms=thinking_time_ms,
-                    deadline=deadline, verbose=verbose,
-                )
-                conf_gate = evaluate_gate(
-                    conf_eval, GateThresholds(min_total_games=EVAL_CONFIRM_TOTAL_GAMES))
-                # The champion plays every confirmation game too — fold them into the
-                # pooled game set so ratings and counts reflect the full evidence.
-                ht.all_games.extend(conf_games)
-                total_eval_games = len(ht.all_games)
+        if sequential_eval:
+            # Variance-reduced sequential screen (SPRT on the paired champion-vs-candidate
+            # outcome, seat-balanced). Decisive candidates — clearly better OR clearly not —
+            # resolve in few games; only genuinely borderline ones cost many. A candidate is
+            # promotable only if the SPRT accepts H1 *and* it clears the conservative gate on
+            # those same games, so the SPRT evidence doubles as the confirmation battery.
+            ht, sprt_results = evaluate_candidates_sequential(
+                state, created, pool, paths, seeds=seeds, thinking_time_ms=thinking_time_ms,
+                elo1=sprt_elo1, min_games=sprt_min_games, max_games=sprt_max_games,
+                deadline=deadline, verbose=verbose,
+            )
+            evals_by_name = {e.name: e for e in ht.candidate_evals}
+            gates_by_name = {ce.name: evaluate_gate(ce, GateThresholds())
+                             for ce in ht.candidate_evals}
+            improved = [ce for ce in ht.candidate_evals
+                        if sprt_results.get(ce.name) is not None
+                        and sprt_results[ce.name].is_improvement]
+            sel = select_winner(improved, GateThresholds())
+            gates_by_name.update(sel["gates"])  # authoritative gate for the winner subset
+            winner = sel["winner"]
+            total_eval_games = len(ht.all_games)
+            # Fold the SPRT verdict into each candidate's report reason for visibility.
+            for c in created:
+                sr = sprt_results.get(c.name)
+                if sr is not None:
+                    c.reason = f"{c.reason} — {sr.summary_line()}"
+            if winner is not None:
+                sr = sprt_results.get(winner.name)
                 confirmation_record = {
-                    "candidate": winner.name,
-                    "approach": winner.approach,
-                    "screen_games": int(evals_by_name[winner.name].games),
-                    "confirm_games": int(conf_eval.games),
-                    "confirm_min_games": EVAL_CONFIRM_TOTAL_GAMES,
-                    "passed": bool(conf_gate.passed),
-                    "reason": conf_gate.reason,
+                    "candidate": winner.name, "approach": winner.approach,
+                    "method": "sprt_sequential",
+                    "screen_games": int(sr.n_games) if sr else 0,
+                    "confirm_games": int(sr.n_games) if sr else 0,
+                    "confirm_min_games": sprt_min_games,
+                    "passed": True,
+                    "reason": (sr.summary_line() if sr else ""),
                 }
-                if conf_gate.passed:
-                    # Promote on the stronger confirmation evidence.
-                    evals_by_name[winner.name] = conf_eval
-                    gates_by_name[winner.name] = conf_gate
-                    winner = conf_eval
-                else:
-                    # The screen result did not hold up over more games — hold.
-                    winner = None
+        else:
+            ht = evaluate_candidates(
+                state, created, pool, paths,
+                games_per_arena=games_per_arena, seeds=seeds,
+                thinking_time_ms=thinking_time_ms, deadline=deadline, verbose=verbose,
+            )
+            evals_by_name = {e.name: e for e in ht.candidate_evals}
+            sel = select_winner(ht.candidate_evals, GateThresholds())
+            gates_by_name = sel["gates"]
+            winner = sel["winner"]
+            total_eval_games = len(ht.all_games)
+
+            # Two-stage promotion (audit #4): the screen above identified a leading
+            # candidate over the cheap 20-game gate. Before promoting, re-evaluate ONLY
+            # that candidate over a larger confirmation sample and require it to clear
+            # the gate again at the higher game floor. A lucky short run can no longer
+            # promote on its own; the extra cost is bounded to one candidate and the
+            # remaining wall-clock budget.
+            if two_stage_promotion and winner is not None and time.monotonic() < deadline:
+                wcand0 = next((c for c in created if c.name == winner.name), None)
+                if wcand0 is not None and getattr(wcand0, "agent_config", None):
+                    conf_eval, conf_games, _conf_dirs = ht_confirm_winner(
+                        state, winner.name, winner.approach, wcand0.agent_config, pool, paths,
+                        seeds=seeds, thinking_time_ms=thinking_time_ms,
+                        deadline=deadline, verbose=verbose,
+                    )
+                    conf_gate = evaluate_gate(
+                        conf_eval, GateThresholds(min_total_games=EVAL_CONFIRM_TOTAL_GAMES))
+                    # The champion plays every confirmation game too — fold them into the
+                    # pooled game set so ratings and counts reflect the full evidence.
+                    ht.all_games.extend(conf_games)
+                    total_eval_games = len(ht.all_games)
+                    confirmation_record = {
+                        "candidate": winner.name,
+                        "approach": winner.approach,
+                        "screen_games": int(evals_by_name[winner.name].games),
+                        "confirm_games": int(conf_eval.games),
+                        "confirm_min_games": EVAL_CONFIRM_TOTAL_GAMES,
+                        "passed": bool(conf_gate.passed),
+                        "reason": conf_gate.reason,
+                    }
+                    if conf_gate.passed:
+                        # Promote on the stronger confirmation evidence.
+                        evals_by_name[winner.name] = conf_eval
+                        gates_by_name[winner.name] = conf_gate
+                        winner = conf_eval
+                    else:
+                        # The screen result did not hold up over more games — hold.
+                        winner = None
 
         # A real evaluation ran -> advance the durable generation counter now. A
         # skipped/empty cycle must NOT look like a completed generation.

@@ -76,6 +76,49 @@ def test_generation_not_advanced_when_no_evaluation_runs(tmp_path, monkeypatch):
     assert "fake: nothing to learn" in (paths.reports_dir / "approach_comparison.md").read_text()
 
 
+def test_sequential_eval_runs_promotion_bookkeeping(tmp_path, monkeypatch):
+    """Regression: with --sequential-eval, the shared bookkeeping (generation increment,
+    Elo/TrueSkill replay, promotion) must run — it must NOT be stranded in the
+    non-sequential branch. On the buggy control flow this test fails because the
+    generation counter never advances in sequential mode even though games were played.
+    """
+    from training.approaches.base import Candidate
+    from training.evaluation.head_to_head import HeadToHeadResult
+
+    paths = _seed(tmp_path)
+    before = json.loads(paths.latest_json.read_text())
+
+    class _MakesCandidate:
+        name = "cand"
+
+        def generate(self, ctx):
+            return Candidate(name="cand", approach="test", created=True,
+                             reason="test: created",
+                             agent_config={"type": "mcts", "thinking_time_ms": 5, "params": {}})
+
+    monkeypatch.setattr(nr.ap_pkg, "build_approaches", lambda names: [_MakesCandidate()])
+
+    # Stand in for the real (slow) SPRT arena: return played games but no winner, so the
+    # promotion branch is skipped and only the *shared* bookkeeping is under test.
+    games = [{"agent_scores": {"champion": 40, "cand": 50, "o1": 30, "o2": 20}},
+             {"agent_scores": {"champion": 45, "cand": 55, "o1": 30, "o2": 20}}]
+    ht = HeadToHeadResult(pool={}, seeds=[1, 2], games_per_arena=2, candidate_evals=[],
+                          all_games=games, run_dirs=[], skipped_for_budget=[])
+    monkeypatch.setattr(nr, "evaluate_candidates_sequential", lambda *a, **k: (ht, {}))
+
+    nr.run_approaches(
+        paths=paths, approaches=["cand"], games_per_arena=2, seeds=[1, 2],
+        time_budget_minutes=5, thinking_time_ms=5, promote_registry=False,
+        dry_run=False, verbose=False, sequential_eval=True,
+    )
+
+    after = json.loads(paths.latest_json.read_text())
+    # The evaluation ran (2 games) -> the shared bookkeeping must have advanced the
+    # generation and recorded the games. On the pre-fix control flow this stays at 5.
+    assert after["generation"] == before["generation"] + 1
+    assert after.get("total_games", 0) == before.get("total_games", 0) + 2
+
+
 def test_resolve_approaches_all_and_csv():
     assert nr._resolve_approaches("all") == list(__import__(
         "training.approaches", fromlist=["DEFAULT_APPROACHES"]).DEFAULT_APPROACHES)
