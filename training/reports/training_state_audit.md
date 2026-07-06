@@ -6,12 +6,12 @@
 - Last promoted generation: 140
 
 ## Latest generation
-- Generation: 155
-- Run: 20260705T191638Z (60 games, Elo 1394.0888986336456)
-- Recent Elo trend per recorded game/run point: 0.134
+- Generation: 156
+- Run: 20260706T022231Z (60 games, Elo 1391.5125704223888)
+- Recent Elo trend per recorded game/run point: -0.316
 
 ## Promotion decisions
-- policy_prior / policy: games=20 promoted=False reason=HOLD policy: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'elo_improvement', 'trueskill_improvement'].
+- policy_prior / policy: games=20 promoted=False reason=HOLD policy: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
 - baseline_mcts / baseline: games=20 promoted=False reason=HOLD baseline: failed ['conservative_promotes_candidate', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
 - heuristic_tuning / heuristic_tune: games=20 promoted=False reason=HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
 
@@ -29,9 +29,9 @@
 - Stable MCTS anchors: 3
 
 ## State/history validation
-- History rows: 155
-- By kind: {'legacy_generation': 123, 'approach_comparison': 32}
-- Approach-comparison rows: 32 · legacy rows: 123 · unknown rows: 0
+- History rows: 156
+- By kind: {'legacy_generation': 123, 'approach_comparison': 33}
+- Approach-comparison rows: 33 · legacy rows: 123 · unknown rows: 0
 - Malformed rows: 0
 - Duplicate keys: 0
 - Missing result-like fields (approach rows only): 0
