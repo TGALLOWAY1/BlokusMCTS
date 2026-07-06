@@ -55,6 +55,12 @@ from training.evaluation import (
 )
 from training.evaluation import report as approach_report
 from training.evaluation.promotion_gate import GateThresholds, evaluate_gate
+from training.evaluation.sequential import (
+    DEFAULT_ELO1 as SPRT_DEFAULT_ELO1,
+    DEFAULT_MAX_GAMES as SPRT_DEFAULT_MAX_GAMES,
+    DEFAULT_MIN_GAMES as SPRT_DEFAULT_MIN_GAMES,
+    evaluate_candidates_sequential,
+)
 
 # Fraction of the wall-clock budget spent on self-play generations; the remainder
 # is reserved for candidate evaluation, reports, commit, and email.
@@ -831,6 +837,10 @@ def run_approaches(
     verbose: bool,
     td_weights_path: Optional[str] = None,
     two_stage_promotion: bool = False,
+    sequential_eval: bool = False,
+    sprt_elo1: float = SPRT_DEFAULT_ELO1,
+    sprt_min_games: int = SPRT_DEFAULT_MIN_GAMES,
+    sprt_max_games: int = SPRT_DEFAULT_MAX_GAMES,
 ) -> Dict[str, Any]:
     """One nightly run as an approach-comparison: generate candidates from each
     approach, evaluate the created ones against a fixed benchmark pool with fixed
@@ -908,8 +918,47 @@ def run_approaches(
     total_eval_games = 0
     eval_samples: List[tuple] = []
     confirmation_record = None
+    sprt_results: Dict[str, Any] = {}
 
-    if created and time.monotonic() < deadline:
+    if created and time.monotonic() < deadline and sequential_eval:
+        # Variance-reduced sequential screen (SPRT on the paired champion-vs-candidate
+        # outcome, seat-balanced). Decisive candidates — clearly better OR clearly not —
+        # resolve in few games; only genuinely borderline ones cost many. A candidate is
+        # promotable only if the SPRT accepts H1 *and* it clears the conservative gate on
+        # those same games, so the SPRT evidence doubles as the confirmation battery.
+        pool = build_benchmark_pool(state, seeds=seeds)
+        ht, sprt_results = evaluate_candidates_sequential(
+            state, created, pool, paths, seeds=seeds, thinking_time_ms=thinking_time_ms,
+            elo1=sprt_elo1, min_games=sprt_min_games, max_games=sprt_max_games,
+            deadline=deadline, verbose=verbose,
+        )
+        evals_by_name = {e.name: e for e in ht.candidate_evals}
+        gates_by_name = {ce.name: evaluate_gate(ce, GateThresholds())
+                         for ce in ht.candidate_evals}
+        improved = [ce for ce in ht.candidate_evals
+                    if sprt_results.get(ce.name) is not None
+                    and sprt_results[ce.name].is_improvement]
+        sel = select_winner(improved, GateThresholds())
+        gates_by_name.update(sel["gates"])  # authoritative gate for the winner subset
+        winner = sel["winner"]
+        total_eval_games = len(ht.all_games)
+        # Fold the SPRT verdict into each candidate's report reason for visibility.
+        for c in created:
+            sr = sprt_results.get(c.name)
+            if sr is not None:
+                c.reason = f"{c.reason} — {sr.summary_line()}"
+        if winner is not None:
+            sr = sprt_results.get(winner.name)
+            confirmation_record = {
+                "candidate": winner.name, "approach": winner.approach,
+                "method": "sprt_sequential",
+                "screen_games": int(sr.n_games) if sr else 0,
+                "confirm_games": int(sr.n_games) if sr else 0,
+                "confirm_min_games": sprt_min_games,
+                "passed": True,
+                "reason": (sr.summary_line() if sr else ""),
+            }
+    elif created and time.monotonic() < deadline:
         pool = build_benchmark_pool(state, seeds=seeds)
         ht = evaluate_candidates(
             state, created, pool, paths,
@@ -1028,6 +1077,10 @@ def run_approaches(
         last_promoted_generation=state.get("last_promoted_generation"),
         confirmation=confirmation_record,
     )
+    if sprt_results:
+        # Persist the sequential (SPRT) screen evidence alongside the comparison so the
+        # status report / email can show each candidate's paired verdict and game count.
+        record["sprt_screen"] = {n: r.to_dict() for n, r in sprt_results.items()}
     state["last_approach_comparison"] = record
     state["last_eval"] = None  # superseded by last_approach_comparison
 
@@ -1158,6 +1211,22 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                         "leading candidate, re-evaluate ONLY that candidate over a larger "
                         f"confirmation sample ({EVAL_CONFIRM_TOTAL_GAMES} games) and promote "
                         "only if it clears the gate again (off by default).")
+    # --- Sequential (SPRT) evaluation: variance-reduced, stops early ---
+    p.add_argument("--sequential-eval", action="store_true",
+                   help="Use the variance-reduced sequential screen instead of the fixed "
+                        "N-game screen: a seat-balanced SPRT on the paired champion-vs-"
+                        "candidate outcome that stops as soon as the result is conclusive. "
+                        "A candidate promotes only if the SPRT accepts H1 AND it clears the "
+                        "conservative gate on those games (supersedes --two-stage-promotion).")
+    p.add_argument("--sprt-elo1", type=float, default=SPRT_DEFAULT_ELO1,
+                   help=f"SPRT H1: smallest candidate-over-champion Elo edge worth promoting "
+                        f"(default {SPRT_DEFAULT_ELO1:.0f}). Smaller ⇒ more games to decide.")
+    p.add_argument("--sprt-min-games", type=int, default=SPRT_DEFAULT_MIN_GAMES,
+                   help=f"SPRT: never decide before this many paired games "
+                        f"(default {SPRT_DEFAULT_MIN_GAMES}).")
+    p.add_argument("--sprt-max-games", type=int, default=SPRT_DEFAULT_MAX_GAMES,
+                   help=f"SPRT: give up (inconclusive → hold) beyond this many paired games "
+                        f"per candidate (default {SPRT_DEFAULT_MAX_GAMES}).")
     p.add_argument("--dry-run", action="store_true", help="Print the plan and exit.")
     p.add_argument("--verbose", action="store_true")
     return p.parse_args(argv)
@@ -1192,6 +1261,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 verbose=args.verbose,
                 td_weights_path=args.td_weights_path,
                 two_stage_promotion=args.two_stage_promotion,
+                sequential_eval=args.sequential_eval,
+                sprt_elo1=args.sprt_elo1,
+                sprt_min_games=args.sprt_min_games,
+                sprt_max_games=args.sprt_max_games,
             )
             return 0
         run(

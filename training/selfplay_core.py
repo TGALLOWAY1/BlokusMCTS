@@ -157,6 +157,7 @@ def run_arena_inproc(
     max_turns: int = 2500,
     verbose: bool = False,
     deadline: Optional[float] = None,
+    seat_policy: str = "randomized",
 ) -> Dict[str, Any]:
     """Run one 4-agent arena in-process and return ``run_experiment``'s result.
 
@@ -165,6 +166,13 @@ def run_arena_inproc(
     ``deadline`` (a ``time.monotonic()`` cutoff) is threaded into ``run_experiment``
     so the arena stops between games once the budget is spent — a long battery can
     no longer overrun the caller's wall-clock budget.
+
+    ``seat_policy`` selects how the four agents are mapped to board seats. The
+    default ``"randomized"`` shuffles per game (seats equal only in expectation);
+    ``"round_robin"`` cyclically rotates so each agent visits each seat once per
+    four games, which cancels seat/first-move advantage by construction and is the
+    right choice for the low-variance paired comparison in
+    :mod:`training.evaluation.sequential`.
     """
     # Strip candidate-metadata keys so they never reach the engine as params.
     agents = [strip_candidate_meta(a) for a in agents]
@@ -172,7 +180,7 @@ def run_arena_inproc(
         "agents": agents,
         "num_games": num_games,
         "seed": seed,
-        "seat_policy": "randomized",
+        "seat_policy": seat_policy,
         "output_root": str(paths.selfplay_runs_dir / run_label),
         "max_turns": max_turns,
         "notes": f"nightly training :: {run_label}",

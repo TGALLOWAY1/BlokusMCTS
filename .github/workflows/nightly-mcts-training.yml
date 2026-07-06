@@ -18,16 +18,14 @@ on:
       approaches:
         description: "Comma-separated candidate-generation approaches to compare (or 'all')."
         required: false
-        # Three approaches (not the audited-bad four): each created candidate is
-        # evaluated one-at-a-time to the same fixed 20-game screen, so more
-        # approaches cost wall-clock rather than games-per-candidate — hence the
-        # 315-min budget below. `policy` = the learned move-policy PUCT prior (fed
-        # by the collection step below), `baseline` = the strong-search control,
-        # `heuristic_tune` = the Layer-6 evaluator re-fit. `policy` produces a
-        # candidate only once enough visit-count targets have accumulated,
-        # otherwise it records a specific "need more data" reason and costs no games
-        # (so early runs are effectively baseline + heuristic_tune).
-        default: "policy,baseline,heuristic_tune"
+        # Candidates that are genuinely DIFFERENT from the champion (the plateau came
+        # from a roster that had collapsed onto the incumbent). `mcts_sweep` = tuned
+        # exploration constant; `progressive_widening` = focus search on the top moves
+        # (re-measured post-maxⁿ-fix); `heuristic_tune` = the Layer-6 evaluator re-fit.
+        # `baseline` self-retires when identical to the champion; `policy` is available
+        # but held out of the default roster until its move-policy model is made richer
+        # than the fixed heuristic it currently self-distils into (see AUDIT_REPORT §7).
+        default: "mcts_sweep,progressive_widening,heuristic_tune"
       games:
         description: "Games per arena per seed for approach evaluation."
         required: false
@@ -47,9 +45,18 @@ on:
       thinking_time_ms:
         description: "Uniform MCTS thinking-time override for evaluation agents."
         required: false
-        # Use a faster uniform evaluator so every approach can satisfy the
-        # 20-game promotion gate. Full-strength 500 ms games exceeded the budget.
+        # Use a faster uniform evaluator so more paired games fit the budget. The
+        # sequential screen needs tens–hundreds of games to reach a conclusive SPRT
+        # verdict, so per-game cost matters more than per-move strength here.
         default: "100"
+      sprt_max_games:
+        description: "Sequential screen: max paired games/candidate before hold (inconclusive)."
+        required: false
+        # Caps each candidate's SPRT at this many paired games (a fair per-candidate
+        # wall-clock split also applies). At elo1=70/α=β=0.05 a clearly-strong candidate
+        # is confirmed in ~70 games and a no-op ruled out in ~150; a near-even candidate
+        # runs to this cap and is held. 160 keeps three candidates inside the budget.
+        default: "160"
 
 # Never run two nightly trainings at once, and never cancel an in-flight run
 # (cancelling mid-train could corrupt a generation). A queued run waits its turn.
@@ -106,12 +113,27 @@ jobs:
           # evaluate them against a fixed benchmark pool with fixed seeds, and promote
           # only a candidate that passes the statistical gate. See
           # docs/03-implementation/NIGHTLY_TRAINING.md and training/README.md.
+          #
+          # Roster: candidates that are genuinely DIFFERENT from the champion. The old
+          # `policy,baseline,heuristic_tune` roster had collapsed onto the incumbent
+          # (`baseline` reproduced it exactly; `policy` self-distilled back into the
+          # fixed heuristic), so nothing could out-perform it. `mcts_sweep` (tuned
+          # exploration constant), `progressive_widening` (focus search on top moves —
+          # re-measured post-maxⁿ-fix) and `heuristic_tune` (evaluator re-fit) explore
+          # new behaviour. `baseline` self-retires when identical to the champion.
+          #
+          # Evaluation: the variance-reduced SEQUENTIAL screen (--sequential-eval) — a
+          # seat-balanced SPRT on the paired champion-vs-candidate outcome that stops as
+          # soon as the result is conclusive (clearly better OR clearly not), so a real
+          # edge is detectable in far fewer games than the old fixed 20-game screen (which
+          # was swamped by the ~±72 Elo re-rating noise and could resolve nothing).
           python -m training.nightly_run \
-            --approaches "${{ github.event.inputs.approaches || 'policy,baseline,heuristic_tune' }}" \
+            --approaches "${{ github.event.inputs.approaches || 'mcts_sweep,progressive_widening,heuristic_tune' }}" \
             --games "${{ github.event.inputs.games || '5' }}" \
             --time-budget-minutes "${{ github.event.inputs.time_budget_minutes || '315' }}" \
             --thinking-time-ms "${{ github.event.inputs.thinking_time_ms || '100' }}" \
-            --two-stage-promotion \
+            --sequential-eval \
+            --sprt-max-games "${{ github.event.inputs.sprt_max_games || '160' }}" \
             --resume training/state/latest.json
 
       - name: Generate reports (always)

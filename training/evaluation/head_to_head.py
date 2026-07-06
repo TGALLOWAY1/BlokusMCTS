@@ -175,8 +175,6 @@ def evaluate_candidate_vs_pool(
     timeout, was cancelled mid-evaluation, and the run never persisted its
     approach-comparison record (see docs/email_reporting.md).
     """
-    from training.experiments.compare import _mean_ci, per_agent_game_stats
-
     seeds = list(seeds) if seeds else list(pool.seeds)
     t0 = time.monotonic()
     arenas = _candidate_arenas(state, candidate_cfg, candidate_name, pool)
@@ -202,8 +200,6 @@ def evaluate_candidate_vs_pool(
             continue  # inner loop completed without break → next arena
         break  # inner loop hit the deadline → stop launching further arenas
 
-    agent_names = sorted({a["name"] for arena in arenas for a in arena})
-
     # The sub-deadline can elapse before a single game finishes. Aggregating over an
     # empty game set is meaningless (and several downstream stats divide by the game
     # count), so return a zero-game eval the caller will record as skipped-for-budget.
@@ -219,13 +215,45 @@ def evaluate_candidate_vs_pool(
         )
         return empty, [], run_dirs
 
+    cand_eval = aggregate_candidate_eval(
+        candidate_name, candidate_approach, games, arenas,
+        seeds=seeds, thinking_time_ms=thinking_time_ms, min_mu_margin=min_mu_margin,
+        runtime_s=time.monotonic() - t0,
+    )
+    return cand_eval, games, run_dirs
+
+
+def aggregate_candidate_eval(
+    candidate_name: str,
+    candidate_approach: str,
+    games: List[Dict[str, Any]],
+    arenas: List[List[Dict[str, Any]]],
+    *,
+    seeds: List[int],
+    thinking_time_ms: Optional[int] = None,
+    min_mu_margin: float = 0.5,
+    runtime_s: float = 0.0,
+    seat_policy: str = "randomized",
+) -> CandidateEval:
+    """Pool a list of ``[champion, candidate, opp, opp]`` games into a
+    :class:`CandidateEval` (win rate + CIs, TrueSkill, Elo, vs-champion record, and
+    the conservative promotion decision).
+
+    Factored out of :func:`evaluate_candidate_vs_pool` so the sequential SPRT screen
+    (:mod:`training.evaluation.sequential`) can reuse the *same* aggregation, gate and
+    report shape on its accumulated games — the SPRT evidence then doubles as the
+    conservative-gate evidence, so no separate confirmation battery is needed.
+    """
+    from training.experiments.compare import per_agent_game_stats
+
+    agent_names = sorted({a["name"] for arena in arenas for a in arena})
     thinking_by_agent = {
         a["name"]: (thinking_time_ms if thinking_time_ms is not None else a.get("thinking_time_ms"))
         for arena in arenas for a in arena
     }
     pooled = gauntlet.aggregate_summary(
         games, agent_names=agent_names, thinking_time_ms_by_agent=thinking_by_agent,
-        seeds=seeds, seat_policy="randomized",
+        seeds=seeds, seat_policy=seat_policy,
         run_config={"phase": "benchmark_eval", "candidate": candidate_name},
     )
     leaderboard = {r["name"]: r for r in gauntlet.build_leaderboard(pooled)}
@@ -254,7 +282,7 @@ def evaluate_candidate_vs_pool(
 
     cand_mu = cand_lb.get("trueskill_mu")
     champ_mu = champ_lb.get("trueskill_mu")
-    cand_eval = CandidateEval(
+    return CandidateEval(
         name=candidate_name,
         approach=candidate_approach,
         games=cand_raw["games"],
@@ -280,11 +308,10 @@ def evaluate_candidate_vs_pool(
         trueskill_mu_delta_vs_champion=(
             (cand_mu - champ_mu) if cand_mu is not None and champ_mu is not None else None),
         decision=decision,
-        runtime_s=time.monotonic() - t0,
+        runtime_s=runtime_s,
         ranked=ranked,
         pooled_summary=pooled,
     )
-    return cand_eval, games, run_dirs
 
 
 def confirm_games_per_arena(

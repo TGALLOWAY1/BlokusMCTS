@@ -8,6 +8,13 @@
 ---
 
 ## Task: Test shorter promotion gate with a longer eval
+Status: ✅ ADDRESSED (2026-07-06) — implemented as a *sequential* paired gate rather
+than a fixed longer eval. `training/evaluation/sequential.py` (`--sequential-eval`)
+runs a seat-balanced SPRT on the paired champion-vs-candidate outcome: decisive
+candidates resolve in few games, borderline ones cost more, and the SPRT games double
+as the conservative-gate evidence. See AUDIT_REPORT.md §7. Remaining variant to try:
+tune `--sprt-elo1` down (chase smaller gains) once an off-Actions parallel runner
+affords the extra games.
 Priority: Medium (score +4)
 Category: Training / evaluation quality
 User impact: +2 · Tech risk: +1 · Demo: +0 · Complexity: −1
