@@ -54,7 +54,21 @@ class BaselineMctsApproach:
             )
         cfg = strong_baseline_params(champ)
         cfg["name"] = self.name
-        changed = {k: v for k, v in STRONG_SEARCH_OVERRIDES.items()}
+        # Self-retire when this is a no-op. Once a strong-baseline agent has been
+        # promoted (as gen140 was), applying the SAME overrides reproduces the champion
+        # byte-for-byte, so the "candidate" is the champion playing itself: it can never
+        # strictly beat the champion and only burns evaluation budget. Skip with a
+        # specific reason. If a future champion ever drifts away from these settings,
+        # this approach automatically becomes a genuine control again.
+        if (champ.get("params") or {}) == (cfg.get("params") or {}):
+            return Candidate(
+                name=self.name, approach="baseline_mcts", created=False,
+                reason=("baseline: identical to the current champion (strong-search "
+                        "settings already promoted) — nothing to test, skipping"),
+                metrics={"identical_to_champion": True},
+            )
+        changed = {k: v for k, v in STRONG_SEARCH_OVERRIDES.items()
+                   if (champ.get("params") or {}).get(k) != v}
         return Candidate(
             name=self.name,
             approach="baseline_mcts",

@@ -58,6 +58,47 @@ def test_mcts_sweep_changes_exploration_constant(tmp_path):
     assert "grid" in cand.metrics
 
 
+def _strong_champion_ctx(tmp_path):
+    """A champion that already carries the strong-search overrides (the gen140 case)."""
+    from training.approaches.baseline_mcts import strong_baseline_params
+
+    champ = strong_baseline_params(copy.deepcopy(CHAMPION_PARAMS))
+    state = {"champion_params": champ, "checkpoints": []}
+    return ApproachContext(state=state, repo_root=tmp_path, run_id="TESTRUN",
+                           now_iso="2026-06-26T00:00:00Z", time_budget_s=30)
+
+
+def test_baseline_self_retires_when_identical_to_champion(tmp_path):
+    # Against a champion that already IS the strong baseline, the candidate would be a
+    # byte-for-byte clone -> it must NOT be created (it can never beat itself and would
+    # only burn evaluation budget). This is the plateau's no-op-candidate fix.
+    cand = ap.get_approach("baseline").generate(_strong_champion_ctx(tmp_path))
+    assert not cand.created
+    assert "identical to the current champion" in cand.reason
+    assert cand.metrics.get("identical_to_champion") is True
+    ok, _ = validate_candidate_artifact(cand.to_artifact("TESTRUN", "t"))
+    assert ok  # a not-created candidate is still a valid, self-explaining artifact
+
+
+def test_progressive_widening_enables_pw(tmp_path):
+    cand = ap.get_approach("progressive_widening").generate(_ctx(tmp_path))
+    assert cand.created
+    p = cand.agent_config["params"]
+    assert p["progressive_widening_enabled"] is True
+    assert p["pw_c"] > 0 and 0.0 < p["pw_alpha"] <= 1.0
+    # Built on the corrected strong search, not the weak champion settings.
+    assert p["rollout_policy"] == "greedy_sample"
+    ok, why = validate_candidate_artifact(cand.to_artifact("TESTRUN", "t"))
+    assert ok, why
+
+
+def test_progressive_widening_in_default_roster(tmp_path):
+    # The genuinely-different search candidate must be in the nightly roster (guards
+    # against a silent revert to the champion-clone roster that caused the plateau).
+    assert "progressive_widening" in ap.DEFAULT_APPROACHES
+    assert "mcts_sweep" in ap.DEFAULT_APPROACHES
+
+
 def test_hybrid_fails_specifically_without_td_artifact(tmp_path):
     # Point TD weights at a non-existent path so the artifact is missing.
     missing = tmp_path / "no_td.json"

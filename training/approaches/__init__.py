@@ -31,6 +31,7 @@ def _register() -> None:
         hybrid_td_mcts,
         mcts_param_sweep,
         policy_prior,
+        progressive_widening,
         td_learning,
     )
 
@@ -41,13 +42,22 @@ def _register() -> None:
         td_learning.NAME: td_learning.make,
         hybrid_td_mcts.NAME: hybrid_td_mcts.make,
         policy_prior.NAME: policy_prior.make,
+        progressive_widening.NAME: progressive_widening.make,
     })
 
 
 _register()
 
-# Default roster for a nightly run (order = report order).
-DEFAULT_APPROACHES: List[str] = ["baseline", "td", "mcts_sweep", "heuristic_tune", "hybrid"]
+# Default roster for a nightly run (order = report order). Leads with candidates that
+# are genuinely DIFFERENT from the champion — the plateau came from a roster that had
+# collapsed onto the incumbent (`baseline` reproduced it exactly; `policy` self-distilled
+# back into the fixed heuristic). `mcts_sweep` (tuned exploration constant) and
+# `progressive_widening` (focus search on top moves) explore new search behaviour;
+# `heuristic_tune` re-fits the evaluator. `baseline` self-retires when identical to the
+# champion, so it only competes if a future champion drifts from the strong-search seed.
+DEFAULT_APPROACHES: List[str] = [
+    "mcts_sweep", "progressive_widening", "heuristic_tune", "policy", "baseline",
+]
 
 ALL_APPROACHES: List[str] = list(_FACTORIES.keys())
 

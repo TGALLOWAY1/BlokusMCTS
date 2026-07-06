@@ -26,8 +26,14 @@ compact log-linear model — still no neural net). The nightly runs a dedicated
 approach distils that corpus into the move-policy PUCT prior
 (`training.policy_learning` → `training/state/policy_weights.json`); see
 `training/README.md` → "Learned move policy". The default approach roster is
-`policy,baseline,heuristic_tune`. Almost everything heavy is imported from
-existing, tested code:
+`mcts_sweep,progressive_widening,heuristic_tune` — candidates that are genuinely
+*different* from the champion (the earlier `policy,baseline,heuristic_tune` roster
+had collapsed onto the incumbent: `baseline` reproduced it byte-for-byte and now
+self-retires, `policy` self-distilled back into the fixed heuristic and is held out
+pending a richer model). Evaluation uses the variance-reduced **sequential SPRT
+screen** (`--sequential-eval`), which stops as soon as the paired champion-vs-candidate
+result is conclusive; see `AUDIT_REPORT.md` §7 and `training/evaluation/sequential.py`.
+Almost everything heavy is imported from existing, tested code:
 
 | Concern | Reused from |
 |---|---|

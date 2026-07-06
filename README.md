@@ -87,6 +87,13 @@ current champion ──(mcts_lab.self_play)──> snapshot corpus
   (heuristic, random, two fixed MCTS anchors), ≥2 fixed seeds, and holding all
   of that over a 60+ game confirmation run. Elo movement without a promotion
   is measurement noise, and the reports label it as such.
+- **Variance-reduced sequential screen** (`--sequential-eval`, the nightly
+  default): instead of a fixed 20-game screen swamped by ±72 Elo re-rating noise,
+  a seat-balanced **SPRT** on the *paired* champion-vs-candidate outcome stops as
+  soon as the result is conclusive — a real edge is detectable in far fewer games,
+  a no-op candidate is rejected fast, and a candidate promotes only if the SPRT
+  accepts *and* it clears the conservative gate on those games
+  (`training/evaluation/sequential.py`; see AUDIT_REPORT.md §7).
 - **Nightly automation:** the GitHub Actions workflow resumes from committed
   state every 6 hours, runs the same loop (`training.nightly_run`), commits
   results, and emails a summary. Reports land in `training/status.md` and
@@ -122,6 +129,14 @@ historical gauntlet runs live in `arena_runs/`.
 - Next strength milestones, in order: retune evaluation weights on fresh
   self-play from the fixed search; retest RAVE/minimax/progressive-widening on
   top of maxⁿ; learn a rollout/move-ordering policy from MCTS visit counts.
+- **Update (2026-07-06):** after gen140 the loop re-plateaued because the
+  candidate roster had collapsed onto the champion (a byte-identical `baseline`
+  clone; a `policy` that self-distilled back into the fixed heuristic) and the
+  20-game screen was too noisy to detect a real gain. Fixed by self-retiring the
+  clone, leading the roster with genuinely-different search candidates
+  (`mcts_sweep`, `progressive_widening`), and adding the sequential SPRT screen
+  above (AUDIT_REPORT.md §7). Highest-leverage remaining work: a richer move
+  policy and an off-Actions, parallelised daily driver.
 
 ## What files matter
 

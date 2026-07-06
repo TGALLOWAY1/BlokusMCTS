@@ -251,3 +251,77 @@ python -m mcts_lab.promote      # candidate vs champion gauntlet + gated promoti
    Off by default; default policy == the fixed move heuristic.
 5. Consider migrating Elo to placement-based updates (§3.5) with a one-time
    ratings reset.
+
+---
+
+## 7. Follow-up (2026-07-06): the *second* plateau — candidate collapse + measurement noise ✅
+
+The maxⁿ fix worked: `baseline_mcts` was promoted to **gen140** (+94.7 Elo, 48–12
+head-to-head). But Elo then went flat again for ~16 generations (gen140→156, a
+16-generation promotion drought). This is a *different* failure from §4, with two
+compounding causes:
+
+### 7.1 The candidate generators collapsed onto the champion (root cause)
+Two of the three nightly candidates became **no-ops by construction**:
+
+- **`baseline` is now a byte-for-byte clone of the champion.** Every value in
+  `STRONG_SEARCH_OVERRIDES` (greedy_sample, cutoff 12, RAVE off, minimax 0.0,
+  workers 1, iters/ms 0.5) already *is* the gen140 champion — because gen140 was
+  promoted *from* this approach. Building the candidate reproduces the champion
+  exactly (verified: zero differing params), so it can never strictly beat the
+  champion; its ~47–50% is a coin flip.
+- **`policy` self-distills back into the fixed heuristic.** The learned move policy
+  is a 4-weight log-linear model over the *same* four move features, **seeded at the
+  fixed heuristic** and trained on the *champion's own* visit counts. The trained
+  artifact (`training/state/policy_weights.json`) is `[1.01, 1.99, 0.44, 0.79]` vs the
+  heuristic default `[1, 2, 0.5, 1]` with piece biases ≤ 0.14 — i.e. behaviourally the
+  champion. A 4-parameter student, seeded at and regularised toward its teacher and
+  evaluated at the same budget, cannot exceed the search that generated it.
+- `heuristic_tune` (evaluator re-fit) is the only candidate with real degrees of
+  freedom, and it kept landing *below* the champion (~45%).
+
+Net: the loop was comparing the champion against near-copies of itself. **Fix:**
+`baseline` now **self-retires** when identical to the champion
+(`training/approaches/baseline_mcts.py`); the nightly roster now leads with candidates
+that are genuinely *different* — `mcts_sweep` (tuned exploration constant),
+`progressive_widening` (`training/approaches/progressive_widening.py`, focus search on
+top moves — the audit's own §6.4 lever, re-measured post-maxⁿ-fix), and
+`heuristic_tune`. `policy` is held out of the default roster until its model is made
+richer than the fixed heuristic it currently reproduces (§7.3).
+
+### 7.2 The screen was too noisy to detect a real gain (compounding cause)
+The fixed 20-game screen re-rated the champion from a **fresh** Elo tracker
+(1200 start, K=32, 6 pairwise updates/4-player game) over ~20 games at 100 ms/move.
+A *fixed* agent's rating swings **±72 Elo** run-to-run on that basis (the reported
+"noise floor"), which swamps any incremental gain — so no candidate could ever clear
+the gate even if it were genuinely better. **Fix — variance-reduced sequential
+evaluation** (`training/evaluation/sequential.py`, `--sequential-eval`), which reuses
+infrastructure already in the repo:
+
+- **Paired** champion-vs-candidate comparison (they are co-present in every game;
+  agent RNG is keyed by name, not seat), so shared seat/opponent/opening variance
+  cancels — the paired within-game record and `analytics/tournament/statistics.py`
+  (`bootstrap_score_ci`, `paired_permutation_test`) already existed, just unused.
+- **Seat-balanced** `round_robin` rotation (was hardcoded `randomized`).
+- **SPRT** (Wald sequential test) on the paired W/D/L stream: decisive candidates —
+  clearly better *or* clearly not — resolve in far fewer games; only genuinely
+  borderline ones cost many. A candidate promotes only if the SPRT accepts H1 **and**
+  it still clears the conservative gate on those same games (the SPRT games double as
+  the confirmation battery — no separate 60-game run). This is standard computer-chess
+  engine-testing practice and is what makes *effective daily training with fewer
+  games* possible. The old fixed-N screen remains available (flag off).
+
+### 7.3 Still open (next highest-leverage)
+- **Richer move policy.** The 4-feature linear policy is fundamentally too weak to
+  beat the search it distils. Give it more features (phase × occupancy interactions,
+  finer corner/blocking counts, opponent-mobility deltas), decouple it from the
+  heuristic seed, and **collect visit targets from a stronger teacher** (higher
+  sim-count games) than the student runs — teacher > student is the point of
+  expert iteration.
+- **Off-Actions daily driver.** The GitHub runner (2 cores, 350-min cap, forced to
+  100 ms) is the binding budget constraint. Parallelise the arena across cores and run
+  the sequential loop at full strength on a dedicated box; leave Actions as the
+  report/commit layer. `--sprt-elo1` can then be lowered to chase smaller gains.
+- **Exploration in self-play.** Add root temperature / Dirichlet noise and a
+  population of past checkpoints so the learning signal stops being "imitate the
+  champion".
