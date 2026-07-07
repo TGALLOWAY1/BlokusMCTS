@@ -466,13 +466,30 @@ Reading:
   the number that matters is the **within-column delta at a fixed config**,
   which is clean because every row replays the same fixed seeds.
 
-**Candidate screen (`rich_leaf` vs champion, same seeds/budget):** the
-`rich_leaf` candidate (45-feature TD value at leaves, trained on the fresh
-732-row teacher-budget corpus) was screened head-to-head against the
-champion. It is a *gated candidate* — the champion registry is not touched
-regardless of outcome; promotion still requires the SPRT screen + the
-conservative gate in the nightly pipeline. Screen result pending (run in
-progress at write time); it will be appended here.
+**Candidate screen (`rich_leaf` vs champion, same seeds/budget, 24 games,
+4-agent arena `[champion, rich_leaf, heuristic, random]`):**
+
+| Agent | win% | 95% CI | TS μ |
+|---|---|---|---|
+| champion | 45.8% | [0.28, 0.65] | 40.4 |
+| `rich_leaf` candidate | 41.7% | [0.24, 0.61] | 41.6 |
+| heuristic | 12.5% | [0.04, 0.31] | 24.6 |
+| random | 0.0% | [0.00, 0.14] | −5.8 |
+
+The `rich_leaf` candidate (45-feature TD value at leaves, trained on the
+fresh 732-row teacher-budget corpus) is **statistically indistinguishable
+from the champion** on this screen — the two strong agents split the wins
+(CIs overlap almost entirely; candidate marginally ahead on TrueSkill μ,
+marginally behind on win-rate). It does **not** clear the "strictly beats
+the champion" bar, so it would **not** promote — the correct gated outcome.
+The champion registry is untouched regardless; promotion requires the SPRT
+screen + conservative gate in the nightly pipeline, not this smoke screen.
+
+Takeaway: the rich-feature leaf value now *reaches* the search and plays at
+champion strength at a fraction of the per-iteration cost (leaf eval ~1 ms
+vs a full rollout), but it is not yet a clear improvement on 24 games. The
+next step is a larger SPRT screen on more teacher-budget data (§8.6), not a
+promotion on this evidence.
 
 ### 8.6 Remaining risks / next steps
 
