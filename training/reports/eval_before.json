@@ -1,0 +1,447 @@
+{
+  "run_id": "gauntlet_pooled",
+  "seed": 20260620,
+  "seat_policy": "randomized",
+  "num_games": 24,
+  "completed_games": 24,
+  "error_games": 0,
+  "run_config": {
+    "phase": "cli_eval"
+  },
+  "win_stats": {
+    "champion": {
+      "games_played": 24.0,
+      "outright_wins": 17.0,
+      "shared_wins": 1.0,
+      "win_points": 17.5,
+      "win_rate": 0.7291666666666666
+    },
+    "heuristic": {
+      "games_played": 24.0,
+      "outright_wins": 2.0,
+      "shared_wins": 1.0,
+      "win_points": 2.5,
+      "win_rate": 0.10416666666666667
+    },
+    "heuristic_2": {
+      "games_played": 24.0,
+      "outright_wins": 4.0,
+      "shared_wins": 0.0,
+      "win_points": 4.0,
+      "win_rate": 0.16666666666666666
+    },
+    "random": {
+      "games_played": 24.0,
+      "outright_wins": 0.0,
+      "shared_wins": 0.0,
+      "win_points": 0.0,
+      "win_rate": 0.0
+    }
+  },
+  "wins_by_seat": {
+    "champion": {
+      "0": {
+        "games": 6,
+        "win_points": 6.0,
+        "win_rate": 1.0
+      },
+      "1": {
+        "games": 7,
+        "win_points": 4.5,
+        "win_rate": 0.6428571428571429
+      },
+      "2": {
+        "games": 7,
+        "win_points": 5.0,
+        "win_rate": 0.7142857142857143
+      },
+      "3": {
+        "games": 4,
+        "win_points": 2.0,
+        "win_rate": 0.5
+      }
+    },
+    "heuristic": {
+      "0": {
+        "games": 7,
+        "win_points": 0.5,
+        "win_rate": 0.07142857142857142
+      },
+      "1": {
+        "games": 4,
+        "win_points": 1.0,
+        "win_rate": 0.25
+      },
+      "2": {
+        "games": 5,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "3": {
+        "games": 8,
+        "win_points": 1.0,
+        "win_rate": 0.125
+      }
+    },
+    "heuristic_2": {
+      "0": {
+        "games": 6,
+        "win_points": 2.0,
+        "win_rate": 0.3333333333333333
+      },
+      "1": {
+        "games": 6,
+        "win_points": 1.0,
+        "win_rate": 0.16666666666666666
+      },
+      "2": {
+        "games": 9,
+        "win_points": 1.0,
+        "win_rate": 0.1111111111111111
+      },
+      "3": {
+        "games": 3,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      }
+    },
+    "random": {
+      "0": {
+        "games": 5,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "1": {
+        "games": 7,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "2": {
+        "games": 3,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "3": {
+        "games": 9,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      }
+    }
+  },
+  "score_stats": {
+    "champion": {
+      "count": 24,
+      "mean": 96.83333333333333,
+      "median": 95.5,
+      "std": 9.227073690444273,
+      "p25": 90.75,
+      "p75": 101.25,
+      "min": 82.0,
+      "max": 122.0
+    },
+    "heuristic": {
+      "count": 24,
+      "mean": 83.08333333333333,
+      "median": 84.0,
+      "std": 8.774568682023952,
+      "p25": 76.75,
+      "p75": 88.5,
+      "min": 66.0,
+      "max": 99.0
+    },
+    "heuristic_2": {
+      "count": 24,
+      "mean": 85.29166666666667,
+      "median": 85.5,
+      "std": 9.976970008752938,
+      "p25": 76.75,
+      "p75": 90.25,
+      "min": 72.0,
+      "max": 118.0
+    },
+    "random": {
+      "count": 24,
+      "mean": 61.125,
+      "median": 60.0,
+      "std": 8.884970924732018,
+      "p25": 54.75,
+      "p75": 65.5,
+      "min": 46.0,
+      "max": 79.0
+    }
+  },
+  "pairwise_matchups": {
+    "champion__vs__heuristic": {
+      "agent_a": "champion",
+      "agent_b": "heuristic",
+      "a_beats_b": 21,
+      "b_beats_a": 2,
+      "tie": 1,
+      "total": 24
+    },
+    "champion__vs__heuristic_2": {
+      "agent_a": "champion",
+      "agent_b": "heuristic_2",
+      "a_beats_b": 20,
+      "b_beats_a": 4,
+      "tie": 0,
+      "total": 24
+    },
+    "champion__vs__random": {
+      "agent_a": "champion",
+      "agent_b": "random",
+      "a_beats_b": 24,
+      "b_beats_a": 0,
+      "tie": 0,
+      "total": 24
+    },
+    "heuristic__vs__heuristic_2": {
+      "agent_a": "heuristic",
+      "agent_b": "heuristic_2",
+      "a_beats_b": 12,
+      "b_beats_a": 12,
+      "tie": 0,
+      "total": 24
+    },
+    "heuristic__vs__random": {
+      "agent_a": "heuristic",
+      "agent_b": "random",
+      "a_beats_b": 24,
+      "b_beats_a": 0,
+      "tie": 0,
+      "total": 24
+    },
+    "heuristic_2__vs__random": {
+      "agent_a": "heuristic_2",
+      "agent_b": "random",
+      "a_beats_b": 23,
+      "b_beats_a": 1,
+      "tie": 0,
+      "total": 24
+    }
+  },
+  "pairwise_total_comparisons": 144,
+  "time_sim_efficiency": {
+    "champion": {
+      "moves": 453.0,
+      "total_time_ms": 4635676.983594894,
+      "avg_time_ms_per_move": 10233.28252449204,
+      "move_time_ms_p50": 9905.054569244385,
+      "move_time_ms_p95": 20049.58472251892,
+      "move_time_ms_max": 21436.78855895996,
+      "configured_thinking_time_ms": 500.0,
+      "avg_budget_utilization": 20.46656504898408,
+      "total_simulations": 113250.0,
+      "avg_simulations_per_move": 250.0,
+      "simulations_per_second": 24.430088722915375,
+      "win_rate_per_second": 0.07125442544183652,
+      "score_per_second": 9.46258769867589
+    },
+    "heuristic": {
+      "moves": 414.0,
+      "total_time_ms": 10902.657626994824,
+      "avg_time_ms_per_move": 26.334921804335323,
+      "move_time_ms_p50": 10.787709999931394,
+      "move_time_ms_p95": 80.42322889955351,
+      "move_time_ms_max": 115.8920460002264,
+      "configured_thinking_time_ms": null,
+      "avg_budget_utilization": null,
+      "total_simulations": null,
+      "avg_simulations_per_move": null,
+      "simulations_per_second": null,
+      "win_rate_per_second": 3.9554576026695654,
+      "score_per_second": 3154.872983889245
+    },
+    "heuristic_2": {
+      "moves": 420.0,
+      "total_time_ms": 10799.233995006944,
+      "avg_time_ms_per_move": 25.712461892873677,
+      "move_time_ms_p50": 12.46540550005193,
+      "move_time_ms_p95": 79.60866390033058,
+      "move_time_ms_max": 113.41590600022755,
+      "configured_thinking_time_ms": null,
+      "avg_budget_utilization": null,
+      "total_simulations": null,
+      "avg_simulations_per_move": null,
+      "simulations_per_second": null,
+      "win_rate_per_second": 6.481941222161192,
+      "score_per_second": 3317.13342044099
+    },
+    "random": {
+      "moves": 323.0,
+      "total_time_ms": 10.264325001571706,
+      "avg_time_ms_per_move": 0.03177809598009816,
+      "move_time_ms_p50": 0.03081600061705103,
+      "move_time_ms_p95": 0.04216779993839736,
+      "move_time_ms_max": 0.05383000006986549,
+      "configured_thinking_time_ms": null,
+      "avg_budget_utilization": null,
+      "total_simulations": null,
+      "avg_simulations_per_move": null,
+      "simulations_per_second": null,
+      "win_rate_per_second": 0.0,
+      "score_per_second": 1923494.7253693575
+    }
+  },
+  "game_duration_sec": {
+    "count": 24,
+    "mean": 220.02020009783345,
+    "median": 220.62390570749994,
+    "std": 11.095956642891647,
+    "p25": 208.93400671150016,
+    "p75": 228.79234763650038,
+    "min": 197.00843133800026,
+    "max": 238.973130329
+  },
+  "trueskill_ratings": {
+    "leaderboard": [
+      {
+        "mu": 51.39122518855964,
+        "sigma": 7.845971052653883,
+        "conservative": 27.85331203059799,
+        "games_played": 24,
+        "agent_id": "champion",
+        "rank": 1
+      },
+      {
+        "mu": 29.831899071516062,
+        "sigma": 7.509096466894152,
+        "conservative": 7.304609670833607,
+        "games_played": 24,
+        "agent_id": "heuristic",
+        "rank": 2
+      },
+      {
+        "mu": 26.65295687406767,
+        "sigma": 7.527301951016815,
+        "conservative": 4.071051021017226,
+        "games_played": 24,
+        "agent_id": "heuristic_2",
+        "rank": 3
+      },
+      {
+        "mu": -6.6723623249017505,
+        "sigma": 7.550747689929091,
+        "conservative": -29.324605394689026,
+        "games_played": 24,
+        "agent_id": "random",
+        "rank": 4
+      }
+    ],
+    "converged": false
+  },
+  "score_margins": {
+    "mean_margin": 38.29,
+    "median_margin": 39.5,
+    "std_margin": 12.91,
+    "min_margin": 9.0,
+    "max_margin": 66.0,
+    "n_games": 24
+  },
+  "score_by_seat_position": {
+    "champion": {
+      "P1": {
+        "mean": 97.17,
+        "std": 4.88,
+        "se": 1.99,
+        "n": 6
+      },
+      "P2": {
+        "mean": 98.0,
+        "std": 14.2,
+        "se": 5.37,
+        "n": 7
+      },
+      "P3": {
+        "mean": 95.71,
+        "std": 5.79,
+        "se": 2.19,
+        "n": 7
+      },
+      "P4": {
+        "mean": 96.25,
+        "std": 12.82,
+        "se": 6.41,
+        "n": 4
+      }
+    },
+    "heuristic_2": {
+      "P1": {
+        "mean": 88.5,
+        "std": 16.87,
+        "se": 6.89,
+        "n": 6
+      },
+      "P2": {
+        "mean": 88.0,
+        "std": 8.22,
+        "se": 3.36,
+        "n": 6
+      },
+      "P3": {
+        "mean": 83.67,
+        "std": 5.79,
+        "se": 1.93,
+        "n": 9
+      },
+      "P4": {
+        "mean": 78.33,
+        "std": 6.51,
+        "se": 3.76,
+        "n": 3
+      }
+    },
+    "heuristic": {
+      "P1": {
+        "mean": 83.29,
+        "std": 10.09,
+        "se": 3.82,
+        "n": 7
+      },
+      "P2": {
+        "mean": 85.0,
+        "std": 10.23,
+        "se": 5.12,
+        "n": 4
+      },
+      "P3": {
+        "mean": 88.0,
+        "std": 5.48,
+        "se": 2.45,
+        "n": 5
+      },
+      "P4": {
+        "mean": 78.88,
+        "std": 8.66,
+        "se": 3.06,
+        "n": 8
+      }
+    },
+    "random": {
+      "P1": {
+        "mean": 59.0,
+        "std": 6.04,
+        "se": 2.7,
+        "n": 5
+      },
+      "P2": {
+        "mean": 67.0,
+        "std": 6.22,
+        "se": 2.35,
+        "n": 7
+      },
+      "P3": {
+        "mean": 57.0,
+        "std": 3.61,
+        "se": 2.08,
+        "n": 3
+      },
+      "P4": {
+        "mean": 59.11,
+        "std": 11.93,
+        "se": 3.98,
+        "n": 9
+      }
+    }
+  }
+}

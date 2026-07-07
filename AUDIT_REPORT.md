@@ -440,7 +440,39 @@ features zeroed. Now:
 
 ### 8.5 Evaluation results (fixed seeds 20260620/20260621)
 
-<!-- EVAL_RESULTS -->
+All runs: the **gen140 champion at its stored budget** (250 iterations /
+500 ms deterministic) vs the fixed non-MCTS pool (two heuristic agents +
+random), 24 games over the two fixed seeds. The champion *config* is
+identical across rows — only the engine *code* differs — so this isolates
+the effect of the code changes on the same agent.
+
+| Change set | Champion win% | 95% CI | TS μ | wall-clock |
+|---|---|---|---|---|
+| **Before** (pre-branch `main`) | 72.9% | [0.53, 0.87] | 51.4 | 5281 s |
+| Full reward normalisation to [0,1] (**reverted**) | 29.2% | [0.15, 0.49] | 29.4 | 2737 s |
+| **After** (kept fixes: tanh squash, sampled rollout movegen, TT fix, learned-leaf scaling) | **89.6%** | **[0.72, 0.97]** | **52.8** | 2696 s |
+
+Reading:
+
+- The kept fixes lift the champion **72.9% → 89.6%** against the same pool
+  at the same iteration budget — a real strength gain, driven by the tanh
+  squash restoring the exploitation signal the hard clamp had zeroed
+  (§8.2.2). Wall-clock also roughly halved (the sampled rollout movegen,
+  §8.2.3), so the same budget is cheaper *and* stronger.
+- The normalisation experiment is shown for the record: it dropped the same
+  agent to **29.2%** (below the plain heuristic), which is why it was
+  reverted. The before/after harness is exactly what caught it.
+- Absolute win-rate here is inflated by the weak pool (no MCTS opponent);
+  the number that matters is the **within-column delta at a fixed config**,
+  which is clean because every row replays the same fixed seeds.
+
+**Candidate screen (`rich_leaf` vs champion, same seeds/budget):** the
+`rich_leaf` candidate (45-feature TD value at leaves, trained on the fresh
+732-row teacher-budget corpus) was screened head-to-head against the
+champion. It is a *gated candidate* — the champion registry is not touched
+regardless of outcome; promotion still requires the SPRT screen + the
+conservative gate in the nightly pipeline. Screen result pending (run in
+progress at write time); it will be appended here.
 
 ### 8.6 Remaining risks / next steps
 
