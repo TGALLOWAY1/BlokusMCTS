@@ -50,9 +50,12 @@ class RichLeafEvaluator:
 
     Args:
         weights_path: Path to the TD artifact with ``rich_phase_weights``.
-        feature_subset: Cost tier — ``"score"`` (default, cheapest),
+        feature_subset: Cost tier — ``"score"`` (cheapest),
             ``"no_opp_mobility"``, or ``"full"`` (see
-            :data:`training.rich_features.LEAF_FEATURE_SUBSETS`).
+            :data:`training.rich_features.LEAF_FEATURE_SUBSETS`). ``None``
+            (default) uses the subset the artifact was *trained* with
+            (``leaf_feature_subset``), falling back to ``"score"`` — a
+            train/serve subset mismatch mis-calibrates the value model.
         fallback_evaluator: 8-feature evaluator used when rich weights are
             unavailable (defaults to a fresh :class:`BlokusStateEvaluator`).
     """
@@ -61,7 +64,7 @@ class RichLeafEvaluator:
         self,
         weights_path: Optional[str] = DEFAULT_RICH_LEAF_WEIGHTS_PATH,
         *,
-        feature_subset: str = "score",
+        feature_subset: Optional[str] = None,
         fallback_evaluator: Optional[BlokusStateEvaluator] = None,
     ) -> None:
         # Imported lazily so the agent module does not hard-depend on the
@@ -73,14 +76,15 @@ class RichLeafEvaluator:
             extract_leaf_features,
         )
 
-        if feature_subset not in LEAF_FEATURE_SUBSETS:
+        if feature_subset is not None and feature_subset not in LEAF_FEATURE_SUBSETS:
             raise ValueError(
                 f"feature_subset must be one of {sorted(LEAF_FEATURE_SUBSETS)}, "
                 f"got '{feature_subset}'"
             )
 
         self.weights_path = weights_path
-        self.feature_subset = feature_subset
+        self._requested_subset = feature_subset
+        self.feature_subset = feature_subset or "score"
         self._rich_feature_names = RICH_FEATURE_NAMES
         self._feature_cache_cls = FeatureCache
         self._extract_leaf_features = extract_leaf_features
@@ -122,6 +126,14 @@ class RichLeafEvaluator:
         if not isinstance(rich, dict):
             self.load_error = "artifact has no 'rich_phase_weights'"
             return
+
+        # Default the serving subset to the subset the model was trained with.
+        trained_subset = artifact.get("leaf_feature_subset")
+        if self._requested_subset is None and isinstance(trained_subset, str):
+            from training.rich_features import LEAF_FEATURE_SUBSETS
+
+            if trained_subset in LEAF_FEATURE_SUBSETS:
+                self.feature_subset = trained_subset
 
         index = {name: i for i, name in enumerate(self._rich_feature_names)}
         n = len(self._rich_feature_names)

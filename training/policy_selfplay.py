@@ -256,34 +256,11 @@ def collect_policy_targets(
 # ---------------------------------------------------------------------------
 
 
-def _default_agents() -> List[Dict[str, Any]]:
-    """Champion (MCTS) vs a mix of opponents — the champion seat drives collection."""
-    try:
-        import copy as _copy
-
-        from scripts.champion_loop import BASE_CHAMPION_PARAMS
-
-        champ = _copy.deepcopy(BASE_CHAMPION_PARAMS)
-        champ["name"] = "champion"
-        champ2 = _copy.deepcopy(BASE_CHAMPION_PARAMS)
-        champ2["name"] = "champion2"
-        return [
-            champ,
-            {"name": "heuristic", "type": "heuristic"},
-            champ2,
-            {"name": "random", "type": "random"},
-        ]
-    except Exception:
-        return [
-            {"name": "heuristic", "type": "heuristic"},
-            {"name": "random", "type": "random"},
-            {"name": "heuristic2", "type": "heuristic"},
-            {"name": "random2", "type": "random"},
-        ]
-
-
 def main(argv: Optional[List[str]] = None) -> int:
     import argparse
+
+    from mcts.search_profiles import SEARCH_PROFILES
+    from training.teacher_roster import teacher_roster
 
     p = argparse.ArgumentParser(
         description="Collect MCTS visit-count policy targets into data/policy_targets.csv."
@@ -294,15 +271,21 @@ def main(argv: Optional[List[str]] = None) -> int:
                    help="Collection run id (default: a unique timestamped id so "
                         "separate runs never collide in data/policy_targets.csv).")
     p.add_argument("--output", default=str(DEFAULT_POLICY_CSV))
+    p.add_argument("--profile", default="teacher", choices=sorted(SEARCH_PROFILES) + ["none"],
+                   help="Search profile for the champion seats (default: teacher). "
+                        "Visit targets from a stronger search than the student's own "
+                        "budget are the whole point of expert iteration. "
+                        "'none' keeps the stored budget.")
     p.add_argument("--thinking-time-ms", type=int, default=None,
-                   help="Override every MCTS agent's thinking budget (small ⇒ fast collection).")
+                   help="Override every MCTS agent's thinking budget (small ⇒ fast collection; "
+                        "overrides --profile's budget).")
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args(argv)
 
     run_id = args.run_id or (
         "policycollect_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     )
-    agents = _default_agents()
+    agents = teacher_roster(None if args.profile == "none" else args.profile)
     if args.thinking_time_ms is not None:
         for a in agents:
             if a.get("type", "mcts") == "mcts":
