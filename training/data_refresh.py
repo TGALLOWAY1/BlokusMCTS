@@ -60,11 +60,20 @@ def refresh_training_data(
     runs only — the nightly job must NOT pass its low evaluation override here,
     that would recreate the weak-teacher data this step exists to replace).
     Returns a summary dict recorded in the run's approach-comparison record.
+
+    Both corpora are resolved under ``paths.root`` (``<root>/data/…``) so an
+    isolated ``TrainingPaths`` (tests, tmp roots) never reads or contaminates
+    the real repo corpora; under the default paths these are exactly
+    ``data/td_trajectories.csv`` / ``data/champion_snapshots.csv``.
     """
     from scripts.champion_loop import accumulate_snapshots
     from training import selfplay_core as sc
     from training.td_selfplay import collect_trajectories
     from training.teacher_roster import champion_version, teacher_roster
+
+    if td_output_path is None:
+        td_output_path = paths.root / "data" / "td_trajectories.csv"
+    snapshot_csv = paths.root / "data" / "champion_snapshots.csv"
 
     t0 = time.monotonic()
     deadline = t0 + budget_s
@@ -115,7 +124,7 @@ def refresh_training_data(
             verbose=verbose,
             deadline=deadline,
         )
-        corpus_rows = accumulate_snapshots(result["run_dir"])
+        corpus_rows = accumulate_snapshots(result["run_dir"], snapshot_csv=snapshot_csv)
         state["total_snapshot_rows"] = corpus_rows
         summary["snapshot_new_rows"] = int(result.get("snapshot_rows", 0) or 0)
         summary["snapshot_corpus_rows"] = int(corpus_rows)

@@ -370,14 +370,21 @@ def update_trueskill_from_run(tracker: TrueSkillTracker, run_dir: str) -> None:
 # Snapshot accumulation
 # ---------------------------------------------------------------------------
 
-def accumulate_snapshots(run_dir: str) -> int:
-    """Append snapshot rows from this run to the master CSV. Returns total rows."""
+def accumulate_snapshots(run_dir: str, snapshot_csv: Optional[Path] = None) -> int:
+    """Append snapshot rows from this run to the master CSV. Returns total rows.
+
+    ``snapshot_csv`` overrides the module-level :data:`SNAPSHOT_CSV` target so
+    callers that resolve paths from an explicit root (e.g.
+    ``training.data_refresh`` under a test/tmp ``TrainingPaths``) stay isolated
+    from the repo-global corpus.
+    """
     try:
         import pandas as pd
     except ImportError:
         print("[champion_loop] WARNING: pandas not available; skipping snapshot accumulation")
         return 0
 
+    target = Path(snapshot_csv) if snapshot_csv is not None else SNAPSHOT_CSV
     src = Path(run_dir) / "snapshots.csv"
     if not src.exists():
         return 0
@@ -385,8 +392,8 @@ def accumulate_snapshots(run_dir: str) -> int:
     new_df = pd.read_csv(src)
     new_df = new_df.dropna(subset=["final_score"])
 
-    if SNAPSHOT_CSV.exists():
-        existing = pd.read_csv(SNAPSHOT_CSV)
+    if target.exists():
+        existing = pd.read_csv(target)
         combined = pd.concat([existing, new_df], ignore_index=True)
     else:
         combined = new_df
@@ -396,8 +403,8 @@ def accumulate_snapshots(run_dir: str) -> int:
     if len(combined) > SNAPSHOT_MAX_ROWS:
         combined = combined.iloc[-SNAPSHOT_MAX_ROWS:].reset_index(drop=True)
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    combined.to_csv(SNAPSHOT_CSV, index=False)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    combined.to_csv(target, index=False)
     return int(len(combined))
 
 

@@ -83,8 +83,6 @@ def test_collect_trajectories_strict_deadline_plays_nothing(tmp_path):
 def test_refresh_training_data_writes_fresh_provenance(tmp_path, monkeypatch):
     monkeypatch.setattr(tr, "teacher_roster", _fast_roster)
     monkeypatch.setattr(tr, "champion_version", lambda: "genTEST")
-    monkeypatch.setattr(champion_loop, "DATA_DIR", tmp_path / "data")
-    monkeypatch.setattr(champion_loop, "SNAPSHOT_CSV", tmp_path / "data" / "snap.csv")
     # Keep the test fast: one TD game (rich-feature capture makes even random-
     # agent games cost tens of seconds) and a tiny snapshot arena. The budget is
     # generous so game caps, not the deadline, bound the work here.
@@ -93,7 +91,6 @@ def test_refresh_training_data_writes_fresh_provenance(tmp_path, monkeypatch):
 
     paths = TrainingPaths.under(tmp_path)
     paths.ensure_dirs()
-    td_out = tmp_path / "td.csv"
     state = {}
 
     summary = dr.refresh_training_data(
@@ -102,28 +99,28 @@ def test_refresh_training_data_writes_fresh_provenance(tmp_path, monkeypatch):
         budget_s=600.0,
         seed=7,
         teacher_profile="teacher",
-        td_output_path=td_out,
         verbose=False,
     )
 
     # Acceptance (plan P1): rows stamped with the current champion + profile +
-    # budget, and both corpora actually grew.
+    # budget, and both corpora actually grew — under the SUPPLIED root, not the
+    # repo-global corpora (td_output_path/snapshot target default to
+    # <paths.root>/data/…, so an isolated TrainingPaths stays isolated).
     assert summary["agent_version"] == "genTEST@teacher:5"
     assert summary["td_rows"] > 0
-    df = pd.read_csv(td_out)
+    df = pd.read_csv(tmp_path / "data" / "td_trajectories.csv")
     assert set(df["agent_version"].unique()) == {"genTEST@teacher:5"}
     # Champion seats only: no rows labelled with the weak seats' outcomes.
     assert set(df["agent_name"].unique()) <= {"champion", "champion2"}
 
     assert summary["snapshot_new_rows"] > 0
-    assert champion_loop.SNAPSHOT_CSV.exists()
+    assert (tmp_path / "data" / "champion_snapshots.csv").exists()
     assert summary["snapshot_corpus_rows"] == state["total_snapshot_rows"]
 
 
 def test_refresh_training_data_td_only(tmp_path, monkeypatch):
     monkeypatch.setattr(tr, "teacher_roster", _fast_roster)
     monkeypatch.setattr(tr, "champion_version", lambda: "genTEST")
-    monkeypatch.setattr(champion_loop, "SNAPSHOT_CSV", tmp_path / "data" / "snap.csv")
     monkeypatch.setattr(dr, "_MAX_TD_GAMES", 1)
 
     paths = TrainingPaths.under(tmp_path)
@@ -133,12 +130,13 @@ def test_refresh_training_data_td_only(tmp_path, monkeypatch):
         run_id="RTD",
         budget_s=600.0,
         seed=7,
-        td_output_path=tmp_path / "td.csv",
+        td_output_path=tmp_path / "td.csv",  # explicit override still honoured
         collect_snapshots=False,
     )
     assert summary["td_rows"] > 0
+    assert (tmp_path / "td.csv").exists()
     assert summary["snapshot_new_rows"] == 0
-    assert not champion_loop.SNAPSHOT_CSV.exists()
+    assert not (tmp_path / "data" / "champion_snapshots.csv").exists()
 
 
 # ---------------------------------------------------------------------------
