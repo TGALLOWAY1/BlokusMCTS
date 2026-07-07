@@ -1,48 +1,48 @@
 # Nightly Training — Approach Comparison
 
-_Run `20260706T151300Z` · generated 2026-07-06T15:13:00.131540+00:00_
+_Run `20260706T195706Z` · generated 2026-07-06T19:57:06.670613+00:00_
 
 **Promoted this run:** none
 **Benchmark pool:** benchmark_v2 — opponents heuristic, random, baseline_mcts_fast, baseline_mcts_strong, best_historical; seeds [20260620, 20260621]
 
 ## Champion Elo trajectory
 
-- Current: **1388.6** · Best: 1398.4 · Gap to best: -9.8
-- Rolling avg: 1393.4 · Trend/step: 0.8352
-- Elo noise floor (σ over fixed-config tail): ±56.0 (spread 197.8, n=20)
-- Move beyond noise floor? **no (within noise)**
+- Current: **1307.3** · Best: 1398.4 · Gap to best: -91.1
+- Rolling avg: 1375.1 · Trend/step: 0.8463
+- Elo noise floor (σ over fixed-config tail): ±46.6 (spread 197.8, n=20)
+- Move beyond noise floor? **yes**
 
 ## Approaches
 
 | Approach | Created | Games | Win% vs Champ | Elo Δ | TrueSkill Δ | Promoted | Reason |
 |---|---|---|---|---|---|---|---|
-| policy_prior | Yes | 20 | 53% | -31.5 | -4.71 | No | HOLD policy: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'elo_improvement', 'trueskill_improvement']. |
-| baseline_mcts | Yes | 20 | 47% | -81.9 | -6.22 | No | HOLD baseline: failed ['conservative_promotes_candidate', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement']. |
-| heuristic_tuning | Yes | 20 | 45% | -61.7 | -3.93 | No | HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement']. |
+| mcts_param_sweep | Yes | 30 | 50% | +12.7 | -1.58 | No | HOLD mcts_sweep: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'trueskill_improvement']. |
+| progressive_widening | Yes | 29 | 54% | +13.4 | -3.13 | No | HOLD progressive_widening: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'trueskill_improvement']. |
+| heuristic_tuning | Yes | 29 | 55% | +12.4 | -1.60 | No | HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'trueskill_improvement']. |
 
 ## Detail
 
-### policy_prior (`policy`)
+### mcts_param_sweep (`mcts_sweep`)
 
-- Created: yes — policy: distilled 678 decisions (loss=3.418671, top1=0.5324)
-- Games: 20 · Win rate (battery): 0.35 · Runtime: 4509.7s
-- Elo Δ vs champion: -31.5 · TrueSkill μ Δ: -4.71
-- Gate: HOLD policy: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'elo_improvement', 'trueskill_improvement'].
-- Metrics: `{'n_samples': 678, 'loss': 3.418671, 'top1_agreement': 0.5324, 'learning_method': 'visit_count_distillation'}`
+- Created: yes — mcts_sweep: exploration_constant 1.414 -> 1.0 over grid [0.7, 1.0, 1.414, 2.0] (on corrected strong search) — [sprt] mcts_sweep: inconclusive after 30 paired games (15W-0D-15L, pairwise 50%, Δelo≈-0, LLR=-0.60 in [-2.94,2.94])
+- Games: 30 · Win rate (battery): 0.33 · Runtime: 6594.2s
+- Elo Δ vs champion: +12.7 · TrueSkill μ Δ: -1.58
+- Gate: HOLD mcts_sweep: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'trueskill_improvement'].
+- Metrics: `{'swept_param': 'exploration_constant', 'grid': [0.7, 1.0, 1.414, 2.0], 'chosen': 1.0, 'previous': 1.414}`
 
-### baseline_mcts (`baseline`)
+### progressive_widening (`progressive_widening`)
 
-- Created: yes — baseline: corrected weak-champion search settings (greedy-sample rollouts, cutoff 12, RAVE/minimax off, move ordering on)
-- Games: 20 · Win rate (battery): 0.38 · Runtime: 4436.6s
-- Elo Δ vs champion: -81.9 · TrueSkill μ Δ: -6.22
-- Gate: HOLD baseline: failed ['conservative_promotes_candidate', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
-- Metrics: `{'overrides': {'rollout_policy': 'greedy_sample', 'rollout_cutoff_depth': 12, 'adaptive_rollout_depth_enabled': False, 'iterations_per_ms': 0.5, 'rave_enabled': False, 'minimax_backup_alpha': 0.0, 'heuristic_move_ordering': True, 'num_workers': 1}}`
+- Created: yes — progressive_widening: focus search on top moves via PW (pw_c=2.0, pw_alpha=0.5) on the corrected strong maxⁿ search — re-measuring the layer post-maxⁿ-fix — [sprt] progressive_widening: inconclusive after 29 paired games (15W-1D-13L, pairwise 53%, Δelo≈+24, LLR=-0.19 in [-2.94,2.94])
+- Games: 29 · Win rate (battery): 0.40 · Runtime: 6271.3s
+- Elo Δ vs champion: +13.4 · TrueSkill μ Δ: -3.13
+- Gate: HOLD progressive_widening: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'trueskill_improvement'].
+- Metrics: `{'progressive_widening_enabled': True, 'pw_c': 2.0, 'pw_alpha': 0.5, 'learning_method': None}`
 
 ### heuristic_tuning (`heuristic_tune`)
 
-- Created: yes — heuristic: re-fit Layer-6 weights from 44832 snapshot rows
-- Games: 20 · Win rate (battery): 0.35 · Runtime: 4452.3s
-- Elo Δ vs champion: -61.7 · TrueSkill μ Δ: -3.93
-- Gate: HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
+- Created: yes — heuristic: re-fit Layer-6 weights from 44832 snapshot rows — [sprt] heuristic_tune: inconclusive after 29 paired games (16W-0D-13L, pairwise 55%, Δelo≈+36, LLR=+0.02 in [-2.94,2.94])
+- Games: 29 · Win rate (battery): 0.45 · Runtime: 6250.5s
+- Elo Δ vs champion: +12.4 · TrueSkill μ Δ: -1.60
+- Gate: HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'trueskill_improvement'].
 - Metrics: `{'training_rows': 44832, 'r2_global': 0.3365017454081656, 'r2_by_phase': {'early': 0.25201791865280476, 'mid': 0.3853658236844436, 'late': 0.7502781453404764}, 'learning_method': 'regression'}`
 
