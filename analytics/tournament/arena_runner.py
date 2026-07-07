@@ -508,11 +508,12 @@ def build_agent(config: AgentConfig, seed: int) -> _ArenaAgentAdapter:
             adaptive_rollout_depth_avg_bf=float(params.get("adaptive_rollout_depth_avg_bf", 80.0)),
             sufficiency_threshold_enabled=bool(params.get("sufficiency_threshold_enabled", False)),
             loss_avoidance_enabled=bool(params.get("loss_avoidance_enabled", False)),
-            loss_avoidance_threshold=float(params.get("loss_avoidance_threshold", -50.0)),
+            loss_avoidance_threshold=float(params.get("loss_avoidance_threshold", -0.5)),
             # Rich leaf evaluator (45-feature TD value at MCTS leaves)
             rich_leaf_eval_enabled=bool(params.get("rich_leaf_eval_enabled", False)),
             rich_leaf_weights_path=params.get("rich_leaf_weights_path"),
-            rich_leaf_feature_subset=str(params.get("rich_leaf_feature_subset", "score")),
+            # None -> serve the subset the artifact was trained with
+            rich_leaf_feature_subset=params.get("rich_leaf_feature_subset"),
         )
         return _SelectActionAdapter(agent)
 
