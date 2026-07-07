@@ -32,6 +32,7 @@ def _register() -> None:
         mcts_param_sweep,
         policy_prior,
         progressive_widening,
+        rich_leaf,
         td_learning,
     )
 
@@ -43,6 +44,7 @@ def _register() -> None:
         hybrid_td_mcts.NAME: hybrid_td_mcts.make,
         policy_prior.NAME: policy_prior.make,
         progressive_widening.NAME: progressive_widening.make,
+        rich_leaf.NAME: rich_leaf.make,
     })
 
 
@@ -56,7 +58,7 @@ _register()
 # `heuristic_tune` re-fits the evaluator. `baseline` self-retires when identical to the
 # champion, so it only competes if a future champion drifts from the strong-search seed.
 DEFAULT_APPROACHES: List[str] = [
-    "mcts_sweep", "progressive_widening", "heuristic_tune", "policy", "baseline",
+    "rich_leaf", "mcts_sweep", "progressive_widening", "heuristic_tune", "policy", "baseline",
 ]
 
 ALL_APPROACHES: List[str] = list(_FACTORIES.keys())

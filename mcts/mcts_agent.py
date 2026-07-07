@@ -426,7 +426,13 @@ class MCTSNode:
     def get_best_move(self) -> Optional[Move]:
         """
         Get the best move based on visit counts.
-        
+
+        Ties (common early game, when branching factor exceeds the iteration
+        budget and every root child gets one visit) resolve to the FIRST
+        child in expansion order — the move-ordering heuristic's top choice.
+        Tie-breaking by single-rollout Q was tried (2026-07-07) and measured
+        strictly noisier than the heuristic fallback.
+
         Returns:
             Best move or None if no children
         """
@@ -512,7 +518,7 @@ class MCTSAgent:
         # --- Rich leaf evaluator (45-feature TD value at MCTS leaves) ---
         rich_leaf_eval_enabled: bool = False,
         rich_leaf_weights_path: Optional[str] = None,
-        rich_leaf_feature_subset: str = "score",
+        rich_leaf_feature_subset: Optional[str] = None,
         # --- Search Trace (Visualization) ---
         enable_search_trace: bool = False,
         search_trace_sample_rate: int = 10,
@@ -642,7 +648,16 @@ class MCTSAgent:
             int(rollout_cutoff_depth) if rollout_cutoff_depth is not None else None
         )
         self.minimax_backup_alpha = float(minimax_backup_alpha)
-        self._eval_reward_scale = 100.0  # match win-bonus magnitude
+        # Reward magnitude shared by every simulation path (rollout score
+        # deltas + 100/10 win bonus, cutoff static eval x100, rich-leaf x100,
+        # learned-leaf win probability x100). NOTE: exploration_constant=1.414
+        # is tiny against this O(100) Q scale, so UCB selection is near-greedy
+        # after the mandatory first-visit sweep. Normalising all rewards onto
+        # [0,1] was tried (2026-07-07) and REGRESSED the champion 72.9%->29.2%
+        # win rate at its pinned exploration constant — stored configs are
+        # implicitly calibrated to this scale. Re-tune exploration on a clean
+        # scale only through the gated mcts_sweep approach, not here.
+        self._eval_reward_scale = 100.0
 
         # Layer 5 params
         self.rave_enabled = bool(rave_enabled)
@@ -689,7 +704,10 @@ class MCTSAgent:
         # Rich leaf evaluator params (45-feature TD value at MCTS leaves)
         self.rich_leaf_eval_enabled = bool(rich_leaf_eval_enabled)
         self.rich_leaf_weights_path = rich_leaf_weights_path
-        self.rich_leaf_feature_subset = str(rich_leaf_feature_subset)
+        # None -> the evaluator serves the subset the artifact was trained with.
+        self.rich_leaf_feature_subset = (
+            str(rich_leaf_feature_subset) if rich_leaf_feature_subset is not None else None
+        )
         # Effective per-move values (set in select_action)
         self._effective_exploration_constant = float(
             adaptive_exploration_base if adaptive_exploration_enabled else exploration_constant
@@ -1669,8 +1687,20 @@ class MCTSAgent:
             rollout, used for RAVE updates. Empty when RAVE is disabled or on
             cache hit.
         """
-        # Check transposition table
-        if self.transposition_table:
+        # The transposition table may only memoise *deterministic* simulation
+        # results (leaf evaluations and depth-0 static eval). Caching a
+        # stochastic rollout would freeze one random sample per board and
+        # replay it on every revisit, silently defeating Monte-Carlo averaging.
+        deterministic = (
+            (self.rich_leaf_eval_enabled and self.rich_leaf_evaluator is not None)
+            or (self.leaf_evaluation_enabled and self.learned_evaluator is not None)
+            or (
+                self._effective_rollout_cutoff_depth is not None
+                and self._effective_rollout_cutoff_depth <= 0
+            )
+        )
+        board_hash = None
+        if self.transposition_table and deterministic:
             board_hash = self.zobrist_hash.hash_board(node.board)
             cached_result = self.transposition_table.get(board_hash)
             if cached_result and "rewards" in cached_result:
@@ -1688,8 +1718,8 @@ class MCTSAgent:
         else:
             rewards, rollout_actions = self._rollout(node.board, node.player)
 
-        # Cache result
-        if self.transposition_table:
+        # Cache result (deterministic paths only)
+        if board_hash is not None:
             self.transposition_table.put(board_hash, {"rewards": rewards})
 
         root = self._root_player
@@ -1723,8 +1753,12 @@ class MCTSAgent:
             rewards, _ = self._rollout(board, player)
             return rewards
         try:
+            # Scaled like every other simulation path — an unscaled [0,1] win
+            # probability would be ~100x smaller than sibling rollout/cutoff
+            # rewards in the same tree.
             rewards = {
                 p: float(self.learned_evaluator.predict_player_win_probability(board, p))
+                * self._eval_reward_scale
                 for p in _PLAYERS
             }
             self.stats["leaf_eval_calls"] += 1
@@ -1827,6 +1861,22 @@ class MCTSAgent:
         consecutive_passes = 0
         num_players = len(_PLAYERS)
 
+        # greedy_sample only scores greedy_sample_size candidates per step, so a
+        # sampled move generator (stops after K legal moves instead of
+        # enumerating hundreds) is behaviour-compatible and ~an order of
+        # magnitude cheaper — full enumeration inside rollouts was ~90% of all
+        # search wall-clock. Sampling is skipped when NST biasing or the
+        # opponent model needs the full move list.
+        can_sample_self = (
+            self.rollout_policy == "greedy_sample" and not track_nst
+        )
+        can_sample_opp = (
+            self._opponent_model is None
+            and (self.opponent_rollout_policy == "greedy_sample"
+                 or (self.opponent_rollout_policy == "same"
+                     and self.rollout_policy == "greedy_sample"))
+        )
+
         while moves_made < self.max_rollout_moves:
             # Layer 4: Early termination at cutoff depth
             if (
@@ -1836,8 +1886,18 @@ class MCTSAgent:
                 self.stats["cutoff_evals"] += 1
                 return self._evaluate_all_players(sim_board, defensive_adj), rollout_actions
 
-            # Get legal moves
-            legal_moves = self.move_generator.get_legal_moves(sim_board, current_player)
+            # Get legal moves (sampled when the step's policy is greedy_sample:
+            # an empty sample is authoritative — the sampler exhausts the move
+            # space before returning fewer than K moves)
+            sample_this_step = (
+                can_sample_self if current_player == root_player else can_sample_opp
+            )
+            if sample_this_step:
+                legal_moves = self.move_generator.sample_legal_moves(
+                    sim_board, current_player, self.greedy_sample_size, self._rng
+                )
+            else:
+                legal_moves = self.move_generator.get_legal_moves(sim_board, current_player)
 
             if not legal_moves:
                 # Player passes — advance to next player

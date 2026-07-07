@@ -151,6 +151,81 @@ class LegalMoveGenerator:
         else:
             return self._get_legal_moves_naive(board, player)
 
+    def sample_legal_moves(self, board: Board, player: Player, k: int, rng) -> List[Move]:
+        """Sample up to ``k`` distinct legal moves without full enumeration.
+
+        Iterates (piece, orientation) combinations and frontier cells in
+        ``rng``-shuffled order, taking at most one legal move per combination
+        (for piece diversity), and stops as soon as ``k`` moves are found. If a
+        full pass yields fewer than ``k``, a second uncapped pass collects the
+        remaining legal moves, so an **empty result is an authoritative "no
+        legal moves"** — the entire move space has been examined.
+
+        This exists for rollout policies (``greedy_sample``) that only need a
+        small diverse candidate set: enumerating hundreds of legal moves per
+        rollout step to then sample 12 dominates MCTS wall-clock. ``rng`` is a
+        ``numpy.random.RandomState``-like object (``shuffle``/``choice``).
+        Falls back to full enumeration + uniform subsampling when the bitboard
+        fast path is disabled.
+        """
+        if not (USE_FRONTIER_MOVEGEN and USE_BITBOARD_LEGALITY):
+            moves = self.get_legal_moves(board, player)
+            if len(moves) <= k:
+                return moves
+            idx = rng.choice(len(moves), size=k, replace=False)
+            return [moves[i] for i in idx]
+
+        available = [p for p in self.all_pieces
+                     if p.id not in board.player_pieces_used[player]]
+        frontier = list(board.get_frontier(player))
+        if not available or not frontier:
+            return []
+        is_first_move = board.player_first_move[player]
+
+        combos = []
+        for piece in available:
+            orientations = ALL_PIECE_ORIENTATIONS.get(piece.id, [])
+            for oi, orientation in enumerate(orientations):
+                combos.append((piece.id, oi, orientation))
+        rng.shuffle(combos)
+        rng.shuffle(frontier)
+
+        found: List[Move] = []
+        seen: Set[Tuple[int, int, int, int]] = set()
+        size = board.SIZE
+
+        def _collect(per_combo_cap: Optional[int]) -> bool:
+            """Scan combos×frontier×anchors; returns True once k moves found."""
+            for piece_id, oi, orientation in combos:
+                taken = 0
+                for fr, fc in frontier:
+                    for rel_r, rel_c in orientation.offsets:
+                        ar, ac = fr - rel_r, fc - rel_c
+                        if ar < 0 or ac < 0 or ar >= size or ac >= size:
+                            continue
+                        key = (piece_id, oi, ar, ac)
+                        if key in seen:
+                            continue
+                        if self.is_placement_legal_bitboard_fast(
+                            board, player, orientation, ar, ac,
+                            is_first_move=is_first_move,
+                        ):
+                            seen.add(key)
+                            found.append(Move(piece_id, oi, ar, ac))
+                            if len(found) >= k:
+                                return True
+                            taken += 1
+                            if per_combo_cap is not None and taken >= per_combo_cap:
+                                break
+                    else:
+                        continue
+                    break
+            return len(found) >= k
+
+        if not _collect(per_combo_cap=1):
+            _collect(per_combo_cap=None)
+        return found
+
     def _get_legal_moves_naive(self, board: Board, player: Player) -> List[Move]:
         """
         Get all legal moves using the original full-board scan implementation.

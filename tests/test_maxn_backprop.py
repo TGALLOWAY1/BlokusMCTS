@@ -35,9 +35,10 @@ class TestRolloutRewardVector(unittest.TestCase):
                           use_transposition_table=False, max_rollout_moves=500)
         agent._root_player = Player.RED
         rewards, _ = agent._rollout(Board(), Player.RED)
-        # With max_rollout_moves=500 the game always reaches all-pass, so at
-        # least one player carries the +100 outright / +10 tie bonus.
-        self.assertTrue(any(v >= 10.0 for v in rewards.values()),
+        # With max_rollout_moves=500 the game always reaches all-pass, so the
+        # winner carries the +100 outright / +10 tie bonus, lifting them
+        # clearly above pure score deltas.
+        self.assertTrue(any(v >= 100.0 for v in rewards.values()),
                         f"no winner bonus found in {rewards}")
 
 

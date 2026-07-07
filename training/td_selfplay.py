@@ -112,6 +112,7 @@ def play_game(
     seed: int,
     max_turns: int = 2500,
     capture_every_ply: bool = False,
+    capture_agents: Optional[Sequence[str]] = None,
 ) -> GameTrajectory:
     """Play one game; record per-player decision-point features and outcomes.
 
@@ -119,7 +120,10 @@ def play_game(
     ``name``). Seats are assigned in order (player 1..4). When
     ``capture_every_ply`` is True, every player's features are captured at every
     ply (denser but slower); by default only the moving player's features are
-    captured at each of its turns.
+    captured at each of its turns. ``capture_agents`` (agent names) restricts
+    which seats' trajectories are recorded — labelling states with a *random*
+    seat's final outcome teaches V(s) the value of random play, so training
+    collection captures only the strong seats by default.
     """
     if len(agents) != 4:
         raise ValueError("play_game requires exactly 4 agent configs")
@@ -132,6 +136,10 @@ def play_game(
     for i, cfg in enumerate(agents):
         ac = AgentConfig.from_dict(cfg)
         agent_instances[i + 1] = build_agent(ac, seed=seed * 31 + i + 1)
+    captured_seats = {
+        pid for pid, name in seat_agent.items()
+        if capture_agents is None or name in set(capture_agents)
+    }
 
     game = BlokusGame()
     traj = GameTrajectory(game_id=game_id, seed=seed, seat_agent=seat_agent)
@@ -156,11 +164,13 @@ def play_game(
         cur_id = int(current.value)
         if capture_every_ply:
             for p in _PLAYERS:
+                if p.value not in captured_seats:
+                    continue
                 feats = extract_rich_features(game.board, p, cache=cache)
                 traj.decisions[p.value].append(
                     _DecisionPoint(ply, get_phase(game.board), occ, cur_id, feats)
                 )
-        else:
+        elif cur_id in captured_seats:
             feats = extract_rich_features(game.board, current, cache=cache)
             traj.decisions[cur_id].append(_DecisionPoint(ply, phase, occ, cur_id, feats))
 
@@ -179,10 +189,11 @@ def play_game(
     traj.final_ranks = compute_ranks(scores)
     traj.winner_id = int(result.winner_ids[0]) if len(result.winner_ids) == 1 else None
 
-    # Terminal-state features for each player (game over board).
+    # Terminal-state features for each captured player (game over board).
     term_cache = FeatureCache()
     for p in _PLAYERS:
-        traj.terminal_features[p.value] = extract_rich_features(game.board, p, cache=term_cache)
+        if p.value in captured_seats:
+            traj.terminal_features[p.value] = extract_rich_features(game.board, p, cache=term_cache)
 
     return traj
 
@@ -275,6 +286,7 @@ def collect_trajectories(
     output_path: Optional[Any] = None,
     max_turns: int = 2500,
     capture_every_ply: bool = False,
+    capture_agents: Optional[Sequence[str]] = None,
     verbose: bool = False,
 ) -> int:
     """Play ``num_games`` games and append TD trajectory rows to ``output_path``.
@@ -297,6 +309,7 @@ def collect_trajectories(
             seed=game_seed,
             max_turns=max_turns,
             capture_every_ply=capture_every_ply,
+            capture_agents=capture_agents,
         )
         rows = trajectory_to_rows(
             traj, run_id=run_id, agent_version=agent_version, created_at=created_at
@@ -314,37 +327,11 @@ def collect_trajectories(
 # ---------------------------------------------------------------------------
 
 
-def _default_agents() -> List[Dict[str, Any]]:
-    """A self-play roster of MCTS champion vs varied opponents.
-
-    Uses the champion_loop base champion for the focal seat and a mix of
-    heuristic / variant opponents so trajectories cover diverse states. Falls
-    back gracefully if the champion config import is unavailable.
-    """
-    try:
-        from scripts.champion_loop import BASE_CHAMPION_PARAMS
-        import copy as _copy
-
-        champ = _copy.deepcopy(BASE_CHAMPION_PARAMS)
-        champ["name"] = "champion"
-        return [
-            champ,
-            {"name": "heuristic", "type": "heuristic"},
-            {"name": "random", "type": "random"},
-            {"name": "heuristic2", "type": "heuristic"},
-        ]
-    except Exception:
-        return [
-            {"name": "heuristic", "type": "heuristic"},
-            {"name": "random", "type": "random"},
-            {"name": "heuristic2", "type": "heuristic"},
-            {"name": "random2", "type": "random"},
-        ]
-
-
 def main(argv: Optional[List[str]] = None) -> int:
     import argparse
 
+    from mcts.search_profiles import SEARCH_PROFILES
+    from training.teacher_roster import champion_version, teacher_roster
     from training.trajectory_store import DEFAULT_TRAJECTORY_CSV
 
     p = argparse.ArgumentParser(
@@ -353,32 +340,49 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--num-games", type=int, default=20)
     p.add_argument("--seed", type=int, default=2026)
     p.add_argument("--run-id", default="tdcollect")
-    p.add_argument("--agent-version", default="champion")
     p.add_argument("--output", default=str(DEFAULT_TRAJECTORY_CSV))
+    p.add_argument("--profile", default="teacher", choices=sorted(SEARCH_PROFILES) + ["none"],
+                   help="Search profile for the champion seats (default: teacher — "
+                        "stronger search than the champion's own budget, so labels "
+                        "come from a stronger teacher). 'none' keeps the stored budget.")
     p.add_argument("--thinking-time-ms", type=int, default=None,
-                   help="Override every MCTS agent's thinking budget (small ⇒ fast collection).")
+                   help="Override every MCTS agent's thinking budget (small ⇒ fast collection; "
+                        "overrides --profile's budget).")
     p.add_argument("--capture-every-ply", action="store_true",
                    help="Capture every player at every ply (denser, slower).")
+    p.add_argument("--capture-all-seats", action="store_true",
+                   help="Also record heuristic/random seats' trajectories "
+                        "(default: champion seats only — weak-seat outcomes teach "
+                        "the value of weak play).")
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args(argv)
 
-    agents = _default_agents()
+    profile = None if args.profile == "none" else args.profile
+    agents = teacher_roster(profile)
     if args.thinking_time_ms is not None:
         for a in agents:
             if a.get("type", "mcts") == "mcts":
                 a["thinking_time_ms"] = int(args.thinking_time_ms)
+
+    # Record who generated the labels and at what budget with every row.
+    budget = (args.thinking_time_ms if args.thinking_time_ms is not None
+              else agents[0].get("thinking_time_ms"))
+    agent_version = f"{champion_version()}@{profile or 'stored'}:{budget}"
+    capture = None if args.capture_all_seats else ("champion", "champion2")
 
     total = collect_trajectories(
         agents,
         run_id=args.run_id,
         num_games=args.num_games,
         seed=args.seed,
-        agent_version=args.agent_version,
+        agent_version=agent_version,
         output_path=args.output,
         capture_every_ply=args.capture_every_ply,
+        capture_agents=capture,
         verbose=args.verbose,
     )
-    print(f"[td_selfplay] wrote {total} rows to {args.output}")
+    print(f"[td_selfplay] wrote {total} rows to {args.output} "
+          f"(labels from {agent_version})")
     return 0
 
 

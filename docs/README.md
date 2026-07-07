@@ -18,7 +18,10 @@ docs.
   (`TRAINING_AND_OVERNIGHT_RUNS.md`).
 - **04-quality/** — known issues, risks, test strategy.
 - **05-frontend/** — frontend design notes.
-- **05-planning/** — prioritized TODO / next tasks.
+- **05-planning/** — prioritized TODO / next tasks. **Start here:**
+  [`CONTINUOUS_TRAINING_PLAN.md`](05-planning/CONTINUOUS_TRAINING_PLAN.md) —
+  why the nightly loop doesn't yet improve the agent and the prioritized plan
+  to make it ratchet (handoff for the next session).
 - **06-history/** — project history (context only).
 - **07-ai-context/** — agent workflow and context-loading protocol.
 - **08-visuals/** — diagrams and screenshots.

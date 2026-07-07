@@ -52,6 +52,17 @@ python -m mcts_lab.promote --candidate training/artifacts/candidates/<artifact>.
 `--thinking-ms 50` on `eval`/`promote` gives fast smoke runs; drop the flag
 for full-strength (500 ms/move) evaluation.
 
+TD trajectories and move-policy targets are collected separately, from the
+**registry champion at a teacher budget** (stronger search than the champion's
+own — labels should come from a stronger teacher; see
+`mcts/search_profiles.py` for the fast/balanced/strong/teacher profiles):
+
+```bash
+python -m training.td_selfplay --num-games 20        # → data/td_trajectories.csv
+python -m training.policy_selfplay --num-games 20    # → data/policy_targets.csv
+python -m training.diagnostics.search_quality        # depth/stability across budgets
+```
+
 ### Run the web demo
 
 ```bash
@@ -137,6 +148,22 @@ historical gauntlet runs live in `arena_runs/`.
   (`mcts_sweep`, `progressive_widening`), and adding the sequential SPRT screen
   above (AUDIT_REPORT.md §7). Highest-leverage remaining work: a richer move
   policy and an off-Actions, parallelised daily driver.
+- **Update (2026-07-07, AUDIT_REPORT.md §8):** a search-signal audit found the
+  search was effectively **depth-1** for most of the game (branching factor >
+  iteration budget), UCB exploration was ~100× under-weighted against the raw
+  reward scale, the evaluator's hard clamp returned **exactly 0.0 for most
+  positions** (no signal at all), rollouts spent ~92% of wall-clock enumerating
+  moves nobody used, and both self-play collectors were generating training
+  data with the **gen0 cold-start config** instead of the promoted champion.
+  Fixed: tanh eval squash (order-preserving, signal restored), sampled rollout
+  movegen (~6× faster iterations), deterministic-only transposition caching,
+  learned-leaf rewards scaled onto the shared magnitude, teacher-profile data
+  collection from the registry champion, and a `rich_leaf` candidate that
+  finally deploys the 45-feature TD value model at leaves. A full reward
+  normalisation was tried and **reverted after measurement** (72.9%→29.2%
+  champion win rate at its pinned exploration constant — see §8.2).
+  `training/diagnostics/search_quality.py` measures search depth/label
+  stability across budgets.
 
 ## What files matter
 

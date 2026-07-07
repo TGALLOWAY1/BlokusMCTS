@@ -92,6 +92,13 @@ class TDConfig:
     score_center: float = DEFAULT_SCORE_CENTER
     score_spread: float = DEFAULT_SCORE_SPREAD
     seed: int = 12345
+    # Train on the same masked feature view the deployment target will see.
+    # "full" (default) keeps every rich feature — right for the 8-feature
+    # projection path. The rich-leaf deployment evaluates only a cost-tier
+    # subset (training.rich_features.LEAF_FEATURE_SUBSETS) with the rest
+    # zeroed; training on unmasked vectors would fit weights to features that
+    # are always zero at serve time, mis-calibrating the ones that remain.
+    feature_subset: str = "full"
 
     def normalized_blend(self) -> Tuple[float, float, float]:
         total = self.blend_rank_weight + self.blend_score_weight + self.blend_margin_weight
@@ -118,6 +125,7 @@ class TDConfig:
             "score_center": self.score_center,
             "score_spread": self.score_spread,
             "seed": self.seed,
+            "feature_subset": self.feature_subset,
         }
 
 
@@ -273,6 +281,19 @@ def train_td(rows: List[Dict[str, Any]], config: TDConfig) -> TDResult:
     rng = _random.Random(config.seed)
     lo, hi = config.clip_td_error
 
+    # Optional serve-time feature mask (see TDConfig.feature_subset).
+    mask: Optional[np.ndarray] = None
+    if config.feature_subset != "full":
+        from training.rich_features import LEAF_FEATURE_SUBSETS
+
+        include = LEAF_FEATURE_SUBSETS.get(config.feature_subset)
+        if include is None:
+            raise ValueError(
+                f"unknown feature_subset '{config.feature_subset}'; "
+                f"expected 'full' or one of {sorted(LEAF_FEATURE_SUBSETS)}"
+            )
+        mask = np.array([1.0 if n in include else 0.0 for n in RICH_FEATURE_NAMES])
+
     # Pre-extract every transition, tagged with current + next phase.
     samples_by_phase: Dict[str, List[_Sample]] = {p: [] for p in PHASES}
     for row in rows:
@@ -280,6 +301,9 @@ def train_td(rows: List[Dict[str, Any]], config: TDConfig) -> TDResult:
         nxt_phase = _row_next_phase(row, cur_phase)
         s = np.asarray(trajectory_store.state_vector(row), dtype=float)
         s_next = np.asarray(trajectory_store.next_state_vector(row), dtype=float)
+        if mask is not None:
+            s = s * mask
+            s_next = s_next * mask
         terminal = bool(int(row.get("terminal", 0)))
         tv = terminal_value(row, config) if terminal else 0.0
         samples_by_phase[cur_phase].append(
@@ -430,6 +454,7 @@ def build_artifact(result: TDResult, config: TDConfig) -> Dict[str, Any]:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "learning_method": "temporal_difference",
         "feature_set_version": FEATURE_SET_VERSION,
+        "leaf_feature_subset": config.feature_subset,
         "source_rows": result.source_rows,
         "feature_names": list(RICH_FEATURE_NAMES),
         "phase_weights": build_phase_weights(result),

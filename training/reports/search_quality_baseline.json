@@ -1,0 +1,1566 @@
+{
+  "agent_params": {
+    "adaptive_rollout_depth_avg_bf": 80.0,
+    "adaptive_rollout_depth_base": 5,
+    "adaptive_rollout_depth_enabled": false,
+    "exploration_constant": 1.414,
+    "heuristic_move_ordering": true,
+    "minimax_backup_alpha": 0.0,
+    "num_workers": 1,
+    "rave_enabled": false,
+    "rave_k": 1000,
+    "rollout_cutoff_depth": 12,
+    "rollout_policy": "greedy_sample",
+    "state_eval_weights": {
+      "accessible_corners": 0.243,
+      "center_proximity": 0.0,
+      "largest_remaining_piece_size": -0.231,
+      "opponent_avg_mobility": -0.3,
+      "reachable_empty_squares": 0.081,
+      "remaining_piece_area": -0.0295,
+      "squares_placed": 0.0295,
+      "territory_enclosure_area": 0.0
+    },
+    "use_transposition_table": true
+  },
+  "budgets": [
+    50,
+    250,
+    1000
+  ],
+  "reference_budget": 1000,
+  "repeats": 2,
+  "seed": 20260707,
+  "positions": [
+    {
+      "ply": 4,
+      "branching_factor": 214,
+      "player": 1,
+      "reference_budget": 1000,
+      "budgets": {
+        "50": {
+          "runs": [
+            {
+              "budget": 50,
+              "seed": 933355018,
+              "move": "20:0@2,3",
+              "elapsed_s": 3.165,
+              "tree_size": 51,
+              "tree_depth_max": 1,
+              "tree_depth_mean": 1.0,
+              "root_children": 214,
+              "root_children_multivisit": 0,
+              "visit_entropy": 3.912023005428145,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 4,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 6,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 7,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 1,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 50,
+              "seed": 933355019,
+              "move": "20:0@2,3",
+              "elapsed_s": 3.129,
+              "tree_size": 51,
+              "tree_depth_max": 1,
+              "tree_depth_mean": 1.0,
+              "root_children": 214,
+              "root_children_multivisit": 0,
+              "visit_entropy": 3.912023005428145,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 4,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 6,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 7,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 1,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 3.147,
+          "ms_per_iteration": 62.94,
+          "mean_tree_depth_max": 1.0,
+          "mean_tree_size": 51.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 1.0,
+          "q_spread": 0.0
+        },
+        "250": {
+          "runs": [
+            {
+              "budget": 250,
+              "seed": 933358418,
+              "move": "20:0@2,3",
+              "elapsed_s": 15.696,
+              "tree_size": 251,
+              "tree_depth_max": 2,
+              "tree_depth_mean": 1.1682242990654206,
+              "root_children": 214,
+              "root_children_multivisit": 10,
+              "visit_entropy": 5.321834529860962,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 4,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 6,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 7,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 2,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 250,
+              "seed": 933358419,
+              "move": "20:0@2,3",
+              "elapsed_s": 15.934,
+              "tree_size": 251,
+              "tree_depth_max": 2,
+              "tree_depth_mean": 1.1682242990654206,
+              "root_children": 214,
+              "root_children_multivisit": 10,
+              "visit_entropy": 5.321834529860962,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 4,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 6,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 7,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 2,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 15.815,
+          "ms_per_iteration": 63.26,
+          "mean_tree_depth_max": 2.0,
+          "mean_tree_size": 251.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 1.0,
+          "q_spread": 0.0
+        },
+        "1000": {
+          "runs": [
+            {
+              "budget": 1000,
+              "seed": 933371168,
+              "move": "20:0@2,3",
+              "elapsed_s": 68.537,
+              "tree_size": 1001,
+              "tree_depth_max": 2,
+              "tree_depth_mean": 2.0,
+              "root_children": 214,
+              "root_children_multivisit": 10,
+              "visit_entropy": 5.3607975609160095,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 5,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 4,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 5,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 5,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 6,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 5,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 7,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 5,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 1000,
+              "seed": 933371169,
+              "move": "20:0@2,3",
+              "elapsed_s": 67.419,
+              "tree_size": 1001,
+              "tree_depth_max": 2,
+              "tree_depth_mean": 2.0,
+              "root_children": 214,
+              "root_children_multivisit": 10,
+              "visit_entropy": 5.3607975609160095,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 5,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 4,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 5,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 3,
+                  "visits": 5,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 6,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 5,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 7,
+                  "anchor_row": 2,
+                  "anchor_col": 3,
+                  "visits": 5,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 67.978,
+          "ms_per_iteration": 67.98,
+          "mean_tree_depth_max": 2.0,
+          "mean_tree_size": 1001.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 1.0,
+          "q_spread": 0.0
+        }
+      }
+    },
+    {
+      "ply": 16,
+      "branching_factor": 471,
+      "player": 1,
+      "reference_budget": 1000,
+      "budgets": {
+        "50": {
+          "runs": [
+            {
+              "budget": 50,
+              "seed": 933355018,
+              "move": "11:3@12,8",
+              "elapsed_s": 3.776,
+              "tree_size": 51,
+              "tree_depth_max": 1,
+              "tree_depth_mean": 1.0,
+              "root_children": 471,
+              "root_children_multivisit": 0,
+              "visit_entropy": 3.912023005428145,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 11,
+                  "orientation": 3,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 0,
+                  "anchor_row": 6,
+                  "anchor_col": 4,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 1,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 50,
+              "seed": 933355019,
+              "move": "11:3@12,8",
+              "elapsed_s": 3.61,
+              "tree_size": 51,
+              "tree_depth_max": 1,
+              "tree_depth_mean": 1.0,
+              "root_children": 471,
+              "root_children_multivisit": 0,
+              "visit_entropy": 3.912023005428145,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 11,
+                  "orientation": 3,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 0,
+                  "anchor_row": 6,
+                  "anchor_col": 4,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 1,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 3.693,
+          "ms_per_iteration": 73.86,
+          "mean_tree_depth_max": 1.0,
+          "mean_tree_size": 51.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 1.0,
+          "q_spread": 0.0
+        },
+        "250": {
+          "runs": [
+            {
+              "budget": 250,
+              "seed": 933358418,
+              "move": "11:3@12,8",
+              "elapsed_s": 18.086,
+              "tree_size": 251,
+              "tree_depth_max": 1,
+              "tree_depth_mean": 1.0,
+              "root_children": 471,
+              "root_children_multivisit": 0,
+              "visit_entropy": 5.521460917862225,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 11,
+                  "orientation": 3,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 0,
+                  "anchor_row": 6,
+                  "anchor_col": 4,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 1,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 250,
+              "seed": 933358419,
+              "move": "11:3@12,8",
+              "elapsed_s": 18.07,
+              "tree_size": 251,
+              "tree_depth_max": 1,
+              "tree_depth_mean": 1.0,
+              "root_children": 471,
+              "root_children_multivisit": 0,
+              "visit_entropy": 5.521460917862225,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 11,
+                  "orientation": 3,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 0,
+                  "anchor_row": 6,
+                  "anchor_col": 4,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 1,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 18.078,
+          "ms_per_iteration": 72.31,
+          "mean_tree_depth_max": 1.0,
+          "mean_tree_size": 251.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 1.0,
+          "q_spread": 0.0
+        },
+        "1000": {
+          "runs": [
+            {
+              "budget": 1000,
+              "seed": 933371168,
+              "move": "11:3@12,8",
+              "elapsed_s": 77.333,
+              "tree_size": 1001,
+              "tree_depth_max": 2,
+              "tree_depth_mean": 2.0,
+              "root_children": 471,
+              "root_children_multivisit": 10,
+              "visit_entropy": 6.144057169611398,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 11,
+                  "orientation": 3,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 0,
+                  "anchor_row": 6,
+                  "anchor_col": 4,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 3,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 1000,
+              "seed": 933371169,
+              "move": "11:3@12,8",
+              "elapsed_s": 76.413,
+              "tree_size": 1001,
+              "tree_depth_max": 2,
+              "tree_depth_mean": 2.0,
+              "root_children": 471,
+              "root_children_multivisit": 10,
+              "visit_entropy": 6.144057169611398,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 11,
+                  "orientation": 3,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 12,
+                  "anchor_col": 8,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 0,
+                  "anchor_row": 6,
+                  "anchor_col": 4,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 20,
+                  "orientation": 0,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 11,
+                  "orientation": 1,
+                  "anchor_row": 11,
+                  "anchor_col": 7,
+                  "visits": 3,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 76.873,
+          "ms_per_iteration": 76.87,
+          "mean_tree_depth_max": 2.0,
+          "mean_tree_size": 1001.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 1.0,
+          "q_spread": 0.0
+        }
+      }
+    },
+    {
+      "ply": 32,
+      "branching_factor": 131,
+      "player": 1,
+      "reference_budget": 1000,
+      "budgets": {
+        "50": {
+          "runs": [
+            {
+              "budget": 50,
+              "seed": 933355018,
+              "move": "10:0@4,11",
+              "elapsed_s": 1.925,
+              "tree_size": 51,
+              "tree_depth_max": 1,
+              "tree_depth_mean": 1.0,
+              "root_children": 131,
+              "root_children_multivisit": 0,
+              "visit_entropy": 3.912023005428145,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 10,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 9,
+                  "orientation": 2,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 7,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 17,
+                  "orientation": 1,
+                  "anchor_row": 16,
+                  "anchor_col": 8,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 18,
+                  "orientation": 3,
+                  "anchor_row": 0,
+                  "anchor_col": 6,
+                  "visits": 1,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 50,
+              "seed": 933355019,
+              "move": "10:0@4,11",
+              "elapsed_s": 1.896,
+              "tree_size": 51,
+              "tree_depth_max": 1,
+              "tree_depth_mean": 1.0,
+              "root_children": 131,
+              "root_children_multivisit": 0,
+              "visit_entropy": 3.912023005428145,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 10,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 9,
+                  "orientation": 2,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 7,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 17,
+                  "orientation": 1,
+                  "anchor_row": 16,
+                  "anchor_col": 8,
+                  "visits": 1,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 18,
+                  "orientation": 3,
+                  "anchor_row": 0,
+                  "anchor_col": 6,
+                  "visits": 1,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 1.91,
+          "ms_per_iteration": 38.21,
+          "mean_tree_depth_max": 1.0,
+          "mean_tree_size": 51.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 1.0,
+          "q_spread": 0.0
+        },
+        "250": {
+          "runs": [
+            {
+              "budget": 250,
+              "seed": 933358418,
+              "move": "10:0@4,11",
+              "elapsed_s": 9.762,
+              "tree_size": 251,
+              "tree_depth_max": 2,
+              "tree_depth_mean": 1.9083969465648856,
+              "root_children": 131,
+              "root_children_multivisit": 10,
+              "visit_entropy": 4.861584801969178,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 10,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 9,
+                  "orientation": 2,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 7,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 17,
+                  "orientation": 1,
+                  "anchor_row": 16,
+                  "anchor_col": 8,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 18,
+                  "orientation": 3,
+                  "anchor_row": 0,
+                  "anchor_col": 6,
+                  "visits": 2,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 250,
+              "seed": 933358419,
+              "move": "10:0@4,11",
+              "elapsed_s": 9.552,
+              "tree_size": 251,
+              "tree_depth_max": 2,
+              "tree_depth_mean": 1.9083969465648856,
+              "root_children": 131,
+              "root_children_multivisit": 10,
+              "visit_entropy": 4.861584801969178,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 10,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 9,
+                  "orientation": 2,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 7,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 17,
+                  "orientation": 1,
+                  "anchor_row": 16,
+                  "anchor_col": 8,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 18,
+                  "orientation": 3,
+                  "anchor_row": 0,
+                  "anchor_col": 6,
+                  "visits": 2,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 9.657,
+          "ms_per_iteration": 38.63,
+          "mean_tree_depth_max": 2.0,
+          "mean_tree_size": 251.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 1.0,
+          "q_spread": 0.0
+        },
+        "1000": {
+          "runs": [
+            {
+              "budget": 1000,
+              "seed": 933371168,
+              "move": "10:0@4,11",
+              "elapsed_s": 37.545,
+              "tree_size": 1001,
+              "tree_depth_max": 2,
+              "tree_depth_mean": 2.0,
+              "root_children": 131,
+              "root_children_multivisit": 10,
+              "visit_entropy": 4.873180285224143,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 10,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 8,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 9,
+                  "orientation": 2,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 8,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 7,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 8,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 17,
+                  "orientation": 1,
+                  "anchor_row": 16,
+                  "anchor_col": 8,
+                  "visits": 8,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 18,
+                  "orientation": 3,
+                  "anchor_row": 0,
+                  "anchor_col": 6,
+                  "visits": 8,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 1000,
+              "seed": 933371169,
+              "move": "10:0@4,11",
+              "elapsed_s": 37.684,
+              "tree_size": 1001,
+              "tree_depth_max": 2,
+              "tree_depth_mean": 2.0,
+              "root_children": 131,
+              "root_children_multivisit": 10,
+              "visit_entropy": 4.873180285224143,
+              "best_move_q": 0.0,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 10,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 8,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 9,
+                  "orientation": 2,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 8,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 7,
+                  "orientation": 0,
+                  "anchor_row": 4,
+                  "anchor_col": 11,
+                  "visits": 8,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 17,
+                  "orientation": 1,
+                  "anchor_row": 16,
+                  "anchor_col": 8,
+                  "visits": 8,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 18,
+                  "orientation": 3,
+                  "anchor_row": 0,
+                  "anchor_col": 6,
+                  "visits": 8,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 37.614,
+          "ms_per_iteration": 37.61,
+          "mean_tree_depth_max": 2.0,
+          "mean_tree_size": 1001.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 1.0,
+          "q_spread": 0.0
+        }
+      }
+    },
+    {
+      "ply": 52,
+      "branching_factor": 20,
+      "player": 1,
+      "reference_budget": 1000,
+      "budgets": {
+        "50": {
+          "runs": [
+            {
+              "budget": 50,
+              "seed": 933355018,
+              "move": "2:1@3,0",
+              "elapsed_s": 0.794,
+              "tree_size": 51,
+              "tree_depth_max": 3,
+              "tree_depth_mean": 2.103448275862069,
+              "root_children": 20,
+              "root_children_multivisit": 10,
+              "visit_entropy": 2.9218494768463987,
+              "best_move_q": 0.8571428571428571,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 7,
+                  "q_value": 0.8571428571428571
+                },
+                {
+                  "piece_id": 3,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 5,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 15,
+                  "anchor_col": 14,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 0,
+                  "anchor_row": 8,
+                  "anchor_col": 7,
+                  "visits": 3,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 50,
+              "seed": 933355019,
+              "move": "2:1@3,0",
+              "elapsed_s": 0.821,
+              "tree_size": 51,
+              "tree_depth_max": 3,
+              "tree_depth_mean": 2.103448275862069,
+              "root_children": 20,
+              "root_children_multivisit": 10,
+              "visit_entropy": 2.9218494768463987,
+              "best_move_q": 0.8571428571428571,
+              "second_best_q": 0.0,
+              "top_moves": [
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 7,
+                  "q_value": 0.8571428571428571
+                },
+                {
+                  "piece_id": 3,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 5,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 15,
+                  "anchor_col": 14,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 0,
+                  "anchor_row": 8,
+                  "anchor_col": 7,
+                  "visits": 3,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 0.807,
+          "ms_per_iteration": 16.15,
+          "mean_tree_depth_max": 3.0,
+          "mean_tree_size": 51.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 0.0,
+          "q_spread": 0.0
+        },
+        "250": {
+          "runs": [
+            {
+              "budget": 250,
+              "seed": 933358418,
+              "move": "1:0@3,0",
+              "elapsed_s": 3.859,
+              "tree_size": 251,
+              "tree_depth_max": 8,
+              "tree_depth_mean": 4.345029239766082,
+              "root_children": 20,
+              "root_children_multivisit": 10,
+              "visit_entropy": 1.3080556874037708,
+              "best_move_q": 7.473118279569892,
+              "second_best_q": 0.8571428571428571,
+              "top_moves": [
+                {
+                  "piece_id": 1,
+                  "orientation": 0,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 186,
+                  "q_value": 7.473118279569892
+                },
+                {
+                  "piece_id": 3,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 7,
+                  "q_value": 0.8571428571428571
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 7,
+                  "q_value": 0.8571428571428571
+                },
+                {
+                  "piece_id": 5,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 3,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 15,
+                  "anchor_col": 14,
+                  "visits": 3,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 250,
+              "seed": 933358419,
+              "move": "3:1@3,0",
+              "elapsed_s": 3.902,
+              "tree_size": 251,
+              "tree_depth_max": 5,
+              "tree_depth_mean": 4.454976303317536,
+              "root_children": 20,
+              "root_children_multivisit": 10,
+              "visit_entropy": 0.9516710788643402,
+              "best_move_q": 46.371980676328505,
+              "second_best_q": 0.8571428571428571,
+              "top_moves": [
+                {
+                  "piece_id": 3,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 207,
+                  "q_value": 46.371980676328505
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 7,
+                  "q_value": 0.8571428571428571
+                },
+                {
+                  "piece_id": 5,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 15,
+                  "anchor_col": 14,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 0,
+                  "anchor_row": 8,
+                  "anchor_col": 7,
+                  "visits": 2,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 3.881,
+          "ms_per_iteration": 15.52,
+          "mean_tree_depth_max": 6.5,
+          "mean_tree_size": 251.0,
+          "move_stability": 0.5,
+          "agreement_with_reference": 0.5,
+          "q_spread": 19.4494
+        },
+        "1000": {
+          "runs": [
+            {
+              "budget": 1000,
+              "seed": 933371168,
+              "move": "3:1@3,0",
+              "elapsed_s": 14.834,
+              "tree_size": 1001,
+              "tree_depth_max": 8,
+              "tree_depth_mean": 5.457459926017263,
+              "root_children": 20,
+              "root_children_multivisit": 10,
+              "visit_entropy": 0.30052076381811477,
+              "best_move_q": 69.19540229885058,
+              "second_best_q": 0.8571428571428571,
+              "top_moves": [
+                {
+                  "piece_id": 3,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 957,
+                  "q_value": 69.19540229885058
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 7,
+                  "q_value": 0.8571428571428571
+                },
+                {
+                  "piece_id": 5,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 15,
+                  "anchor_col": 14,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 0,
+                  "anchor_row": 8,
+                  "anchor_col": 7,
+                  "visits": 2,
+                  "q_value": 0.0
+                }
+              ]
+            },
+            {
+              "budget": 1000,
+              "seed": 933371169,
+              "move": "3:1@3,0",
+              "elapsed_s": 14.09,
+              "tree_size": 1001,
+              "tree_depth_max": 8,
+              "tree_depth_mean": 5.850899742930591,
+              "root_children": 20,
+              "root_children_multivisit": 10,
+              "visit_entropy": 0.30052076381811477,
+              "best_move_q": 100.04179728317659,
+              "second_best_q": 0.8571428571428571,
+              "top_moves": [
+                {
+                  "piece_id": 3,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 957,
+                  "q_value": 100.04179728317659
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 7,
+                  "q_value": 0.8571428571428571
+                },
+                {
+                  "piece_id": 5,
+                  "orientation": 1,
+                  "anchor_row": 3,
+                  "anchor_col": 0,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 1,
+                  "anchor_row": 15,
+                  "anchor_col": 14,
+                  "visits": 2,
+                  "q_value": 0.0
+                },
+                {
+                  "piece_id": 2,
+                  "orientation": 0,
+                  "anchor_row": 8,
+                  "anchor_col": 7,
+                  "visits": 2,
+                  "q_value": 0.0
+                }
+              ]
+            }
+          ],
+          "mean_elapsed_s": 14.462,
+          "ms_per_iteration": 14.46,
+          "mean_tree_depth_max": 8.0,
+          "mean_tree_size": 1001.0,
+          "move_stability": 1.0,
+          "agreement_with_reference": 1.0,
+          "q_spread": 15.4232
+        }
+      }
+    }
+  ],
+  "summary": {
+    "budgets": {
+      "50": {
+        "mean_tree_depth_max": 1.5,
+        "mean_ms_per_iteration": 47.79,
+        "mean_move_stability": 1.0,
+        "mean_agreement_with_reference": 0.75
+      },
+      "250": {
+        "mean_tree_depth_max": 2.88,
+        "mean_ms_per_iteration": 47.43,
+        "mean_move_stability": 0.875,
+        "mean_agreement_with_reference": 0.875
+      },
+      "1000": {
+        "mean_tree_depth_max": 3.5,
+        "mean_ms_per_iteration": 49.23,
+        "mean_move_stability": 1.0,
+        "mean_agreement_with_reference": 1.0
+      }
+    }
+  }
+}

@@ -19,6 +19,7 @@ Output is normalised to [0, 1] for compatibility with Q-values.
 
 from __future__ import annotations
 
+import math
 from typing import Dict, Optional
 
 import numpy as np
@@ -224,8 +225,11 @@ class BlokusStateEvaluator:
 
         raw = sum(w.get(k, 0.0) * v for k, v in features.items())
 
-        # Clamp to [0, 1]
-        return max(0.0, min(1.0, raw))
+        # Squash onto [0, 1] preserving order. The previous hard clamp mapped
+        # every negative-sum state to exactly 0.0; learned weight vectors sum
+        # negative on typical early/mid boards, so ALL cutoff evaluations
+        # returned 0 and the search had no exploitation signal at all.
+        return 0.5 * (1.0 + math.tanh(raw))
 
     @staticmethod
     def _reachable_empty(

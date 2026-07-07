@@ -58,15 +58,12 @@ def main(argv=None) -> int:
     print(f"\nsnapshot corpus: {total_rows} rows (data/champion_snapshots.csv)")
 
     if args.collect_policy_games > 0:
-        import copy
         from training.policy_selfplay import collect_policy_targets
+        from training.teacher_roster import teacher_roster
 
-        champ = copy.deepcopy(state["champion_params"])
-        champ["name"] = "champion"
-        champ2 = copy.deepcopy(champ)
-        champ2["name"] = "champion2"
-        roster = [champ, {"name": "heuristic", "type": "heuristic"},
-                  champ2, {"name": "random", "type": "random"}]
+        # Teacher profile: visit-count targets should come from a stronger
+        # search than the student will run (expert iteration).
+        roster = teacher_roster("teacher")
         if args.thinking_ms is not None:
             for a in roster:
                 if a.get("type", "mcts") == "mcts":

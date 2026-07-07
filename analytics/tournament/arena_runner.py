@@ -512,7 +512,8 @@ def build_agent(config: AgentConfig, seed: int) -> _ArenaAgentAdapter:
             # Rich leaf evaluator (45-feature TD value at MCTS leaves)
             rich_leaf_eval_enabled=bool(params.get("rich_leaf_eval_enabled", False)),
             rich_leaf_weights_path=params.get("rich_leaf_weights_path"),
-            rich_leaf_feature_subset=str(params.get("rich_leaf_feature_subset", "score")),
+            # None -> serve the subset the artifact was trained with
+            rich_leaf_feature_subset=params.get("rich_leaf_feature_subset"),
         )
         return _SelectActionAdapter(agent)
 
