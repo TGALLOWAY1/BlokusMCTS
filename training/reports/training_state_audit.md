@@ -6,14 +6,14 @@
 - Last promoted generation: 140
 
 ## Latest generation
-- Generation: 161
-- Run: 20260707T094025Z (84 games, Elo 1323.237574306347)
-- Recent Elo trend per recorded game/run point: -9.993
+- Generation: 162
+- Run: 20260707T151216Z (84 games, Elo 1323.1204991365955)
+- Recent Elo trend per recorded game/run point: -10.913
 
 ## Promotion decisions
 - mcts_param_sweep / mcts_sweep: games=29 promoted=False reason=HOLD mcts_sweep: failed ['conservative_promotes_candidate', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
-- progressive_widening / progressive_widening: games=29 promoted=False reason=HOLD progressive_widening: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'trueskill_improvement'].
-- heuristic_tuning / heuristic_tune: games=26 promoted=False reason=HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
+- progressive_widening / progressive_widening: games=28 promoted=False reason=HOLD progressive_widening: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'elo_improvement', 'trueskill_improvement'].
+- heuristic_tuning / heuristic_tune: games=27 promoted=False reason=HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'conservative:beats_runner_up_h2h', 'conservative:win_rate_ci_conclusive', 'elo_improvement', 'trueskill_improvement'].
 
 ## Gate satisfiability
 - Required: 20 games over 2 seeds
@@ -21,7 +21,7 @@
 - Any candidate satisfiable under latest counts: True
 - All created candidates satisfy game floor: True
 - Under game floor: {}
-- Candidate game counts: {'mcts_sweep': 29, 'progressive_widening': 29, 'heuristic_tune': 26}
+- Candidate game counts: {'mcts_sweep': 29, 'progressive_widening': 28, 'heuristic_tune': 27}
 
 ## Benchmark pool
 - Version: benchmark_v2
@@ -29,9 +29,9 @@
 - Stable MCTS anchors: 3
 
 ## State/history validation
-- History rows: 161
-- By kind: {'legacy_generation': 123, 'approach_comparison': 38}
-- Approach-comparison rows: 38 · legacy rows: 123 · unknown rows: 0
+- History rows: 162
+- By kind: {'legacy_generation': 123, 'approach_comparison': 39}
+- Approach-comparison rows: 39 · legacy rows: 123 · unknown rows: 0
 - Malformed rows: 0
 - Duplicate keys: 0
 - Missing result-like fields (approach rows only): 0
