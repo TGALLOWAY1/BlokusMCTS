@@ -161,13 +161,16 @@ def play_and_collect(
     if len(agents) != 4:
         raise ValueError("play_and_collect requires exactly 4 agent configs")
 
+    # Clamp into numpy's legal seed range: large run-derived seeds would
+    # otherwise overflow RandomState in the per-agent derivation below.
+    seed = int(seed) % (2**31)
     random.seed(seed)
     np.random.seed(seed)
 
     adapters: Dict[int, Any] = {}
     underlying: Dict[int, Optional[MCTSAgent]] = {}
     for i, cfg in enumerate(agents):
-        adapter = build_agent(AgentConfig.from_dict(cfg), seed=seed * 31 + i + 1)
+        adapter = build_agent(AgentConfig.from_dict(cfg), seed=(seed * 31 + i + 1) % (2**31))
         adapters[i + 1] = adapter
         agent = getattr(adapter, "agent", None)
         if isinstance(agent, MCTSAgent):

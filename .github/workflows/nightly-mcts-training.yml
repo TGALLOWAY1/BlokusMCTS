@@ -18,14 +18,16 @@ on:
       approaches:
         description: "Comma-separated candidate-generation approaches to compare (or 'all')."
         required: false
-        # Candidates that are genuinely DIFFERENT from the champion (the plateau came
-        # from a roster that had collapsed onto the incumbent). `mcts_sweep` = tuned
-        # exploration constant; `progressive_widening` = focus search on the top moves
-        # (re-measured post-maxⁿ-fix); `heuristic_tune` = the Layer-6 evaluator re-fit.
-        # `baseline` self-retires when identical to the champion; `policy` is available
-        # but held out of the default roster until its move-policy model is made richer
-        # than the fixed heuristic it currently self-distils into (see AUDIT_REPORT §7).
-        default: "mcts_sweep,progressive_widening,heuristic_tune"
+        # Roster leads with the LEARNING candidates now that --refresh-data feeds them
+        # fresh teacher-budget experience every run (CONTINUOUS_TRAINING_PLAN.md P1):
+        # `rich_leaf` = 45-feature TD value at MCTS leaves, trained on the refreshed
+        # data/td_trajectories.csv; `heuristic_tune` = Layer-6 evaluator re-fit on the
+        # refreshed (post-search-fix, recency-capped) data/champion_snapshots.csv;
+        # `mcts_sweep` = tuned exploration constant (no-data search probe).
+        # `baseline` self-retires when identical to the champion; `policy` stays out of
+        # the roster until its move-policy model is richer than the fixed heuristic it
+        # currently self-distils into (see AUDIT_REPORT §7).
+        default: "rich_leaf,heuristic_tune,mcts_sweep"
       games:
         description: "Games per arena per seed for approach evaluation."
         required: false
@@ -53,10 +55,26 @@ on:
         description: "Sequential screen: max paired games/candidate before hold (inconclusive)."
         required: false
         # Caps each candidate's SPRT at this many paired games (a fair per-candidate
-        # wall-clock split also applies). At elo1=70/α=β=0.05 a clearly-strong candidate
-        # is confirmed in ~70 games and a no-op ruled out in ~150; a near-even candidate
-        # runs to this cap and is held. 160 keeps three candidates inside the budget.
+        # wall-clock split also applies). A near-even candidate runs to this cap and is
+        # held. 160 keeps three candidates inside the budget.
         default: "160"
+      sprt_elo1:
+        description: "Sequential screen H1: smallest candidate Elo edge worth promoting."
+        required: false
+        # CONTINUOUS_TRAINING_PLAN.md P3: with the roster now trained on fresh
+        # teacher-budget data, chase smaller true edges. 70 could only confirm
+        # landslides; 40 lets a real ~+40 Elo candidate reach accept_h1 within the
+        # game cap instead of parking at inconclusive.
+        default: "40"
+      refresh_minutes:
+        description: "Wall-clock cap (minutes) for the pre-eval training-data refresh."
+        required: false
+        # CONTINUOUS_TRAINING_PLAN.md P1: fresh teacher-budget TD trajectories +
+        # evaluator snapshots from the CURRENT champion, generated before candidate
+        # creation so rich_leaf/heuristic_tune train on live data. ~45 min buys
+        # roughly 4-8 teacher games (~200-400 trajectory rows) plus a snapshot
+        # arena per run; the corpora accumulate across runs. Set 0 to skip.
+        default: "45"
 
 # Never run two nightly trainings at once, and never cancel an in-flight run
 # (cancelling mid-train could corrupt a generation). A queued run waits its turn.
@@ -96,31 +114,41 @@ jobs:
         run: |
           # Grow data/policy_targets.csv with MCTS root visit distributions — the
           # supervised target the `policy` approach distils into the move-policy
-          # PUCT prior (the expert-iteration loop). Uses a smaller dedicated
-          # thinking budget (not the eval budget) so more decisions are collected
-          # per minute; rows are flushed per-decision. Hard-capped at 15 min so it
-          # never eats the training budget; the corpus accumulates across runs.
+          # PUCT prior (the expert-iteration loop). Collected at the TEACHER search
+          # profile (1200 iterations + progressive widening), not a tiny flat budget:
+          # visit counts from a shallow search are near-uniform noise and teach the
+          # policy nothing (CONTINUOUS_TRAINING_PLAN.md P2 — the old 40 ms budget was
+          # near-random). Fewer games, but every row is a real search verdict; rows
+          # are flushed per-decision so the 15-min timeout keeps whatever finished.
+          # The corpus accumulates across runs.
           timeout 900 python -m training.policy_selfplay \
-            --num-games 8 \
-            --thinking-time-ms 40 \
+            --num-games 4 \
+            --profile teacher \
             --verbose || echo "policy target collection skipped/timed out (non-fatal)"
 
       - name: Run nightly training (approach-comparison framework)
         id: train
         continue-on-error: true  # reports + email must still run if training crashes
         run: |
-          # Approach-comparison framework: generate candidates from each approach,
-          # evaluate them against a fixed benchmark pool with fixed seeds, and promote
-          # only a candidate that passes the statistical gate. See
+          # Approach-comparison framework: refresh the training corpora with fresh
+          # champion self-play, generate candidates from each approach, evaluate them
+          # against a fixed benchmark pool with fixed seeds, and promote only a
+          # candidate that passes the statistical gate. See
           # docs/03-implementation/NIGHTLY_TRAINING.md and training/README.md.
           #
-          # Roster: candidates that are genuinely DIFFERENT from the champion. The old
-          # `policy,baseline,heuristic_tune` roster had collapsed onto the incumbent
-          # (`baseline` reproduced it exactly; `policy` self-distilled back into the
-          # fixed heuristic), so nothing could out-perform it. `mcts_sweep` (tuned
-          # exploration constant), `progressive_widening` (focus search on top moves —
-          # re-measured post-maxⁿ-fix) and `heuristic_tune` (evaluator re-fit) explore
-          # new behaviour. `baseline` self-retires when identical to the champion.
+          # Data refresh (--refresh-data, CONTINUOUS_TRAINING_PLAN.md P1): before
+          # candidate generation, collect teacher-budget TD trajectories + evaluator
+          # snapshots from the CURRENT champion (wall-clock capped) so the learning
+          # approaches fit live post-search-fix data, not a frozen corpus. This is the
+          # expert-iteration loop: deep-search teacher labels -> evaluator/policy fit ->
+          # a sharper student next cycle. The refresh runs INSIDE the training step so
+          # a single 2-core runner splits its budget explicitly (~45 min data, rest
+          # train+eval); the corpora accumulate across the 4 runs/day cadence.
+          # NOTE: the --thinking-time-ms eval override deliberately does NOT apply to
+          # the refresh — labels must come from teacher-budget search.
+          #
+          # Roster: learning candidates first (they consume the refreshed data), plus
+          # one search probe. `baseline` self-retires when identical to the champion.
           #
           # Evaluation: the variance-reduced SEQUENTIAL screen (--sequential-eval) — a
           # seat-balanced SPRT on the paired champion-vs-candidate outcome that stops as
@@ -128,11 +156,15 @@ jobs:
           # edge is detectable in far fewer games than the old fixed 20-game screen (which
           # was swamped by the ~±72 Elo re-rating noise and could resolve nothing).
           python -m training.nightly_run \
-            --approaches "${{ github.event.inputs.approaches || 'mcts_sweep,progressive_widening,heuristic_tune' }}" \
+            --approaches "${{ github.event.inputs.approaches || 'rich_leaf,heuristic_tune,mcts_sweep' }}" \
             --games "${{ github.event.inputs.games || '5' }}" \
             --time-budget-minutes "${{ github.event.inputs.time_budget_minutes || '315' }}" \
             --thinking-time-ms "${{ github.event.inputs.thinking_time_ms || '100' }}" \
+            --refresh-data \
+            --teacher-profile teacher \
+            --refresh-minutes "${{ github.event.inputs.refresh_minutes || '45' }}" \
             --sequential-eval \
+            --sprt-elo1 "${{ github.event.inputs.sprt_elo1 || '40' }}" \
             --sprt-max-games "${{ github.event.inputs.sprt_max_games || '160' }}" \
             --resume training/state/latest.json
 
@@ -168,8 +200,11 @@ jobs:
           # bulky per-game selfplay_runs/ are excluded).
           # training/state also carries training/state/policy_weights.json (the
           # distilled move policy); data/policy_targets.csv is the growing
-          # visit-count corpus the `policy` approach learns from.
-          git add training/state training/status.md training/reports training/artifacts data/champion_snapshots.csv data/policy_targets.csv data/champion_registry.json 2>/dev/null || true
+          # visit-count corpus the `policy` approach learns from, and
+          # data/td_trajectories.csv + data/champion_snapshots.csv are the corpora
+          # the --refresh-data step regenerates from the current champion each run
+          # (losing them would silently re-freeze the learning approaches).
+          git add training/state training/status.md training/reports training/artifacts data/champion_snapshots.csv data/td_trajectories.csv data/policy_targets.csv data/champion_registry.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else

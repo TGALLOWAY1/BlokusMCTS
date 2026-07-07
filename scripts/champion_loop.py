@@ -66,6 +66,11 @@ SE_FEATURE_COLS = [f"se_{f}" for f in FEATURE_NAMES]
 REFIT_INTERVAL = 3
 # Minimum snapshot rows required before attempting re-fit
 MIN_ROWS_FOR_REFIT = 200
+# Recency window on the snapshot corpus: keep only the newest rows so the
+# regression re-fit tracks the CURRENT champion's play instead of averaging
+# over all history (CONTINUOUS_TRAINING_PLAN.md P4 — the pre-search-fix corpus
+# is archived under data/archive/, never appended to).
+SNAPSHOT_MAX_ROWS = 30000
 # Maximum weight magnitude after normalisation
 WEIGHT_SCALE = 0.30
 
@@ -385,6 +390,11 @@ def accumulate_snapshots(run_dir: str) -> int:
         combined = pd.concat([existing, new_df], ignore_index=True)
     else:
         combined = new_df
+
+    # Recency window (P4): drop the oldest rows beyond the cap so the corpus
+    # tracks the current champion rather than averaging over all history.
+    if len(combined) > SNAPSHOT_MAX_ROWS:
+        combined = combined.iloc[-SNAPSHOT_MAX_ROWS:].reset_index(drop=True)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     combined.to_csv(SNAPSHOT_CSV, index=False)

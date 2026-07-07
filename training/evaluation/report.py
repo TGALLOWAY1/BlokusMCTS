@@ -112,6 +112,13 @@ def render_markdown(record: Dict[str, Any]) -> str:
     if pool:
         lines.append(f"**Benchmark pool:** {pool.get('version')} — opponents "
                      f"{', '.join(pool.get('opponents', []))}; seeds {pool.get('seeds')}")
+    refresh = record.get("data_refresh") or {}
+    if refresh:
+        lines.append(f"**Data refresh:** +{refresh.get('td_rows', 0)} TD rows "
+                     f"(labels from `{refresh.get('agent_version')}`) · "
+                     f"+{refresh.get('snapshot_new_rows', 0)} snapshot rows "
+                     f"(corpus {refresh.get('snapshot_corpus_rows', '—')}) · "
+                     f"{refresh.get('elapsed_s', '—')}s of {refresh.get('budget_s', '—')}s budget")
     lines.append("")
 
     # Trajectory (noise-aware).
