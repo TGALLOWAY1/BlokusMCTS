@@ -63,13 +63,6 @@ from .state_evaluator import BlokusStateEvaluator
 from .utils import compute_policy_entropy
 from .zobrist import TranspositionTable, ZobristHash
 
-# Divisor mapping the raw rollout reward (score delta 0..~109 + win bonus 100 /
-# tie 10) onto ~[0,1], the scale shared by every other reward path (static
-# cutoff eval, rich-leaf eval, learned-leaf win probability). A pure rescale:
-# Q orderings are unchanged; only the exploitation:exploration balance moves,
-# which is the point — see _eval_reward_scale.
-_REWARD_NORM = 100.0
-
 
 class MCTSNode:
     """
@@ -432,11 +425,13 @@ class MCTSNode:
 
     def get_best_move(self) -> Optional[Move]:
         """
-        Get the best move based on visit counts, tie-broken by mean reward.
+        Get the best move based on visit counts.
 
-        The tie-break matters at high branching factors: when the budget only
-        affords ~1 visit per root child, plain max-by-visits degenerates to
-        "first expanded child" and the search result is ignored entirely.
+        Ties (common early game, when branching factor exceeds the iteration
+        budget and every root child gets one visit) resolve to the FIRST
+        child in expansion order — the move-ordering heuristic's top choice.
+        Tie-breaking by single-rollout Q was tried (2026-07-07) and measured
+        strictly noisier than the heuristic fallback.
 
         Returns:
             Best move or None if no children
@@ -444,13 +439,7 @@ class MCTSNode:
         if not self.children:
             return None
 
-        best_child = max(
-            self.children,
-            key=lambda child: (
-                child.visits,
-                child.total_reward / child.visits if child.visits > 0 else float("-inf"),
-            ),
-        )
+        best_child = max(self.children, key=lambda child: child.visits)
         return best_child.move
 
 
@@ -525,7 +514,7 @@ class MCTSAgent:
         adaptive_rollout_depth_avg_bf: float = 80.0,
         sufficiency_threshold_enabled: bool = False,
         loss_avoidance_enabled: bool = False,
-        loss_avoidance_threshold: float = -0.5,  # on the normalised ~[0,1] reward scale
+        loss_avoidance_threshold: float = -50.0,
         # --- Rich leaf evaluator (45-feature TD value at MCTS leaves) ---
         rich_leaf_eval_enabled: bool = False,
         rich_leaf_weights_path: Optional[str] = None,
@@ -659,11 +648,16 @@ class MCTSAgent:
             int(rollout_cutoff_depth) if rollout_cutoff_depth is not None else None
         )
         self.minimax_backup_alpha = float(minimax_backup_alpha)
-        # All reward paths sit on a common ~[0,1] scale (see _REWARD_NORM) so
-        # UCB's exploration term is commensurate with Q-value gaps. The old
-        # x100 scale made exploration_constant=1.414 negligible against Q gaps
-        # of O(10-100): selection was near-greedy and visit counts degenerate.
-        self._eval_reward_scale = 1.0
+        # Reward magnitude shared by every simulation path (rollout score
+        # deltas + 100/10 win bonus, cutoff static eval x100, rich-leaf x100,
+        # learned-leaf win probability x100). NOTE: exploration_constant=1.414
+        # is tiny against this O(100) Q scale, so UCB selection is near-greedy
+        # after the mandatory first-visit sweep. Normalising all rewards onto
+        # [0,1] was tried (2026-07-07) and REGRESSED the champion 72.9%->29.2%
+        # win rate at its pinned exploration constant — stored configs are
+        # implicitly calibrated to this scale. Re-tune exploration on a clean
+        # scale only through the gated mcts_sweep approach, not here.
+        self._eval_reward_scale = 100.0
 
         # Layer 5 params
         self.rave_enabled = bool(rave_enabled)
@@ -1759,8 +1753,12 @@ class MCTSAgent:
             rewards, _ = self._rollout(board, player)
             return rewards
         try:
+            # Scaled like every other simulation path — an unscaled [0,1] win
+            # probability would be ~100x smaller than sibling rollout/cutoff
+            # rewards in the same tree.
             rewards = {
                 p: float(self.learned_evaluator.predict_player_win_probability(board, p))
+                * self._eval_reward_scale
                 for p in _PLAYERS
             }
             self.stats["leaf_eval_calls"] += 1
@@ -1964,24 +1962,18 @@ class MCTSAgent:
             current_player = _PLAYERS[(current_idx + 1) % num_players]
             moves_made += 1
 
-        # Per-player reward: score delta over the rollout, normalised by
-        # _REWARD_NORM onto ~[0,1] so it is commensurate with the static-eval
-        # and leaf-eval reward paths (and with exploration_constant).
+        # Per-player reward: score delta over the rollout
         final_scores = {p: sim_board.get_score(p) for p in _PLAYERS}
-        rewards = {
-            p: float(final_scores[p] - initial_scores[p]) / _REWARD_NORM for p in _PLAYERS
-        }
+        rewards = {p: float(final_scores[p] - initial_scores[p]) for p in _PLAYERS}
 
         # Determine if rollout reached a natural game end (all players passed)
         game_ended = consecutive_passes >= num_players
 
-        # Add win/tie bonus to each winner's own reward (pre-normalisation
-        # magnitudes were 100/10 on a raw-score scale; the ratio to the score
-        # delta is preserved exactly)
+        # Add win/tie bonus to each winner's own reward
         if game_ended:
             max_score = max(final_scores.values())
             winners = [p for p, s in final_scores.items() if s == max_score]
-            bonus = 100.0 / _REWARD_NORM if len(winners) == 1 else 10.0 / _REWARD_NORM
+            bonus = 100.0 if len(winners) == 1 else 10.0
             for p in winners:
                 rewards[p] += bonus
 

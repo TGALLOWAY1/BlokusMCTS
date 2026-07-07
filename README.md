@@ -155,12 +155,15 @@ historical gauntlet runs live in `arena_runs/`.
   positions** (no signal at all), rollouts spent ~92% of wall-clock enumerating
   moves nobody used, and both self-play collectors were generating training
   data with the **gen0 cold-start config** instead of the promoted champion.
-  All fixed: rewards normalised to a common ~[0,1] scale, tanh eval squash,
-  sampled rollout movegen (~6× faster iterations), deterministic-only
-  transposition caching, teacher-profile data collection from the registry
-  champion, and a `rich_leaf` candidate that finally deploys the 45-feature TD
-  value model at leaves. `training/diagnostics/search_quality.py` measures
-  search depth/label stability across budgets.
+  Fixed: tanh eval squash (order-preserving, signal restored), sampled rollout
+  movegen (~6× faster iterations), deterministic-only transposition caching,
+  learned-leaf rewards scaled onto the shared magnitude, teacher-profile data
+  collection from the registry champion, and a `rich_leaf` candidate that
+  finally deploys the 45-feature TD value model at leaves. A full reward
+  normalisation was tried and **reverted after measurement** (72.9%→29.2%
+  champion win rate at its pinned exploration constant — see §8.2).
+  `training/diagnostics/search_quality.py` measures search depth/label
+  stability across budgets.
 
 ## What files matter
 

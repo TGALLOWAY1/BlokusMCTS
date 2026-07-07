@@ -360,12 +360,20 @@ this budget are what the policy/TD trainers were imitating.
 
 ### 8.2 Fixed: four search-signal defects (mcts core)
 
-1. **Reward-scale mismatch (high confidence, measured).** Rollout/cutoff
-   rewards were O(100) (score delta + 100 win bonus; static eval ×100) while
-   `exploration_constant=1.414` contributes O(1–5) — UCB was effectively
-   greedy, and the learned-leaf path returned win probabilities in [0,1],
-   100× off-scale from sibling paths. All reward paths now share a ~[0,1]
-   scale (a pure rescale: Q orderings unchanged).
+1. **Reward-scale mismatch (measured, then partially REVERTED after
+   measurement).** Rollout/cutoff rewards are O(100) (score delta + 100 win
+   bonus; static eval ×100) while `exploration_constant=1.414` contributes
+   O(1–5) — UCB is effectively greedy after the mandatory first-visit sweep,
+   and the learned-leaf path returned win probabilities in [0,1], 100× too
+   small next to sibling paths. Normalising every reward onto [0,1] was
+   implemented and **measured to regress the champion 72.9% → 29.2% win
+   rate** at its *pinned* exploration constant (24 fixed-seed games each vs
+   the heuristic/random pool): stored configs are implicitly calibrated to
+   the legacy near-greedy balance, and the extra exploration at bf ≥ budget
+   turns move choice into single-rollout noise. The scale was restored; the
+   one genuine defect kept from this line of work is the learned-leaf path,
+   now scaled ×100 to match its siblings. Re-tuning exploration on a clean
+   scale belongs to the gated `mcts_sweep` approach, not a code default.
 2. **Evaluator clamp destroyed the signal (high confidence, measured).** The
    champion's learned `state_eval_weights` sum *negative* on typical
    early/mid boards and `BlokusStateEvaluator.evaluate` hard-clamped to
@@ -385,10 +393,12 @@ this budget are what the policy/TD trainers were imitating.
    one random sample masquerading as a Monte-Carlo average. The TT now only
    memoises deterministic results (leaf evals, depth-0 static eval).
 
-Also: root move selection tie-breaks equal visit counts by mean reward
-(matters exactly when bf ≥ budget), and named search profiles
-(`mcts/search_profiles.py`: fast/balanced/strong/teacher; teacher = 1200
-iterations + progressive widening) replace ad-hoc budget arithmetic.
+Also: named search profiles (`mcts/search_profiles.py`:
+fast/balanced/strong/teacher; teacher = 1200 iterations + progressive
+widening) replace ad-hoc budget arithmetic. A root-move tie-break by mean
+reward was tried and reverted: with bf ≥ budget every root child has one
+visit, and the single-rollout Q tie-break measured strictly noisier than
+falling back to the move-ordering heuristic's top choice.
 
 ### 8.3 Fixed: training data came from the wrong agent (high confidence)
 
