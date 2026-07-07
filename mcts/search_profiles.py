@@ -69,8 +69,11 @@ def apply_search_profile(agent_cfg: Dict[str, Any], profile: str) -> Dict[str, A
     cfg = copy.deepcopy(agent_cfg)
     cfg["thinking_time_ms"] = spec["thinking_time_ms"]
     params = cfg.setdefault("params", {})
-    # Champion registry configs historically double-nest params.params.
+    # Champion registry documents historically double-nest the agent config
+    # ({"params": {"params": {...engine params...}, ...}}). The arena reads
+    # cfg["params"] directly, so flatten to the inner engine params.
     if isinstance(params.get("params"), dict):
         params = params["params"]
+        cfg["params"] = params
     params.update(spec["params"])
     return cfg
