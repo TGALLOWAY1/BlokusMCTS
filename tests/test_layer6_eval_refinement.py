@@ -134,9 +134,9 @@ class TestFeatureExtraction:
             manual_sum = sum(
                 evaluator.weights.get(k, 0.0) * v for k, v in features.items()
             )
-            manual_clamped = max(0.0, min(1.0, manual_sum))
-            assert abs(expected - manual_clamped) < 1e-9, (
-                f"Player {player}: evaluate()={expected} != manual={manual_clamped}"
+            manual_squashed = 0.5 * (1.0 + math.tanh(manual_sum))
+            assert abs(expected - manual_squashed) < 1e-9, (
+                f"Player {player}: evaluate()={expected} != manual={manual_squashed}"
             )
 
 
@@ -215,7 +215,7 @@ class TestPhaseDependentEvaluation:
         """Without phase_weights, default single weight vector is used."""
         val = evaluator.evaluate(mid_game_board, Player.RED)
         features = evaluator.extract_features(mid_game_board, Player.RED)
-        manual = max(0.0, min(1.0, sum(
+        manual = 0.5 * (1.0 + math.tanh(sum(
             DEFAULT_WEIGHTS.get(k, 0.0) * v for k, v in features.items()
         )))
         assert abs(val - manual) < 1e-9
