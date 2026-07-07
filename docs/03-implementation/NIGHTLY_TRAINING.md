@@ -18,21 +18,29 @@ workflow state.
 
 ## What it reuses (it does not reinvent the engine)
 
-The "learning" is **re-fitting the Layer-6 state evaluator** on accumulated
-self-play snapshots and **distilling a move policy from MCTS visit counts** (a
-compact log-linear model — still no neural net). The nightly runs a dedicated
-**policy-target collection step** (`training.policy_selfplay` →
-`data/policy_targets.csv`) before the approach comparison, and the `policy`
-approach distils that corpus into the move-policy PUCT prior
+The "learning" is **fitting evaluators on fresh self-play experience**: the
+Layer-6 state evaluator re-fit (`heuristic_tune`), the 45-feature TD leaf value
+(`rich_leaf` / `td`), and **distilling a move policy from MCTS visit counts** (a
+compact log-linear model — still no neural net). Every run starts with a
+wall-clock-capped **data-refresh step** (`--refresh-data` →
+`training.data_refresh`): teacher-budget TD trajectories + evaluator snapshots
+collected from the *current* champion, so the learning approaches train on live
+post-search-fix data instead of a frozen corpus (this was the P1 fix in
+`docs/05-planning/CONTINUOUS_TRAINING_PLAN.md` — without it the nightly loop
+compared near-copies of the champion on stale data and could never ratchet).
+The nightly also runs a dedicated **policy-target collection step**
+(`training.policy_selfplay` → `data/policy_targets.csv`, at the `teacher`
+search profile) before the approach comparison, and the `policy` approach
+distils that corpus into the move-policy PUCT prior
 (`training.policy_learning` → `training/state/policy_weights.json`); see
 `training/README.md` → "Learned move policy". The default approach roster is
-`mcts_sweep,progressive_widening,heuristic_tune` — candidates that are genuinely
-*different* from the champion (the earlier `policy,baseline,heuristic_tune` roster
-had collapsed onto the incumbent: `baseline` reproduced it byte-for-byte and now
-self-retires, `policy` self-distilled back into the fixed heuristic and is held out
-pending a richer model). Evaluation uses the variance-reduced **sequential SPRT
-screen** (`--sequential-eval`), which stops as soon as the paired champion-vs-candidate
-result is conclusive; see `AUDIT_REPORT.md` §7 and `training/evaluation/sequential.py`.
+`rich_leaf,heuristic_tune,mcts_sweep` — the learning candidates first (they
+consume the refreshed corpora) plus one search probe (`baseline` reproduced the
+incumbent byte-for-byte and now self-retires; `policy` self-distilled back into
+the fixed heuristic and is held out pending a richer model). Evaluation uses
+the variance-reduced **sequential SPRT screen** (`--sequential-eval`), which
+stops as soon as the paired champion-vs-candidate result is conclusive; see
+`AUDIT_REPORT.md` §7 and `training/evaluation/sequential.py`.
 Almost everything heavy is imported from existing, tested code:
 
 | Concern | Reused from |
@@ -108,6 +116,39 @@ Reports also live at `training/status.md` and `training/reports/latest_diagnosis
 > drifting distribution is visible at game-level resolution rather than one coarse
 > point per generation. See `record_game_elos` / `champion_game_elo_series` in
 > `training/ratings_db.py`.
+
+### Fresh data every cycle (`--refresh-data`)
+
+The approach-comparison mode (`--approaches …`) previously generated **no new
+game experience** — it only built and compared candidates, so the learning
+approaches kept fitting the same frozen corpora and the champion stayed at
+`gen140`. `--refresh-data` fixes that. Before candidate generation,
+`training.data_refresh.refresh_training_data` runs two capped phases from the
+current registry champion:
+
+1. **TD trajectories** (~70% of the refresh budget): full games with the
+   champion seats searched at `--teacher-profile` (default `teacher`: 1200
+   iterations + progressive widening — strictly deeper than the champion's own
+   play budget, the expert-iteration asymmetry), appended to
+   `data/td_trajectories.csv` with per-row provenance
+   (`gen140@teacher:1200`). `td` / `rich_leaf` train on this corpus.
+2. **Evaluator snapshots** (the remainder): one snapshot-enabled arena at the
+   champion's own play budget, accumulated into `data/champion_snapshots.csv`
+   under a recency cap (`scripts.champion_loop.SNAPSHOT_MAX_ROWS`, newest rows
+   kept). `heuristic_tune` re-fits on this corpus. The pre-search-fix corpus is
+   archived at `data/archive/` and is never trained on again.
+
+The step is hard-capped by `--refresh-minutes` (and at 35% of the run's total
+budget), stops **between** games, and its summary is recorded in the run's
+approach-comparison record (`data_refresh`) so every run's fresh-row count and
+teacher provenance are attributable. The uniform `--thinking-time-ms`
+evaluation override deliberately does **not** apply to the refresh. Both
+corpora accumulate across runs and are committed back by the workflow.
+
+```bash
+# Local refresh outside a nightly run (same code path)
+python -m training.data_refresh --minutes 30 --profile teacher
+```
 
 ### CLI
 

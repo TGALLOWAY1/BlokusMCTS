@@ -128,6 +128,10 @@ def play_game(
     if len(agents) != 4:
         raise ValueError("play_game requires exactly 4 agent configs")
 
+    # Clamp into numpy's legal seed range: large run-derived seeds (e.g. the
+    # nightly's date-based seed) would otherwise overflow RandomState in the
+    # per-agent derivation below.
+    seed = int(seed) % (2**31)
     random.seed(seed)
     np.random.seed(seed)
 
@@ -135,7 +139,7 @@ def play_game(
     agent_instances = {}
     for i, cfg in enumerate(agents):
         ac = AgentConfig.from_dict(cfg)
-        agent_instances[i + 1] = build_agent(ac, seed=seed * 31 + i + 1)
+        agent_instances[i + 1] = build_agent(ac, seed=(seed * 31 + i + 1) % (2**31))
     captured_seats = {
         pid for pid, name in seat_agent.items()
         if capture_agents is None or name in set(capture_agents)
@@ -287,20 +291,33 @@ def collect_trajectories(
     max_turns: int = 2500,
     capture_every_ply: bool = False,
     capture_agents: Optional[Sequence[str]] = None,
+    deadline: Optional[float] = None,
+    min_games: int = 1,
     verbose: bool = False,
 ) -> int:
-    """Play ``num_games`` games and append TD trajectory rows to ``output_path``.
+    """Play up to ``num_games`` games and append TD trajectory rows to ``output_path``.
 
     Returns the total number of rows written. ``output_path`` defaults to
     ``data/td_trajectories.csv`` (see
     :data:`training.trajectory_store.DEFAULT_TRAJECTORY_CSV`).
+
+    ``deadline`` is a ``time.monotonic()`` cutoff: once it has passed, no new game
+    is started (games are never interrupted mid-play). At least ``min_games``
+    games are always played so a tight budget still produces some fresh rows;
+    pass ``min_games=0`` to make the deadline strict.
     """
+    import time
+
     from training.trajectory_store import DEFAULT_TRAJECTORY_CSV
 
     output_path = output_path or DEFAULT_TRAJECTORY_CSV
     created_at = datetime.now(timezone.utc).isoformat()
     total = 0
     for g in range(num_games):
+        if deadline is not None and g >= min_games and time.monotonic() >= deadline:
+            if verbose:
+                print(f"[td_selfplay] deadline reached after {g}/{num_games} games", flush=True)
+            break
         game_seed = seed + g
         game_id = f"{run_id}_g{g:04d}"
         traj = play_game(

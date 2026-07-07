@@ -15,6 +15,23 @@ Read `AUDIT_REPORT.md` §7 and §8 first — this file assumes that context.
 
 ---
 
+## Implementation status (2026-07-07)
+
+| Workstream | Status | Where |
+|---|---|---|
+| **P1** — regenerate fresh experience every cycle | **Implemented.** `run_approaches()` now runs a wall-clock-capped data-refresh step (`--refresh-data`, workflow default on, 45 min cap): teacher-budget TD trajectories → `data/td_trajectories.csv` + a snapshot arena at the champion's play budget → `data/champion_snapshots.csv`, both from the *current* champion with per-row provenance, both committed back by the workflow. Refresh summary is recorded in the run's `data_refresh` record. | `training/data_refresh.py`, `training/nightly_run.py`, workflow |
+| **P2** — teacher stronger than student | **Partially implemented.** Labels are generated at `teacher` (1200 iters + widening) while candidates play/evaluate at the champion's budgets; the policy-target collection step now collects at the `teacher` profile instead of the near-random 40 ms. The teacher-vs-champion-budget head-to-head acceptance test has *not* been run yet; `policy` stays out of the roster. | workflow (policy step), `training/data_refresh.py` |
+| **P3** — SPRT power | **Partially implemented.** `--sprt-elo1` workflow default lowered 70 → 40 (input-overridable) now that candidates train on fresh data; per-game cost already ~6× cheaper post-fix. The arena is still single-process and the synthetic +50-Elo-candidate acceptance test has *not* been run — do not fully trust null results until it has. | workflow |
+| **P4** — retire the poisoned snapshot corpus | **Implemented.** The 44,832-row pre-search-fix corpus is archived at `data/archive/champion_snapshots_pre_searchfix_gen140.csv.gz` (never trained on again); the live corpus regrows from the fixed-search champion via the refresh step under a recency cap (`SNAPSHOT_MAX_ROWS = 30000`, newest kept). `heuristic_tune` self-retires with a clear reason until the fresh corpus reaches 200 rows (~1–2 runs). | `scripts/champion_loop.py`, `data/archive/` |
+| **P5** — exploration in self-play | **Not started.** Do after P1–P4 have produced at least one gated promotion. | — |
+
+Nightly roster is now `rich_leaf,heuristic_tune,mcts_sweep` (learning candidates
+first — they consume the refreshed corpora). Remaining acceptance tests to run:
+P1's `search_quality` depth ≥ 3 check on the teacher profile, P2's
+teacher-vs-play-budget head-to-head, and P3's synthetic +50 Elo gate probe.
+
+---
+
 ## 1. Why the agent is frozen (the core defect)
 
 The nightly workflow (`.github/workflows/nightly-mcts-training.yml`) runs

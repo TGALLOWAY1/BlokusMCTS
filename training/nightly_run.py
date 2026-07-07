@@ -841,10 +841,14 @@ def run_approaches(
     sprt_elo1: float = SPRT_DEFAULT_ELO1,
     sprt_min_games: int = SPRT_DEFAULT_MIN_GAMES,
     sprt_max_games: int = SPRT_DEFAULT_MAX_GAMES,
+    refresh_data: bool = False,
+    teacher_profile: str = "teacher",
+    refresh_minutes: float = 45.0,
 ) -> Dict[str, Any]:
-    """One nightly run as an approach-comparison: generate candidates from each
-    approach, evaluate the created ones against a fixed benchmark pool with fixed
-    seeds, promote only a gate-passing winner, and write reports.
+    """One nightly run as an approach-comparison: (optionally) refresh the training
+    corpora with fresh champion self-play, generate candidates from each approach,
+    evaluate the created ones against a fixed benchmark pool with fixed seeds,
+    promote only a gate-passing winner, and write reports.
 
     Dry-run writes nothing to tracked state (artifacts go to a temp dir); it prints
     the plan and the per-approach created/reason verdicts and returns.
@@ -860,6 +864,32 @@ def run_approaches(
     _ensure_cold_start(state, champion)
     state["run_id"] = run_id
 
+    # 0. Data refresh (P1, CONTINUOUS_TRAINING_PLAN.md): fresh teacher-budget
+    # experience from the CURRENT champion so the learning approaches fit live
+    # data instead of a frozen corpus. Hard-capped so it never starves the
+    # evaluation that decides promotions; anything beyond the cap simply rolls
+    # into the next night's refresh (the corpora accumulate across runs).
+    refresh_summary: Optional[Dict[str, Any]] = None
+    if refresh_data and refresh_minutes > 0 and not dry_run:
+        from training.data_refresh import refresh_training_data
+
+        refresh_budget_s = min(refresh_minutes * 60.0,
+                               time_budget_minutes * 60.0 * 0.35)
+        refresh_summary = refresh_training_data(
+            state, paths,
+            run_id=run_id,
+            budget_s=refresh_budget_s,
+            # Hour-resolution seed: each of the 4 runs/day collects different
+            # games even when the generation counter did not advance.
+            seed=int(_utc_now().strftime("%Y%m%d%H")) * 13 + int(state.get("generation", 0)),
+            teacher_profile=teacher_profile,
+            verbose=verbose,
+        )
+        print(f"[nightly] data refresh: +{refresh_summary['td_rows']} TD rows "
+              f"(labels from {refresh_summary['agent_version']}), "
+              f"+{refresh_summary['snapshot_new_rows']} snapshot rows "
+              f"in {refresh_summary['elapsed_s']}s")
+
     # 1. Candidate generation (budget a quarter of wall-clock to learning).
     # In dry-run, redirect *all* writes (candidate artifacts + freshly-trained TD
     # weights) into a throwaway temp dir so no tracked state is touched.
@@ -872,8 +902,11 @@ def run_approaches(
             ctx_td_weights = str(artifact_root / "td_evaluator_weights.json")
 
     gen_budget = max(60.0, time_budget_minutes * 60.0 * 0.25)
+    # repo_root == artifact_root: in dry-run that redirects every approach-side
+    # write (e.g. rich_leaf's weights artifact) into the temp dir too, keeping
+    # the "dry-run writes no tracked state" promise.
     ctx = ApproachContext(
-        state=state, repo_root=paths.root, run_id=run_id, now_iso=now_iso,
+        state=state, repo_root=artifact_root, run_id=run_id, now_iso=now_iso,
         time_budget_s=gen_budget / max(len(approaches), 1), verbose=verbose,
         td_weights_path=ctx_td_weights,
     )
@@ -895,6 +928,10 @@ def run_approaches(
     if dry_run:
         print(f"[nightly] DRY RUN run_id={run_id} approaches={approaches} "
               f"games={games_per_arena} seeds={seeds} budget_min={time_budget_minutes}")
+        if refresh_data:
+            print(f"[nightly]   data refresh: profile={teacher_profile} "
+                  f"cap={min(refresh_minutes, time_budget_minutes * 0.35):.0f}min "
+                  f"(skipped in dry run)")
         for c in candidates:
             print(f"[nightly]   {c.approach:18s} created={c.created!s:5s} :: {c.reason}")
         print(f"[nightly] {len(created)}/{len(candidates)} candidates created. "
@@ -1081,6 +1118,10 @@ def run_approaches(
         # Persist the sequential (SPRT) screen evidence alongside the comparison so the
         # status report / email can show each candidate's paired verdict and game count.
         record["sprt_screen"] = {n: r.to_dict() for n, r in sprt_results.items()}
+    if refresh_summary is not None:
+        # Attribution: which corpus rows this run added, from which champion at
+        # which teacher budget (acceptance evidence for the P1 refresh step).
+        record["data_refresh"] = refresh_summary
     state["last_approach_comparison"] = record
     state["last_eval"] = None  # superseded by last_approach_comparison
 
@@ -1227,6 +1268,20 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--sprt-max-games", type=int, default=SPRT_DEFAULT_MAX_GAMES,
                    help=f"SPRT: give up (inconclusive → hold) beyond this many paired games "
                         f"per candidate (default {SPRT_DEFAULT_MAX_GAMES}).")
+    # --- Data refresh (P1, CONTINUOUS_TRAINING_PLAN.md) ---
+    p.add_argument("--refresh-data", action="store_true",
+                   help="Before candidate generation, refresh the training corpora with "
+                        "fresh champion self-play: teacher-budget TD trajectories "
+                        "(data/td_trajectories.csv) + evaluator snapshots "
+                        "(data/champion_snapshots.csv). Wall-clock capped by "
+                        "--refresh-minutes so evaluation is never starved.")
+    p.add_argument("--teacher-profile", default="teacher",
+                   help="Search profile for the refresh's trajectory champion seats "
+                        "(default 'teacher': 1200 iterations + progressive widening — "
+                        "strictly deeper search than the champion's play budget).")
+    p.add_argument("--refresh-minutes", type=float, default=45.0,
+                   help="Hard wall-clock cap on the data-refresh step (default 45; also "
+                        "capped at 35%% of the run's total time budget).")
     p.add_argument("--dry-run", action="store_true", help="Print the plan and exit.")
     p.add_argument("--verbose", action="store_true")
     return p.parse_args(argv)
@@ -1265,6 +1320,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 sprt_elo1=args.sprt_elo1,
                 sprt_min_games=args.sprt_min_games,
                 sprt_max_games=args.sprt_max_games,
+                refresh_data=args.refresh_data,
+                teacher_profile=args.teacher_profile,
+                refresh_minutes=args.refresh_minutes,
             )
             return 0
         run(
