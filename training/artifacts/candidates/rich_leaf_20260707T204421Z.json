@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "approach": "rich_leaf",
+  "name": "rich_leaf",
+  "run_id": "20260707T204421Z",
+  "created_at": "2026-07-07T20:44:21.739303+00:00",
+  "created": true,
+  "reason": "rich_leaf: 45-feature TD leaf value (subset 'score') replacing rollouts; trained on 808 rows",
+  "agent_config": {
+    "params": {
+      "adaptive_rollout_depth_avg_bf": 80.0,
+      "adaptive_rollout_depth_base": 5,
+      "adaptive_rollout_depth_enabled": false,
+      "deterministic_time_budget": true,
+      "exploration_constant": 1.414,
+      "heuristic_move_ordering": true,
+      "iterations_per_ms": 0.5,
+      "minimax_backup_alpha": 0.0,
+      "num_workers": 1,
+      "parallel_strategy": "root",
+      "rave_enabled": false,
+      "rave_k": 1000,
+      "rollout_cutoff_depth": 12,
+      "rollout_policy": "greedy_sample",
+      "state_eval_weights": {
+        "accessible_corners": 0.243,
+        "center_proximity": 0.0,
+        "largest_remaining_piece_size": -0.231,
+        "opponent_avg_mobility": -0.3,
+        "reachable_empty_squares": 0.081,
+        "remaining_piece_area": -0.0295,
+        "squares_placed": 0.0295,
+        "territory_enclosure_area": 0.0
+      },
+      "use_transposition_table": true,
+      "rich_leaf_eval_enabled": true,
+      "rich_leaf_weights_path": "/home/runner/work/MCTS_Laboratory/MCTS_Laboratory/training/state/rich_leaf_weights.json",
+      "rich_leaf_feature_subset": "score"
+    },
+    "thinking_time_ms": 500,
+    "type": "mcts",
+    "name": "rich_leaf"
+  },
+  "metrics": {
+    "source_rows": 808,
+    "rows_by_phase": {
+      "early": 242,
+      "mid": 331,
+      "late": 235
+    },
+    "trained_phases": {
+      "early": true,
+      "mid": true,
+      "late": true
+    },
+    "td_loss": 0.0066,
+    "mean_abs_td_error": 0.035707,
+    "learning_method": "temporal_difference",
+    "feature_subset": "score"
+  }
+}

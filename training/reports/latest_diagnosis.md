@@ -1,9 +1,9 @@
 # Nightly Training Diagnosis
 
-_Generated: 2026-07-07 20:27 UTC · run `20260707T151216Z` · generation 162_
+_Generated: 2026-07-08 01:59 UTC · run `20260707T204421Z` · generation 163_
 
 **2 finding(s):**
 
-- 🟠 **[warn] promotion_drought** — 22 generations since the last promotion (gen 140).
-- 🔵 **[info] elo_variance** — Champion Elo swung 71 (peak 1394 → 1323) but the champion config is unchanged (no promotion in this window), so this is sampling variance, not a skill regression. Treat the Elo timeline as noise until a promotion actually changes the agent.
-  - _evidence: last 6 points: [1394, 1389, 1307, 1326, 1323, 1323]_
+- 🟠 **[warn] promotion_drought** — 23 generations since the last promotion (gen 140).
+- 🔵 **[info] refit_pending** — Only 96 snapshot rows accumulated (need 200 before the evaluator can re-fit) — no candidate will be generated until then.
+  - _evidence: rows=96_
