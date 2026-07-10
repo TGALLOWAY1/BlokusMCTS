@@ -78,18 +78,18 @@
       }
     }
   ],
-  "days_trained": 48,
-  "elo": 1405.2895478662288,
+  "days_trained": 49,
+  "elo": 1360.7678579785809,
   "estimate_confidence": "medium",
-  "estimated_days_to_target": 73.8,
+  "estimated_days_to_target": 59.2,
   "estimated_games_to_target": null,
-  "games_today": 153,
-  "generation": 170,
+  "games_today": 167,
+  "generation": 171,
   "human_target_elo": 1700,
   "last_approach_comparison": {
     "champion_status": {
       "ever_promoted": true,
-      "generation": 170,
+      "generation": 171,
       "last_promoted_generation": 140,
       "measurement_drift": false,
       "promoted_this_run": false
@@ -98,16 +98,16 @@
     "data_refresh": {
       "agent_version": "gen140@teacher:1200",
       "budget_s": 2700.0,
-      "elapsed_s": 2744.7,
+      "elapsed_s": 2867.5,
       "profile": "teacher",
-      "run_id": "20260709T151326Z",
-      "snapshot_corpus_rows": 668,
-      "snapshot_games": 1,
-      "snapshot_new_rows": 32,
-      "td_elapsed_s": 2462.2,
-      "td_rows": 77
+      "run_id": "20260709T204602Z",
+      "snapshot_corpus_rows": 796,
+      "snapshot_games": 4,
+      "snapshot_new_rows": 128,
+      "td_elapsed_s": 1947.0,
+      "td_rows": 79
     },
-    "generated_at": "2026-07-09T15:13:26.645968+00:00",
+    "generated_at": "2026-07-09T20:46:02.680958+00:00",
     "pool": {
       "opponents": [
         "heuristic",
@@ -126,21 +126,21 @@
       {
         "approach": "rich_leaf",
         "created": true,
-        "elo_delta": -35.83921383500501,
-        "games": 56,
+        "elo_delta": 65.32541627188289,
+        "games": 61,
         "gate_passed": false,
-        "gate_reason": "HOLD rich_leaf: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].",
+        "gate_reason": "HOLD rich_leaf: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'trueskill_improvement'].",
         "metrics": {
           "feature_subset": "score",
           "learning_method": "temporal_difference",
-          "mean_abs_td_error": 0.042981,
+          "mean_abs_td_error": 0.044581,
           "rows_by_phase": {
-            "early": 394,
-            "late": 424,
-            "mid": 535
+            "early": 416,
+            "late": 454,
+            "mid": 562
           },
-          "source_rows": 1353,
-          "td_loss": 0.00698,
+          "source_rows": 1432,
+          "td_loss": 0.007338,
           "trained_phases": {
             "early": true,
             "late": true,
@@ -149,42 +149,42 @@
         },
         "name": "rich_leaf",
         "promoted": false,
-        "reason": "rich_leaf: 45-feature TD leaf value (subset 'score') replacing rollouts; trained on 1353 rows \u2014 [sprt] rich_leaf: inconclusive after 56 paired games (22W-3D-31L, pairwise 42%, \u0394elo\u2248-56, LLR=-1.49 in [-2.94,2.94])",
-        "runtime_s": 5445.624485296999,
-        "trueskill_delta": -8.47461412391602,
-        "win_rate": 0.25,
-        "win_rate_vs_champion": 0.41509433962264153
+        "reason": "rich_leaf: 45-feature TD leaf value (subset 'score') replacing rollouts; trained on 1432 rows \u2014 [sprt] rich_leaf: inconclusive after 61 paired games (25W-2D-34L, pairwise 43%, \u0394elo\u2248-52, LLR=-1.49 in [-2.94,2.94])",
+        "runtime_s": 5364.228150391999,
+        "trueskill_delta": -5.460602912796681,
+        "win_rate": 0.29508196721311475,
+        "win_rate_vs_champion": 0.423728813559322
       },
       {
         "approach": "heuristic_tuning",
         "created": true,
-        "elo_delta": -119.67231264044835,
-        "games": 48,
+        "elo_delta": -42.72980074430211,
+        "games": 54,
         "gate_passed": false,
         "gate_reason": "HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].",
         "metrics": {
           "learning_method": "regression",
           "r2_by_phase": {
-            "early": 0.606713674057397,
-            "late": 0.8119688998041619,
-            "mid": 0.746695048876352
+            "early": 0.5767925220486969,
+            "late": 0.7784507159742341,
+            "mid": 0.7320954047463458
           },
-          "r2_global": 0.5963643510095015,
-          "training_rows": 668
+          "r2_global": 0.5752149800494617,
+          "training_rows": 796
         },
         "name": "heuristic_tune",
         "promoted": false,
-        "reason": "heuristic: re-fit Layer-6 weights from 668 snapshot rows \u2014 [sprt] heuristic_tune: inconclusive after 48 paired games (18W-1D-29L, pairwise 39%, \u0394elo\u2248-81, LLR=-1.62 in [-2.94,2.94])",
-        "runtime_s": 5373.866390894,
-        "trueskill_delta": -8.721702179622312,
-        "win_rate": 0.22916666666666666,
-        "win_rate_vs_champion": 0.3829787234042553
+        "reason": "heuristic: re-fit Layer-6 weights from 796 snapshot rows \u2014 [sprt] heuristic_tune: inconclusive after 54 paired games (22W-1D-31L, pairwise 42%, \u0394elo\u2248-58, LLR=-1.42 in [-2.94,2.94])",
+        "runtime_s": 5450.848297724999,
+        "trueskill_delta": -6.8336815596367515,
+        "win_rate": 0.3148148148148148,
+        "win_rate_vs_champion": 0.41509433962264153
       },
       {
         "approach": "mcts_param_sweep",
         "created": true,
-        "elo_delta": -126.23513188898937,
-        "games": 49,
+        "elo_delta": -118.76086031676914,
+        "games": 52,
         "gate_passed": false,
         "gate_reason": "HOLD mcts_sweep: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].",
         "metrics": {
@@ -200,14 +200,14 @@
         },
         "name": "mcts_sweep",
         "promoted": false,
-        "reason": "mcts_sweep: exploration_constant 1.414 -> 1.0 over grid [0.7, 1.0, 1.414, 2.0] (on corrected strong search) \u2014 [sprt] mcts_sweep: inconclusive after 49 paired games (18W-1D-30L, pairwise 38%, \u0394elo\u2248-87, LLR=-1.74 in [-2.94,2.94])",
-        "runtime_s": 5397.041718541999,
-        "trueskill_delta": -11.253739168459965,
-        "win_rate": 0.29591836734693877,
-        "win_rate_vs_champion": 0.375
+        "reason": "mcts_sweep: exploration_constant 1.414 -> 1.0 over grid [0.7, 1.0, 1.414, 2.0] (on corrected strong search) \u2014 [sprt] mcts_sweep: inconclusive after 52 paired games (19W-1D-32L, pairwise 38%, \u0394elo\u2248-89, LLR=-1.88 in [-2.94,2.94])",
+        "runtime_s": 5223.224512165998,
+        "trueskill_delta": -11.232541004890855,
+        "win_rate": 0.2980769230769231,
+        "win_rate_vs_champion": 0.37254901960784315
       }
     ],
-    "run_id": "20260709T151326Z",
+    "run_id": "20260709T204602Z",
     "seeds": [
       20260620,
       20260621
@@ -215,37 +215,37 @@
     "sprt_screen": {
       "heuristic_tune": {
         "approach": "heuristic_tuning",
-        "blocks_run": 6,
+        "blocks_run": 7,
         "bounds": [
           -2.944,
           2.944
         ],
         "decision": "inconclusive",
-        "elo_estimate": -81.1,
+        "elo_estimate": -58.5,
         "hypotheses_elo": [
           0.0,
           40.0
         ],
         "is_improvement": false,
-        "llr": -1.618,
-        "mean_score_diff": -3.688,
-        "n_games": 48,
+        "llr": -1.42,
+        "mean_score_diff": -3.241,
+        "n_games": 54,
         "name": "heuristic_tune",
-        "pairwise_win_rate": 0.3854,
+        "pairwise_win_rate": 0.4167,
         "pairwise_win_rate_ci": [
-          0.2611,
-          0.5267
+          0.295,
+          0.5494
         ],
-        "permutation_p_value": 0.0685,
+        "permutation_p_value": 0.135,
         "record": {
           "draws": 1,
-          "losses": 29,
-          "wins": 18
+          "losses": 31,
+          "wins": 22
         },
-        "runtime_s": 5373.87,
+        "runtime_s": 5450.85,
         "score_diff_ci": [
-          -7.958,
-          0.417
+          -7.389,
+          0.815
         ]
       },
       "mcts_sweep": {
@@ -256,82 +256,82 @@
           2.944
         ],
         "decision": "inconclusive",
-        "elo_estimate": -86.9,
+        "elo_estimate": -88.7,
         "hypotheses_elo": [
           0.0,
           40.0
         ],
         "is_improvement": false,
-        "llr": -1.741,
-        "mean_score_diff": -6.367,
-        "n_games": 49,
+        "llr": -1.877,
+        "mean_score_diff": -5.635,
+        "n_games": 52,
         "name": "mcts_sweep",
-        "pairwise_win_rate": 0.3776,
+        "pairwise_win_rate": 0.375,
         "pairwise_win_rate_ci": [
-          0.2554,
-          0.5175
+          0.2563,
+          0.5109
         ],
-        "permutation_p_value": 0.0115,
+        "permutation_p_value": 0.0315,
         "record": {
           "draws": 1,
-          "losses": 30,
-          "wins": 18
+          "losses": 32,
+          "wins": 19
         },
-        "runtime_s": 5397.04,
+        "runtime_s": 5223.22,
         "score_diff_ci": [
-          -11.469,
-          -1.592
+          -10.577,
+          -0.692
         ]
       },
       "rich_leaf": {
         "approach": "rich_leaf",
-        "blocks_run": 7,
+        "blocks_run": 8,
         "bounds": [
           -2.944,
           2.944
         ],
         "decision": "inconclusive",
-        "elo_estimate": -56.3,
+        "elo_estimate": -51.6,
         "hypotheses_elo": [
           0.0,
           40.0
         ],
         "is_improvement": false,
-        "llr": -1.487,
-        "mean_score_diff": -3.339,
-        "n_games": 56,
+        "llr": -1.489,
+        "mean_score_diff": -2.869,
+        "n_games": 61,
         "name": "rich_leaf",
-        "pairwise_win_rate": 0.4196,
+        "pairwise_win_rate": 0.4262,
         "pairwise_win_rate_ci": [
-          0.2997,
-          0.5499
+          0.3102,
+          0.551
         ],
-        "permutation_p_value": 0.133,
+        "permutation_p_value": 0.1935,
         "record": {
-          "draws": 3,
-          "losses": 31,
-          "wins": 22
+          "draws": 2,
+          "losses": 34,
+          "wins": 25
         },
-        "runtime_s": 5445.62,
+        "runtime_s": 5364.23,
         "score_diff_ci": [
-          -7.589,
-          0.839
+          -7.148,
+          1.393
         ]
       }
     },
     "trajectory": {
       "best": 1409.9,
-      "current": 1405.3,
-      "gap_to_best": -4.6,
+      "current": 1360.8,
+      "gap_to_best": -49.1,
       "noise": {
-        "mean": 1373.8,
+        "mean": 1371.9,
         "n": 20,
         "spread": 102.6,
-        "stddev": 33.8
+        "stddev": 33.5
       },
-      "rolling_last": 1392.5,
-      "significant": false,
-      "trend_per_step": 1.1364
+      "rolling_last": 1386.2,
+      "significant": true,
+      "trend_per_step": 1.1519
     },
     "winner": null
   },
@@ -339,11 +339,11 @@
   "last_eval": null,
   "last_promoted_generation": 140,
   "last_refit_generation": -1,
-  "run_id": "20260709T151326Z",
+  "run_id": "20260709T204602Z",
   "schema_version": 1,
-  "total_games": 4715,
-  "total_snapshot_rows": 668,
-  "trueskill_mu": 53.28201377213437,
+  "total_games": 4882,
+  "total_snapshot_rows": 796,
+  "trueskill_mu": 52.71279841470864,
   "trueskill_ratings": {
     "baseline": {
       "conservative": 31.483240156081997,
@@ -352,34 +352,34 @@
       "sigma": 5.032971363615149
     },
     "baseline_mcts_fast": {
-      "conservative": 25.621743306694782,
-      "games_played": 1288,
-      "mu": 40.17026170264505,
-      "sigma": 4.849506131983422
+      "conservative": 25.27804677213603,
+      "games_played": 1367,
+      "mu": 39.80249404476703,
+      "sigma": 4.841482424210334
     },
     "baseline_mcts_strong": {
-      "conservative": 40.14032268671492,
-      "games_played": 1288,
-      "mu": 54.57259850910043,
-      "sigma": 4.810758607461838
+      "conservative": 38.862791224088475,
+      "games_played": 1367,
+      "mu": 53.2686020914441,
+      "sigma": 4.801936955785209
     },
     "champion": {
-      "conservative": 38.25097492202081,
-      "games_played": 4715,
-      "mu": 53.28201377213437,
-      "sigma": 5.010346283371186
+      "conservative": 37.64435819569135,
+      "games_played": 4882,
+      "mu": 52.71279841470864,
+      "sigma": 5.022813406339093
     },
     "heuristic": {
-      "conservative": -17.190984883343425,
-      "games_played": 3427,
-      "mu": -0.5945992497444506,
-      "sigma": 5.532128544532991
+      "conservative": -16.485991128301016,
+      "games_played": 3515,
+      "mu": 0.21484752604597668,
+      "sigma": 5.566946218115664
     },
     "heuristic_tune": {
-      "conservative": 28.459668564574603,
-      "games_played": 912,
-      "mu": 43.35248757838579,
-      "sigma": 4.964273004603729
+      "conservative": 29.06060155796084,
+      "games_played": 966,
+      "mu": 43.978980492504945,
+      "sigma": 4.972792978181368
     },
     "mcts_deep_cutoff": {
       "conservative": 22.791317804178846,
@@ -460,10 +460,10 @@
       "sigma": 5.700806616465989
     },
     "mcts_sweep": {
-      "conservative": 24.66132522122857,
-      "games_played": 647,
-      "mu": 39.89376055863762,
-      "sigma": 5.077478445803016
+      "conservative": 23.937561724657787,
+      "games_played": 699,
+      "mu": 39.15794293371322,
+      "sigma": 5.073460403018479
     },
     "policy": {
       "conservative": 28.761437744703006,
@@ -478,16 +478,16 @@
       "sigma": 6.134767436071878
     },
     "random": {
-      "conservative": -106.0261426485357,
-      "games_played": 3427,
-      "mu": -83.98011518078329,
-      "sigma": 7.348675822584138
+      "conservative": -108.33828846892571,
+      "games_played": 3515,
+      "mu": -86.0106500178849,
+      "sigma": 7.442546150346939
     },
     "rich_leaf": {
-      "conservative": 25.51838318004365,
-      "games_played": 524,
-      "mu": 40.56535995367062,
-      "sigma": 5.015658924542324
+      "conservative": 28.142160128487767,
+      "games_played": 585,
+      "mu": 43.18438594901849,
+      "sigma": 5.014075273510241
     },
     "td": {
       "conservative": -5.2278488109922705,
@@ -496,6 +496,6 @@
       "sigma": 5.125179427286321
     }
   },
-  "trueskill_sigma": 5.010346283371186,
-  "updated_at": "2026-07-09T20:29:29.100593+00:00"
+  "trueskill_sigma": 5.022813406339093,
+  "updated_at": "2026-07-10T02:01:12.928516+00:00"
 }

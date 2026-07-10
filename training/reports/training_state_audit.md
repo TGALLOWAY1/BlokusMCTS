@@ -6,22 +6,22 @@
 - Last promoted generation: 140
 
 ## Latest generation
-- Generation: 170
-- Run: 20260709T151326Z (153 games, Elo 1405.2895478662288)
-- Recent Elo trend per recorded game/run point: 9.360
+- Generation: 171
+- Run: 20260709T204602Z (167 games, Elo 1360.7678579785809)
+- Recent Elo trend per recorded game/run point: 5.973
 
 ## Promotion decisions
-- rich_leaf / rich_leaf: games=56 promoted=False reason=HOLD rich_leaf: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
-- heuristic_tuning / heuristic_tune: games=48 promoted=False reason=HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
-- mcts_param_sweep / mcts_sweep: games=49 promoted=False reason=HOLD mcts_sweep: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
+- rich_leaf / rich_leaf: games=61 promoted=False reason=HOLD rich_leaf: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'trueskill_improvement'].
+- heuristic_tuning / heuristic_tune: games=54 promoted=False reason=HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
+- mcts_param_sweep / mcts_sweep: games=52 promoted=False reason=HOLD mcts_sweep: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
 
 ## Gate satisfiability
 - Required: 20 games over 2 seeds
-- Latest max candidate games: 56 over 2 seeds
+- Latest max candidate games: 61 over 2 seeds
 - Any candidate satisfiable under latest counts: True
 - All created candidates satisfy game floor: True
 - Under game floor: {}
-- Candidate game counts: {'rich_leaf': 56, 'heuristic_tune': 48, 'mcts_sweep': 49}
+- Candidate game counts: {'rich_leaf': 61, 'heuristic_tune': 54, 'mcts_sweep': 52}
 
 ## Benchmark pool
 - Version: benchmark_v2
@@ -29,9 +29,9 @@
 - Stable MCTS anchors: 3
 
 ## State/history validation
-- History rows: 170
-- By kind: {'legacy_generation': 123, 'approach_comparison': 47}
-- Approach-comparison rows: 47 · legacy rows: 123 · unknown rows: 0
+- History rows: 171
+- By kind: {'legacy_generation': 123, 'approach_comparison': 48}
+- Approach-comparison rows: 48 · legacy rows: 123 · unknown rows: 0
 - Malformed rows: 0
 - Duplicate keys: 0
 - Missing result-like fields (approach rows only): 0
