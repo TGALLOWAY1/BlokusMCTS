@@ -1,49 +1,49 @@
 # Nightly Training — Approach Comparison
 
-_Run `20260710T093326Z` · generated 2026-07-10T09:33:26.917975+00:00_
+_Run `20260710T150635Z` · generated 2026-07-10T15:06:35.698011+00:00_
 
 **Promoted this run:** none
 **Benchmark pool:** benchmark_v2 — opponents heuristic, random, baseline_mcts_fast, baseline_mcts_strong, best_historical; seeds [20260620, 20260621]
-**Data refresh:** +74 TD rows (labels from `gen140@teacher:1200`) · +96 snapshot rows (corpus 956) · 2935.1s of 2700.0s budget
+**Data refresh:** +116 TD rows (labels from `gen140@teacher:1200`) · +64 snapshot rows (corpus 1020) · 2719.4s of 2700.0s budget
 
 ## Champion Elo trajectory
 
-- Current: **1384.5** · Best: 1409.9 · Gap to best: -25.3
-- Rolling avg: 1381.0 · Trend/step: 1.187
-- Elo noise floor (σ over fixed-config tail): ±32.5 (spread 102.6, n=20)
-- Move beyond noise floor? **no (within noise)**
+- Current: **1284.1** · Best: 1409.9 · Gap to best: -125.8
+- Rolling avg: 1358.6 · Trend/step: 1.1724
+- Elo noise floor (σ over fixed-config tail): ±36.9 (spread 125.8, n=20)
+- Move beyond noise floor? **yes**
 
 ## Approaches
 
 | Approach | Created | Games | Win% vs Champ | Elo Δ | TrueSkill Δ | Promoted | Reason |
 |---|---|---|---|---|---|---|---|
-| rich_leaf | Yes | 56 | 42% | -39.8 | -8.21 | No | HOLD rich_leaf: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement']. |
-| heuristic_tuning | Yes | 48 | 42% | -98.2 | -7.78 | No | HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement']. |
-| mcts_param_sweep | Yes | 48 | 38% | -108.4 | -10.54 | No | HOLD mcts_sweep: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement']. |
+| rich_leaf | Yes | 80 | 45% | -90.3 | -8.75 | No | HOLD rich_leaf: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement']. |
+| heuristic_tuning | Yes | 70 | 46% | +93.8 | -1.32 | No | HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'trueskill_improvement']. |
+| mcts_param_sweep | Yes | 69 | 42% | +60.4 | -7.62 | No | HOLD mcts_sweep: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'trueskill_improvement']. |
 
 ## Detail
 
 ### rich_leaf (`rich_leaf`)
 
-- Created: yes — rich_leaf: 45-feature TD leaf value (subset 'score') replacing rollouts; trained on 1584 rows — [sprt] rich_leaf: inconclusive after 56 paired games (22W-3D-31L, pairwise 42%, Δelo≈-56, LLR=-1.49 in [-2.94,2.94])
-- Games: 56 · Win rate (battery): 0.29 · Runtime: 5399.9s
-- Elo Δ vs champion: -39.8 · TrueSkill μ Δ: -8.21
+- Created: yes — rich_leaf: 45-feature TD leaf value (subset 'score') replacing rollouts; trained on 1700 rows — [sprt] rich_leaf: inconclusive after 80 paired games (34W-4D-42L, pairwise 45%, Δelo≈-35, LLR=-1.53 in [-2.94,2.94])
+- Games: 80 · Win rate (battery): 0.33 · Runtime: 5456.1s
+- Elo Δ vs champion: -90.3 · TrueSkill μ Δ: -8.75
 - Gate: HOLD rich_leaf: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
-- Metrics: `{'source_rows': 1584, 'rows_by_phase': {'early': 460, 'mid': 621, 'late': 503}, 'trained_phases': {'early': True, 'mid': True, 'late': True}, 'td_loss': 0.007861, 'mean_abs_td_error': 0.045581, 'learning_method': 'temporal_difference', 'feature_subset': 'score'}`
+- Metrics: `{'source_rows': 1700, 'rows_by_phase': {'early': 493, 'mid': 662, 'late': 545}, 'trained_phases': {'early': True, 'mid': True, 'late': True}, 'td_loss': 0.006954, 'mean_abs_td_error': 0.045717, 'learning_method': 'temporal_difference', 'feature_subset': 'score'}`
 
 ### heuristic_tuning (`heuristic_tune`)
 
-- Created: yes — heuristic: re-fit Layer-6 weights from 956 snapshot rows — [sprt] heuristic_tune: inconclusive after 48 paired games (20W-0D-28L, pairwise 42%, Δelo≈-58, LLR=-1.24 in [-2.94,2.94])
-- Games: 48 · Win rate (battery): 0.30 · Runtime: 5310.3s
-- Elo Δ vs champion: -98.2 · TrueSkill μ Δ: -7.78
-- Gate: HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
-- Metrics: `{'training_rows': 956, 'r2_global': 0.5791214296822369, 'r2_by_phase': {'early': 0.5581904324480038, 'mid': 0.7090059846154786, 'late': 0.7816384715608355}, 'learning_method': 'regression'}`
+- Created: yes — heuristic: re-fit Layer-6 weights from 1020 snapshot rows — [sprt] heuristic_tune: inconclusive after 70 paired games (31W-2D-37L, pairwise 46%, Δelo≈-30, LLR=-1.19 in [-2.94,2.94])
+- Games: 70 · Win rate (battery): 0.34 · Runtime: 5432.0s
+- Elo Δ vs champion: +93.8 · TrueSkill μ Δ: -1.32
+- Gate: HOLD heuristic_tune: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'trueskill_improvement'].
+- Metrics: `{'training_rows': 1020, 'r2_global': 0.5769981278158323, 'r2_by_phase': {'early': 0.546385733074361, 'mid': 0.7106026858949928, 'late': 0.7829950558458972}, 'learning_method': 'regression'}`
 
 ### mcts_param_sweep (`mcts_sweep`)
 
-- Created: yes — mcts_sweep: exploration_constant 1.414 -> 1.0 over grid [0.7, 1.0, 1.414, 2.0] (on corrected strong search) — [sprt] mcts_sweep: inconclusive after 48 paired games (18W-1D-29L, pairwise 39%, Δelo≈-81, LLR=-1.62 in [-2.94,2.94])
-- Games: 48 · Win rate (battery): 0.30 · Runtime: 5355.8s
-- Elo Δ vs champion: -108.4 · TrueSkill μ Δ: -10.54
-- Gate: HOLD mcts_sweep: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'elo_improvement', 'trueskill_improvement'].
+- Created: yes — mcts_sweep: exploration_constant 1.414 -> 1.0 over grid [0.7, 1.0, 1.414, 2.0] (on corrected strong search) — [sprt] mcts_sweep: inconclusive after 69 paired games (28W-2D-39L, pairwise 42%, Δelo≈-56, LLR=-1.77 in [-2.94,2.94])
+- Games: 69 · Win rate (battery): 0.33 · Runtime: 5367.0s
+- Elo Δ vs champion: +60.4 · TrueSkill μ Δ: -7.62
+- Gate: HOLD mcts_sweep: failed ['conservative_promotes_candidate', 'beats_champion_head_to_head', 'trueskill_improvement'].
 - Metrics: `{'swept_param': 'exploration_constant', 'grid': [0.7, 1.0, 1.414, 2.0], 'chosen': 1.0, 'previous': 1.414}`
 
