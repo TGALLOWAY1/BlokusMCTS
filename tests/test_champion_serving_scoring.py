@@ -351,10 +351,10 @@ def test_house_scoring_includes_positional_bonuses():
     assert game.get_score(Player.RED) == base + bonus
 
 
-def test_house_scoring_is_default():
-    # Existing arena runs / experiments construct BlokusGame() with no mode and
-    # must keep the historical house behavior.
-    assert BlokusGame().scoring_mode == "house"
+def test_standard_scoring_is_default():
+    # Standard Blokus is the training/evaluation objective (rescue decision
+    # D-002); house scoring is explicit opt-in for historical comparisons.
+    assert BlokusGame().scoring_mode == "standard"
 
 
 def test_standard_and_house_diverge_on_same_position():

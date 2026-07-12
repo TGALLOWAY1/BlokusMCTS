@@ -31,7 +31,7 @@ from analytics.winprob.features import (
     extract_player_snapshot_features,
 )
 from engine.board import Player
-from engine.game import BlokusGame
+from engine.game import SCORING_MODE_STANDARD, VALID_SCORING_MODES, BlokusGame
 from engine.move_generator import LegalMoveGenerator, Move
 from engine.pieces import PieceGenerator
 from mcts.champion_profile import CHALLENGE_CHAMPION_PROFILE, build_mcts_kwargs, load_challenge_champion_profile
@@ -159,6 +159,9 @@ class RunConfig:
     max_turns: int = DEFAULT_MAX_TURNS
     notes: str = ""
     snapshots: SnapshotConfig = field(default_factory=SnapshotConfig)
+    # Scoring objective for arena games. Standard is the evaluation target
+    # (decision D-002); "house" is explicit opt-in for historical comparisons.
+    scoring_mode: str = SCORING_MODE_STANDARD
 
     @classmethod
     def from_dict(cls, config: Mapping[str, Any]) -> RunConfig:
@@ -179,6 +182,7 @@ class RunConfig:
         if not isinstance(snapshots_raw, Mapping):
             raise ValueError("RunConfig 'snapshots' must be an object when provided.")
         snapshots = SnapshotConfig.from_dict(snapshots_raw)
+        scoring_mode = str(config.get("scoring_mode", SCORING_MODE_STANDARD))
         run_config = cls(
             agents=agents,
             num_games=num_games,
@@ -188,6 +192,7 @@ class RunConfig:
             max_turns=max_turns,
             notes=notes,
             snapshots=snapshots,
+            scoring_mode=scoring_mode,
         )
         run_config.validate()
         return run_config
@@ -207,6 +212,11 @@ class RunConfig:
             )
         if self.max_turns <= 0:
             raise ValueError("max_turns must be > 0.")
+        if self.scoring_mode not in VALID_SCORING_MODES:
+            raise ValueError(
+                f"Unsupported scoring_mode '{self.scoring_mode}'. "
+                f"Expected one of {sorted(VALID_SCORING_MODES)}."
+            )
         self.snapshots.validate()
 
     def to_dict(self) -> Dict[str, Any]:
@@ -219,6 +229,7 @@ class RunConfig:
             "max_turns": self.max_turns,
             "notes": self.notes,
             "snapshots": self.snapshots.to_dict(),
+            "scoring_mode": self.scoring_mode,
         }
 
     @property
@@ -698,7 +709,7 @@ def run_single_game(
         for agent_name in set(seat_assignment.values())
     }
 
-    game = BlokusGame()
+    game = BlokusGame(scoring_mode=run_config.scoring_mode)
     move_generator = LegalMoveGenerator()
     passes = 0
     invalid_actions = 0

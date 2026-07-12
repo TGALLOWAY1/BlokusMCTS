@@ -981,7 +981,7 @@ class GameManager:
             move_count=game.get_move_count(),
             game_over=game.is_game_over(),
             winner=self._convert_player_back(game.winner) if game.winner else None,
-            scoring_mode=game_data.get('scoring_mode', ScoringMode.HOUSE),
+            scoring_mode=game_data.get('scoring_mode', ScoringMode.STANDARD),
             legal_moves=legal_moves,
             created_at=game_data['created_at'],
             updated_at=game_data['updated_at'],

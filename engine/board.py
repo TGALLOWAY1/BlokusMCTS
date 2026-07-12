@@ -26,6 +26,10 @@ class Player(Enum):
 # Pre-computed player list to avoid repeated list(Player) allocations
 _PLAYERS = list(Player)
 
+# Piece id of the 1-square monomino (== pieces.PieceType.MONOMINO.value; kept as a
+# literal so board.py stays independent of the piece catalogue).
+MONOMINO_PIECE_ID = 1
+
 
 @dataclass
 class Position:
@@ -60,6 +64,9 @@ class Board:
             Player.GREEN: Position(self.SIZE - 1, 0),
         }
         self.player_pieces_used = {player: set() for player in Player}
+        # Last piece id each player placed (None until their first placement).
+        # Needed for standard Blokus scoring: +5 if the monomino was played last.
+        self.player_last_piece: Dict[Player, Optional[int]] = dict.fromkeys(Player)
         self.player_first_move = dict.fromkeys(Player, True)
         self.game_over = False
         self.current_player = Player.RED
@@ -541,6 +548,7 @@ class Board:
 
         # Record the piece as used
         self.player_pieces_used[player].add(piece_id)
+        self.player_last_piece[player] = piece_id
 
         # Mark first move as completed
         self.player_first_move[player] = False
@@ -561,11 +569,13 @@ class Board:
 
     def get_score(self, player: Player) -> int:
         """
-        Calculate score for a player.
-        
+        Calculate score for a player (standard Blokus base scoring).
+
         Score is based on:
         - Number of squares covered by pieces
-        - Bonus for using all pieces
+        - +15 bonus for using all 21 pieces
+        - +5 additional bonus if all pieces were used AND the monomino was the
+          last piece placed (standard Blokus rule)
         """
         # Count squares covered by player
         squares_covered = np.sum(self.grid == player.value)
@@ -573,6 +583,8 @@ class Board:
         # Bonus for using all pieces (21 pieces total)
         if len(self.player_pieces_used[player]) == 21:
             squares_covered += 15  # Bonus for using all pieces
+            if self.player_last_piece[player] == MONOMINO_PIECE_ID:
+                squares_covered += 5  # Monomino-played-last bonus
 
         return squares_covered
 
@@ -649,6 +661,7 @@ class Board:
         new_board = object.__new__(Board)
         new_board.grid = self.grid.copy()
         new_board.player_pieces_used = {k: v.copy() for k, v in self.player_pieces_used.items()}
+        new_board.player_last_piece = self.player_last_piece.copy()
         new_board.player_first_move = self.player_first_move.copy()
         new_board.game_over = self.game_over
         new_board.current_player = self.current_player

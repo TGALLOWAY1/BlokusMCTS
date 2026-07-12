@@ -18,6 +18,7 @@ Rules and inventory for every dataset and model artifact. Governing rules:
 | maxⁿ backprop fix | `DEBUGGED_BACKPROP_EPOCH_RUN_ID = 20260701T204805Z` (gen 139, commit `732bd9c`) | Anything earlier used the cooperating-opponents search — invalid for strength conclusions |
 | Multi-agent framework | `MULTI_AGENT_EPOCH_RUN_ID = 20260626T055723Z` | Reporting-era cutoff for approach comparisons |
 | Rescue baseline | commit `cabe2dd7738daca661798d422ee487179640e34f` (2026-07-12) | All hashes below pinned at this commit |
+| Standard-scoring switch | Phase 2 task 1 commit (2026-07-12, protocol `rescue_v2`) | Arena results, ratings rows, and self-play `final_score` labels produced **before** this commit are house-scored; everything after defaults to standard scoring (+5 monomino-last implemented). Never mix across this boundary |
 
 ## Frozen-asset inventory (sha256 @ rescue baseline)
 
@@ -30,8 +31,8 @@ state).
 
 | File | sha256 | Compatibility |
 |---|---|---|
-| `champion_snapshots.csv` (~1.5k rows, per-ply Layer-6/se_* features + outcome labels) | `ad5322ee34e7e2cb01a4fb28cd5614677814ca0125db8e1bfd71f0f1451ebcdd` | **Suspect** — era-mixed accumulation; post-fix rows not separable without join on run metadata; usable only for legacy `heuristic_tune` refits |
-| `td_trajectories.csv` (~2.1k rows, 45 `f_*`/`nf_*` features, `agent_version`, `feature_set_version=rich_blokus_v1`) | `e46c81461f7f48254dc06d087b2be8cd957e571cf850a8a1ca9d501cddd69cad` | **Verified-tagged** — rows carry generating agent/budget tags; filterable by era |
+| `champion_snapshots.csv` (~1.5k rows, per-ply Layer-6/se_* features + outcome labels) | `ad5322ee34e7e2cb01a4fb28cd5614677814ca0125db8e1bfd71f0f1451ebcdd` | **Suspect** — era-mixed accumulation; post-fix rows not separable without join on run metadata; usable only for legacy `heuristic_tune` refits; all existing `final_score` labels are house-scored |
+| `td_trajectories.csv` (~2.1k rows, 45 `f_*`/`nf_*` features, `agent_version`, `feature_set_version=rich_blokus_v1`) | `e46c81461f7f48254dc06d087b2be8cd957e571cf850a8a1ca9d501cddd69cad` | **Verified-tagged** — rows carry generating agent/budget tags; filterable by era; all existing reward/score labels are house-scored (rows appended post-`rescue_v2` are standard-scored) |
 | `policy_targets.csv` (~75k rows, root visit counts, grouped by `decision_id`) | `e420bf0ffde2c62a7172536d5db3c45e9d80a87f2202cfabf93df0117af305e0` | **Suspect** — no era/agent column; collection spans budgets (old 40 ms near-random rows + teacher rows indistinguishable) |
 | `champion_registry.json` (serving registry, `current_version: v2`) | `561a45fa4fb737fb424555faf4f729945f6878a501c7fb13781700d5c536f6c4` | **Verified** as serving state; lineage split from training champion (D-009) |
 | `layer6_calibrated_weights.json` | `412231ffc0c49a26ac54089e7dd2812bc67d2b36eceedb47cd883ff3511207d3` | **Verified** artifact |
