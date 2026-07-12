@@ -2,6 +2,32 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-12 (session 3 — Phase 2 task 2: property tests + differential harness)
+
+- **Current phase:** Phase 2 (trusted engine), tasks 1–2 of 3 complete.
+- **Current phase gate:** reference↔optimized agreement at scale ✔ (this session) + property
+  tests ✔ + versioned state/action formats (task 3, open).
+- **Work completed:**
+  - `tests/test_engine_properties.py` — seeded full-game invariant suite (every ply of 3 full
+    games): occupancy monotonicity, piece-inventory conservation incl. `player_last_piece`,
+    strict turn rotation, grid↔bitboard duality + pairwise-disjoint player masks, independent
+    score recomputation, terminal-implies-no-moves, deep clone independence, same-seed
+    reproducibility (decision D-012: hand-rolled seeded loops, no hypothesis).
+  - `tests/test_engine_differential.py` — full-game reference↔optimized harness: naive
+    full-scan movegen + grid legality vs frontier movegen + bitboard legality, cross-checked
+    every ply (mover move-set equality; all four players on a stride; legality agreement on
+    sampled legal + perturbed placements; pass-detection equality; terminal scores incl. the
+    standard bonuses recomputed from the raw grid). Scales via `BLOKUS_DIFF_GAMES`.
+- **Tests passing:** properties 4/4 (2 s); differential 1/1 at default 3-game scale (14 s,
+  ≥240 move-set + ≥300 legality checks asserted) and at 20-game scale (94 s, ≥1 600 move-set +
+  ≥2 000 legality checks) — zero disagreements. `mcts_lab.checks` 7/7.
+- **Tests failing:** none.
+- **Note for task 3:** a board serialization **round-trip test is not possible yet** — the
+  engine has no board deserializer (only `grid.tolist()` snapshots). It lands with the
+  versioned state/action formats in task 3.
+- **Next recommended task:** Phase 2 task 3 — versioned state/action schema surfaced in
+  self-play records + serialization round-trip; then the Phase 2 gate report.
+
 ## Session 2026-07-12 (session 2 — Phase 2 task 1: standard scoring)
 
 - **Current phase:** Phase 2 (trusted engine), task 1 of 3 complete.

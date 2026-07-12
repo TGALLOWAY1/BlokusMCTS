@@ -15,21 +15,23 @@ _For the next agent/session. Read `MASTER_PLAN.md`, `CURRENT_STATUS.md`, `DECISI
 
 ## Exact next action
 
-**Phase 2, task 2** (task 1 — standard scoring — is DONE, 2026-07-12, protocol `rescue_v2`):
+**Phase 2, task 3** (tasks 1–2 DONE 2026-07-12: standard scoring + protocol `rescue_v2`;
+property suite `tests/test_engine_properties.py` + differential harness
+`tests/test_engine_differential.py`, zero disagreements at 20-game scale):
 
-1. Property-test suite for the engine invariants (occupancy monotonicity, piece-inventory
-   conservation incl. `player_last_piece`, turn order, clone independence, serialization
-   round-trip, terminal-implies-no-moves). Consider `hypothesis` — new dev dependency, record
-   a decision in `DECISIONS.md` either way.
-2. Full-game reference↔optimized differential harness: naive movegen + grid legality vs
-   frontier + bitboard across thousands of randomized positions/trajectories (legal moves,
-   resulting states, inventories, current player, terminal status, scores, rankings).
-3. Version the state/action formats (schema id surfaced in self-play records) — Phase 2 task 3.
+1. Version the state/action formats: a schema id for board state + move encoding, surfaced in
+   self-play records (`analytics/tournament/arena_runner.py` game records /
+   `training/td_selfplay.py` trajectories) so Phase 7 datasets can declare provenance.
+2. Board serialization round-trip: the engine currently has **no board deserializer** (only
+   `grid.tolist()` snapshots) — add serialize/deserialize with a round-trip property test
+   (this was the one Phase 2 invariant that could not be tested in task 2).
+3. Then write `phases/PHASE_2_TRUSTED_ENGINE.md` with the gate verdict (needs: differential
+   agreement ✔, property invariants ✔, standard scoring tested ✔, versioned formats — task 3).
 
-Notes from task 1: the browser bundle (`frontend/public/blokus_core.zip`) is generated — the
-next `scripts/build_browser_core.sh` run picks up the engine change automatically; do not edit
-`browser_python/` module copies. The Zobrist/TT terminal-state edge for the monomino bonus is
-documented in `CURRENT_STATUS.md` (accepted, negligible).
+Notes: browser bundle (`frontend/public/blokus_core.zip`) is generated — next
+`scripts/build_browser_core.sh` run picks up engine changes; never edit `browser_python/`
+module copies. Zobrist/TT terminal-state edge documented in `CURRENT_STATUS.md` (accepted).
+Differential harness scales with `BLOKUS_DIFF_GAMES` (default 3; 20 ≈ 94 s).
 
 ## Commands to reproduce current results
 

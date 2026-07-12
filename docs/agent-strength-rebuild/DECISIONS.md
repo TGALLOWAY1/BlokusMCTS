@@ -79,6 +79,25 @@ Format per governing master prompt §21. Statuses: Proposed / Accepted / Superse
   branch names.
 - **Related:** session protocol in `CURRENT_STATUS.md`.
 
+## D-012 — Property tests: hand-rolled seeded invariant loops, no hypothesis (for now)
+
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** Phase 2 task 2 requires property/invariant tests. The master plan flagged
+  `hypothesis` as a candidate tool; the repo has no property-testing framework and its existing
+  invariant suites (`tests/test_frontier_basic.py`, `tests/test_bitboard_basic.py`) are
+  hand-rolled loops over seeded random self-play.
+- **Options considered:** adopt `hypothesis` (shrinking, broader input distribution, new dev
+  dependency + CI cost); extend the existing hand-rolled seeded-trajectory pattern.
+- **Decision:** hand-rolled seeded full-game invariant loops
+  (`tests/test_engine_properties.py`), consistent with the repo's existing pattern; every ply
+  of real games is checked, seeds are fixed, failures reproduce exactly.
+- **Consequences:** no automatic input shrinking; coverage is bounded by the seeded
+  trajectories rather than adversarial generation.
+- **Revisit conditions:** an engine bug slips past these suites, or Phase 2 differential
+  testing needs adversarial position generation the trajectories don't reach.
+- **Related:** Phase 2 in `MASTER_PLAN.md`; `tests/test_engine_differential.py`.
+
 ---
 
 ## Open decisions (required before their phases)
