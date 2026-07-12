@@ -2,6 +2,19 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-12 (session 9 — evaluator track v1: dataset generation)
+
+- **Current phase:** Phase 5/6 evaluator track (Phase 4 gate open as acceptance test).
+- **Work completed:** D-015 recorded (v1 scope: data / target / features / framework / gates);
+  `training/experiments/value_dataset.py` — manifested fresh-dataset generator (standard
+  scoring, PW+rollout-50 teacher self-play, per-ply `rich_blokus_v1` capture, never touches
+  the legacy corpus); smoke-tested (292 rows/game, ~2 min/game); **`data/value_dataset_v1/`
+  generation launched** (60 games, seed 20260713, 150-min deadline, ~17k rows expected).
+- **Next recommended task:** when the dataset finalizes — train v1 models (sklearn GBM/MLP,
+  held-out split) vs the linear baseline; then the D-015 gates in order: held-out skill →
+  root Q-spread probe (must beat the 1.3-point Layer-6 flatness) → the fixed Phase 4
+  acceptance ladder. See `HANDOFF.md`.
+
 ## Session 2026-07-12 (session 8 — EXP-003) — PHASE 4 FAIL ATTRIBUTED: evaluator is the ceiling
 
 - **Current phase:** Phase 4 gate **FAIL — ATTRIBUTED** (stays open as the acceptance test
