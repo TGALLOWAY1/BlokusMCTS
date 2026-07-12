@@ -15,27 +15,28 @@ _For the next agent/session. Read `MASTER_PLAN.md`, `CURRENT_STATUS.md`, `DECISI
 
 ## Exact next action
 
-**Phase 4 — the mandatory search-scaling gate** (Phases 2 AND 3 are COMPLETE, gates PASS:
-`phases/PHASE_2_TRUSTED_ENGINE.md`, `phases/PHASE_3_MINIMAL_SEARCH.md`; Phase 3 found and
-fixed the rollout-reward-baseline defect, D-014 — read it before touching search values).
+**Phase 4 remediation — EXP-002: progressive-widening ladder.** Phase 4's gate **FAILED**
+(EXP-001: no positive scaling 50→500; 500 trends worse; mechanism = below-bf first-visit
+sweep collapses search to the ordering heuristic, above-bf revisits follow single-rollout
+noise — read `phases/PHASE_4_SEARCH_SCALING.md` first). Phases 5–8 are blocked.
 
-1. Strength-vs-budget study: the SAME minimal agent at increasing **iteration** budgets
-   (e.g. 50 / 150 / 500 / 1 500 / 5 000) against the fixed benchmark protocol
-   (`BENCHMARK_PROTOCOL.md`: round_robin seats, fixed seeds, iteration-deterministic budgets).
-   Start from `training/diagnostics/search_quality.py`; use `mcts_lab/node_stats.py` to record
-   root statistics (depth, visit concentration, expansion coverage) per budget.
-2. Record every run in `EXPERIMENT_LOG.md` (full reproducibility block); wall-clock costs are
-   real — budget the arena sizes before launching (a 4-game 100 ms-budget arena took ~3.5 min
-   on this container; 5 000-iteration agents are ~10× a 500-iteration agent per move).
-3. Gate: larger budgets must convincingly beat much smaller ones (e.g. 1500 > 150 > 50) with
-   defensible uncertainty. On PASS: pick the teacher budget (D-008). On FAIL: stop — diagnose
-   (backup, eval signal mix [score-delta vs tanh×100 static — flagged in D-014], branching,
-   ordering) with targeted experiments before ANY learning work (master prompt §20 escapes
-   forbidden).
-4. Known structure to quantify (from the Phase 3 CLI): at ~16 plies there are ~300+ legal
-   moves — 200 iterations yield a pure depth-1 tree; 1 500 reach depth 2. The +inf
-   unvisited-child UCB forces a full first-visit sweep at every node; whether strength still
-   scales despite this is exactly the question.
+1. **EXP-002 (one variable):** same protocol as EXP-001 — same seeds (20260620/20260621),
+   round_robin, 12 games/seed, mixed table 50/150/500 + heuristic — but with
+   `progressive_widening_enabled: true, pw_c: 2.0, pw_alpha: 0.5` added to
+   `MINIMAL_SEARCH_PARAMS` budget agents (the existing teacher-profile setting;
+   `MCTSNode.max_children_for_visits` already implements it). Command shape:
+   add a `--pw` flag to `training/experiments/search_scaling.py` (label e.g. `pw_b50_150_500`)
+   rather than editing the constant, so EXP-001 stays reproducible. ~110 min runtime.
+   Record in `EXPERIMENT_LOG.md` at launch. Hypothesis: visit concentration → positive scaling.
+2. Verify mechanism moved: re-run the root-statistics probe with PW (expect best-child visit
+   share ≫ 1/bf and depth > 2 at 500 iters).
+3. If PW scaling is positive: extend one rung (1500) to size the teacher budget (D-008) —
+   ~10 min/game per 1500-iter seat; budget accordingly (deadline flag exists).
+4. If PW is NOT sufficient: selection-robustness experiments, one at a time (exploration
+   constant vs O(10–30)-point reward noise; visit floor; re-measure reward normalization
+   post-D-014 — do not assume the pre-fix revert still holds).
+5. Update the Phase 4 report with each result; the gate stays open until a run passes.
+   No learning work, no champion changes, no default escapes (master prompt §20).
 
 Notes: browser bundle (`frontend/public/blokus_core.zip`) is generated — next
 `scripts/build_browser_core.sh` run picks up engine changes; never edit `browser_python/`
