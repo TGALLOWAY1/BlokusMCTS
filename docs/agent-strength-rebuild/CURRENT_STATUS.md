@@ -2,6 +2,24 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-12 (session 7 — Phase 4 remediation: EXP-002 PW ladder) — GATE STILL OPEN
+
+- **Current phase:** Phase 4, remediation loop. Gate remains **FAIL/OPEN** after EXP-002.
+  Phases 5–8 stay blocked.
+- **EXP-002 result (24/24 games, one variable = progressive widening):** tree-shape pathology
+  fixed (pre-probe: 23% best-child visit share, depth 4 at 500 iters) and absolute strength
+  up — it500 22.2%→31.2%, TS μ 14.5→24.2; ALL rungs now beat the heuristic anchor decisively
+  (+11..+16 pts, p ≤ 0.0006). **But budget→strength is still flat** (50 ≈ 150 ≈ 500). With
+  concentration repaired, the remaining suspect is the value signal (rollout deltas /
+  static-eval mix adds nothing beyond the ordering prior at these budgets).
+- **Next recommended task — EXP-003 (value-signal isolation):** same PW ladder with
+  `rollout_cutoff_depth: 0` (pure static-eval leaves, deterministic). Scaling appears →
+  rollout noise was the blocker (Phase 5 direction confirmed). Still flat → the Layer-6
+  evaluator is the ceiling; the rescue pivots to leaf-evaluation quality with search
+  mechanics exonerated. Then a 1500-iter PW rung; then C / visit-floor probes.
+- **Also:** PR #197 carries EXP-002 (review feedback on per-agent params addressed). PW is
+  NOT adopted into any config until a scaling run passes.
+
 ## Session 2026-07-12 (session 6 — Phase 4: search-scaling gate) — PHASE 4 GATE: FAIL
 
 - **Current phase:** Phase 4 — gate **FAIL** (`phases/PHASE_4_SEARCH_SCALING.md`).

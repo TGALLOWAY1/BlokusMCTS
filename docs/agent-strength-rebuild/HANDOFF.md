@@ -15,28 +15,28 @@ _For the next agent/session. Read `MASTER_PLAN.md`, `CURRENT_STATUS.md`, `DECISI
 
 ## Exact next action
 
-**Phase 4 remediation — EXP-002: progressive-widening ladder.** Phase 4's gate **FAILED**
-(EXP-001: no positive scaling 50→500; 500 trends worse; mechanism = below-bf first-visit
-sweep collapses search to the ordering heuristic, above-bf revisits follow single-rollout
-noise — read `phases/PHASE_4_SEARCH_SCALING.md` first). Phases 5–8 are blocked.
+**Phase 4 remediation — EXP-003: value-signal isolation.** The gate FAILED at EXP-001 and
+remains OPEN after EXP-002 (PW ladder): progressive widening fixed the tree shape and raised
+absolute strength (all rungs now crush the heuristic anchor, p ≤ 0.0006) but budget→strength
+is STILL flat (50 ≈ 150 ≈ 500). Read `phases/PHASE_4_SEARCH_SCALING.md` incl. the EXP-002
+addendum first. Phases 5–8 remain blocked.
 
-1. **EXP-002 (one variable):** same protocol as EXP-001 — same seeds (20260620/20260621),
-   round_robin, 12 games/seed, mixed table 50/150/500 + heuristic — but with
-   `progressive_widening_enabled: true, pw_c: 2.0, pw_alpha: 0.5` added to
-   `MINIMAL_SEARCH_PARAMS` budget agents (the existing teacher-profile setting;
-   `MCTSNode.max_children_for_visits` already implements it). Command shape:
-   add a `--pw` flag to `training/experiments/search_scaling.py` (label e.g. `pw_b50_150_500`)
-   rather than editing the constant, so EXP-001 stays reproducible. ~110 min runtime.
-   Record in `EXPERIMENT_LOG.md` at launch. Hypothesis: visit concentration → positive scaling.
-2. Verify mechanism moved: re-run the root-statistics probe with PW (expect best-child visit
-   share ≫ 1/bf and depth > 2 at 500 iters).
-3. If PW scaling is positive: extend one rung (1500) to size the teacher budget (D-008) —
-   ~10 min/game per 1500-iter seat; budget accordingly (deadline flag exists).
-4. If PW is NOT sufficient: selection-robustness experiments, one at a time (exploration
-   constant vs O(10–30)-point reward noise; visit floor; re-measure reward normalization
-   post-D-014 — do not assume the pre-fix revert still holds).
-5. Update the Phase 4 report with each result; the gate stays open until a run passes.
-   No learning work, no champion changes, no default escapes (master prompt §20).
+1. **EXP-003 (one variable vs EXP-002):** same PW ladder/protocol, but budget agents get
+   `rollout_cutoff_depth: 0` — pure static-eval leaves (deterministic, TT-cacheable; the
+   `_rollout` depth-0 path returns `_evaluate_all_players`). Add a `--cutoff N` flag to
+   `training/experiments/search_scaling.py` (keep --pw; label e.g. `pw_c0_b50_150_500`).
+   Outcome A (scaling appears): rollout noise was the blocker → Phase 5 (replace rollouts
+   with static/learned leaves) is the confirmed direction. Outcome B (still flat): the
+   Layer-6 evaluator itself adds nothing beyond the move-ordering prior — search mechanics
+   are exonerated and the rescue pivots to leaf-evaluation QUALITY (Phase 5/6), with the
+   scaling gate re-run once a better evaluator exists.
+   Note: cutoff-0 searches are much cheaper per iteration (no 12-ply rollouts) — recalibrate
+   timing before sizing; consider adding a 1500 rung in the same run if it fits.
+2. Root-statistics pre-probe with cutoff 0 (confirm Q values differentiate siblings — beware
+   the old tanh clamp history, AUDIT_REPORT §8; evaluator returns ×100-scale values).
+3. Then: 1500-iter PW rung; then C / visit-floor probes if needed.
+4. Update the Phase 4 report addendum with each result; gate stays open until a run passes.
+   PW is NOT adopted into any production/minimal config until then. No default escapes (§20).
 
 Notes: browser bundle (`frontend/public/blokus_core.zip`) is generated — next
 `scripts/build_browser_core.sh` run picks up engine changes; never edit `browser_python/`

@@ -47,7 +47,36 @@
 
 - **Gate criteria:** search strength scales positively with compute over a useful range,
   statistically credibly; a viable teacher budget identified.
-- **Gate result:** **FAIL.**
+- **Gate result:** **FAIL** (EXP-001). **Still FAIL/OPEN after EXP-002** (see addendum below).
+
+## Addendum (2026-07-12, EXP-002): progressive widening — necessary but not sufficient
+
+Remediation experiment 1 (one variable: `progressive_widening_enabled, pw_c=2.0, α=0.5`;
+full record in `../EXPERIMENT_LOG.md`):
+
+- **Mechanism confirmed fixed** (pre-probe): at 500 iterations, 44 expanded children with the
+  best child at 116 visits / 23% share and depth 4 — vs all-children / 3 visits / 0.6% /
+  depth 2 without PW; concentration grows with budget.
+- **Absolute strength up**, most where EXP-001 was worst: it500 22.2%→31.2% first-place,
+  TS μ 14.5→24.2; ALL rungs now beat the heuristic anchor decisively (+11 to +16 points,
+  p ≤ 0.0006; EXP-001's it500 was p=0.22).
+- **But scaling is still flat**: it50 ≈ it150 ≈ it500 (paired diffs +3.7/+5.3 in the WRONG
+  direction, p=0.42/0.30). With tree shape repaired, the remaining suspect is the **value
+  signal** — the greedy_sample rollout-delta / tanh×100 static-eval mix appears to carry no
+  reliable information beyond the move-ordering prior at these budgets.
+
+Next distinguishing experiments (one variable each, same protocol so results pool):
+1. **EXP-003 — value-signal isolation:** PW ladder with `rollout_cutoff_depth: 0`
+   (pure static-eval leaves, deterministic, TT-cacheable) — separates rollout NOISE from
+   evaluator QUALITY. If scaling appears: rollout noise was the blocker (Phase 5 direction
+   confirmed). If still flat: the Layer-6 evaluator itself adds nothing over the ordering
+   prior — the strength ceiling is the evaluator, pointing the rescue at leaf-evaluation
+   quality (Phase 5/6) with search mechanics exonerated.
+2. A 1500-iteration PW rung (does scaling emerge past 500?).
+3. Exploration-constant / visit-floor robustness probes.
+
+PW adoption into the minimal config is deferred until a scaling run passes — no config churn
+without a passed gate.
 
 - **Failure response (per master prompt §11/§20 — no default escapes):** do NOT proceed to
   Phases 5–8. Targeted distinguishing experiments, one variable each:
