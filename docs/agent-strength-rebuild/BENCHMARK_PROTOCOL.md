@@ -1,0 +1,64 @@
+# Benchmark Protocol
+
+**Protocol version:** `rescue_v1` (2026-07-12). Any change to pool, seeds, budgets, seat policy,
+or scoring mode requires a version bump recorded here and referenced in every experiment entry.
+Raw match outcomes and matchup matrices are the primary evidence; every rating is a summary.
+
+## Fixed conditions (rescue_v1)
+
+| Condition | Value | Source |
+|---|---|---|
+| Opponent pool | `benchmark_v2`: heuristic, random, `baseline_mcts_fast` (100 ms-equiv), `baseline_mcts_strong` (500 ms-equiv), `best_historical` checkpoint | `training/evaluation/benchmark_pool.py` |
+| Seeds | `20260620, 20260621` (nightly convention); pool defaults `20260101, 20260202` where the code requires them | `mcts_lab/eval.py`, `benchmark_pool.py` |
+| Seat policy | `round_robin` (required — cancels first-move advantage deterministically; `randomized` allowed only for exploratory runs, never gates) | `analytics/tournament/arena_runner.py` |
+| Move budget | **Iteration-deterministic** (`deterministic_time_budget` + `iterations_per_ms`), never wall-clock, for anything feeding a gate | `mcts/search_profiles.py`, repo convention |
+| Scoring mode | house (historical) until Phase 2 lands standard scoring; then `SCORING_MODE_STANDARD` and protocol bumps to `rescue_v2` | D-002 |
+| Minimum games | screen ≥ 20; confirmation ≥ 60; SPRT cap 160 paired games/candidate | `promotion_gate.py`, `sequential.py` |
+| Statistics | Wilson 95% CI on win rate; TrueSkill (PlackettLuce) μ/σ, conservative = μ−3σ; Wald SPRT α=β=0.05; paired permutation test | existing implementations |
+| Hardware note | record runner class (GitHub-hosted 2-core vs local) in every experiment entry | — |
+
+## Required metrics per evaluation (master prompt §5)
+
+First-place rate; average finishing position; final normalized score; score margin; placement
+distribution; per-seat performance; per-opponent-composition performance; head-to-head /
+mixed-table matrix; CI or equivalent uncertainty; runtime per move; simulations per move;
+(once a model exists) inference time; search throughput; memory; TrueSkill summary (+ Elo as a
+legacy secondary).
+
+Most of these are already emitted by `analytics/tournament/arena_runner.py` summaries and
+`mcts_lab/eval.py`; gaps (placement distribution, per-seat breakdown surfaced per run) are
+Phase 3/4 deliverables of the node-stats/benchmark tooling.
+
+## Canonical commands
+
+```bash
+# Sanity gate before any benchmark
+python -m mcts_lab.checks
+
+# Standard evaluation (pooled, seeded)
+python -m mcts_lab.eval --agents champion,baseline --games 10 --seeds 20260620,20260621
+
+# Candidate promotion (two-stage, never bypass)
+python -m mcts_lab.promote --candidate training/artifacts/candidates/<artifact>.json
+
+# Search-quality diagnostic (Phase 4 starting point)
+python -m training.diagnostics.search_quality   # see training/diagnostics/
+```
+
+## Rules
+
+1. **No gate decision from a single rating number.** Promotion and phase gates cite game counts,
+   CIs/SPRT verdicts, and the matchup matrix.
+2. **Never change benchmark conditions mid-experiment.** A changed condition = new protocol
+   version = results not comparable.
+3. **Benchmark agents are immutable.** Pool members are pinned configs/checkpoints; replacing
+   one is a protocol version bump.
+4. **Seat balance is mandatory** for gates (round_robin), and per-seat results must be reported.
+5. **Determinism:** fixed seeds, iteration budgets, single-thread search for gate games
+   (root-parallel allowed for data generation, not for gate evaluation unless separately
+   validated).
+6. **Reproducibility block** (per `EXPERIMENT_LOG.md` template) is required for every run used
+   as evidence: commit, seeds, configs, hardware, game counts, artifacts.
+7. **Era hygiene:** results from before the maxⁿ fix (`DEBUGGED_BACKPROP_EPOCH_RUN_ID =
+   20260701T204805Z`) are never mixed into current comparisons; post-Phase-2 (standard scoring)
+   results are likewise never mixed with house-scored ones.
