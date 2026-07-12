@@ -56,6 +56,16 @@ def main(argv: Optional[list] = None) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = out_dir / "trajectories.csv"
+    # Datasets are immutable once written (DATA_LINEAGE.md): the CSV helper is
+    # append-only and run ids derive from the seed, so a rerun into the same
+    # directory would silently mix duplicate game ids into a dataset whose
+    # manifest describes only the last invocation. Refuse instead.
+    if csv_path.exists():
+        raise SystemExit(
+            f"{csv_path} already exists — datasets are immutable. "
+            "Pass a new --out directory (e.g. data/value_dataset_v2) or delete "
+            "the old directory deliberately before regenerating."
+        )
     run_id = args.run_id or f"vds1_s{args.seed}"
 
     agents = [teacher_agent(f"pw{TEACHER_ITERATIONS}_{i}") for i in range(1, 5)]
