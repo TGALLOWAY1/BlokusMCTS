@@ -15,26 +15,27 @@ _For the next agent/session. Read `MASTER_PLAN.md`, `CURRENT_STATUS.md`, `DECISI
 
 ## Exact next action
 
-**Phase 3 — minimal trusted search** (Phase 2 is COMPLETE, gate PASS:
-`phases/PHASE_2_TRUSTED_ENGINE.md`).
+**Phase 4 — the mandatory search-scaling gate** (Phases 2 AND 3 are COMPLETE, gates PASS:
+`phases/PHASE_2_TRUSTED_ENGINE.md`, `phases/PHASE_3_MINIMAL_SEARCH.md`; Phase 3 found and
+fixed the rollout-reward-baseline defect, D-014 — read it before touching search values).
 
-The candidate minimal search already exists: `MCTSAgent` with **all experimental layers off**
-(plain UCT + maxⁿ per-player vector backup, no tree reuse, deterministic-only TT, single
-thread, iteration budgets). Phase 3 is verification, not a rewrite:
-
-1. Search-correctness tests on hand-authored positions: near-terminal decisions with a known
-   best move (extend `tests/test_tactical_positions.py`), single-legal-move positions,
-   positions requiring passes (pass-node expansion), forced outcomes on reduced positions.
-   Assert node internals, not just the chosen move: root visit counts, per-player Q values
-   (mover-credited), terminal values, exploration behavior under fixed seeds.
-2. Node-statistics inspection CLI (build on `mcts/search_trace.py`): dump root children with
-   visits / per-player Q / prior ordering / depth histogram for any `Board.from_dict` position
-   (the new serialization API is the intended input format).
-3. Determinism matrix: same seed → identical tree stats across runs; iteration budgets only.
-4. Contingency if verification fails: a ~300-line reference MCTS for differential comparison.
-5. Then `phases/PHASE_3_MINIMAL_SEARCH.md` with the gate verdict, and on PASS proceed to the
-   **mandatory Phase 4 scaling gate** (`MASTER_PLAN.md` §4; builds on
-   `training/diagnostics/search_quality.py`).
+1. Strength-vs-budget study: the SAME minimal agent at increasing **iteration** budgets
+   (e.g. 50 / 150 / 500 / 1 500 / 5 000) against the fixed benchmark protocol
+   (`BENCHMARK_PROTOCOL.md`: round_robin seats, fixed seeds, iteration-deterministic budgets).
+   Start from `training/diagnostics/search_quality.py`; use `mcts_lab/node_stats.py` to record
+   root statistics (depth, visit concentration, expansion coverage) per budget.
+2. Record every run in `EXPERIMENT_LOG.md` (full reproducibility block); wall-clock costs are
+   real — budget the arena sizes before launching (a 4-game 100 ms-budget arena took ~3.5 min
+   on this container; 5 000-iteration agents are ~10× a 500-iteration agent per move).
+3. Gate: larger budgets must convincingly beat much smaller ones (e.g. 1500 > 150 > 50) with
+   defensible uncertainty. On PASS: pick the teacher budget (D-008). On FAIL: stop — diagnose
+   (backup, eval signal mix [score-delta vs tanh×100 static — flagged in D-014], branching,
+   ordering) with targeted experiments before ANY learning work (master prompt §20 escapes
+   forbidden).
+4. Known structure to quantify (from the Phase 3 CLI): at ~16 plies there are ~300+ legal
+   moves — 200 iterations yield a pure depth-1 tree; 1 500 reach depth 2. The +inf
+   unvisited-child UCB forces a full first-visit sweep at every node; whether strength still
+   scales despite this is exactly the question.
 
 Notes: browser bundle (`frontend/public/blokus_core.zip`) is generated — next
 `scripts/build_browser_core.sh` run picks up engine changes; never edit `browser_python/`
