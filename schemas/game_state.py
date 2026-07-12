@@ -93,7 +93,7 @@ class GameState(BaseModel):
     game_over: bool
     winner: Optional[Player] = None
     scoring_mode: ScoringMode = Field(
-        default=ScoringMode.HOUSE,
+        default=ScoringMode.STANDARD,
         description="Scoring rule set in effect for this game ('standard' or 'house')",
     )
     legal_moves: List[Move] = Field(description="Available legal moves for current player")

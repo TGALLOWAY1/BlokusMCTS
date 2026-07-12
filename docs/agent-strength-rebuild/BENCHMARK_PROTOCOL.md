@@ -1,10 +1,18 @@
 # Benchmark Protocol
 
-**Protocol version:** `rescue_v1` (2026-07-12). Any change to pool, seeds, budgets, seat policy,
+**Protocol version:** `rescue_v2` (2026-07-12). Any change to pool, seeds, budgets, seat policy,
 or scoring mode requires a version bump recorded here and referenced in every experiment entry.
 Raw match outcomes and matchup matrices are the primary evidence; every rating is a summary.
 
-## Fixed conditions (rescue_v1)
+**Version history:**
+- `rescue_v2` (2026-07-12) — scoring mode is **`SCORING_MODE_STANDARD`** (coverage + 15
+  all-pieces + 5 monomino-last), now the engine/arena default (D-002 implemented). All
+  pre-`rescue_v2` results — including every rating in `training/state/ratings.sqlite` and the
+  gen140 champion numbers — are **house-scored and not directly comparable**; standard-scored
+  baselines are re-anchored by the first `rescue_v2` evaluation runs.
+- `rescue_v1` (2026-07-12) — initial codification; house scoring (historical engine default).
+
+## Fixed conditions (rescue_v2)
 
 | Condition | Value | Source |
 |---|---|---|
@@ -12,7 +20,7 @@ Raw match outcomes and matchup matrices are the primary evidence; every rating i
 | Seeds | `20260620, 20260621` (nightly convention); pool defaults `20260101, 20260202` where the code requires them | `mcts_lab/eval.py`, `benchmark_pool.py` |
 | Seat policy | `round_robin` (required — cancels first-move advantage deterministically; `randomized` allowed only for exploratory runs, never gates) | `analytics/tournament/arena_runner.py` |
 | Move budget | **Iteration-deterministic** (`deterministic_time_budget` + `iterations_per_ms`), never wall-clock, for anything feeding a gate | `mcts/search_profiles.py`, repo convention |
-| Scoring mode | house (historical) until Phase 2 lands standard scoring; then `SCORING_MODE_STANDARD` and protocol bumps to `rescue_v2` | D-002 |
+| Scoring mode | `SCORING_MODE_STANDARD` (engine, arena `RunConfig`, and TD self-play default; house is explicit opt-in via `RunConfig.scoring_mode`) | D-002, implemented 2026-07-12 |
 | Minimum games | screen ≥ 20; confirmation ≥ 60; SPRT cap 160 paired games/candidate | `promotion_gate.py`, `sequential.py` |
 | Statistics | Wilson 95% CI on win rate; TrueSkill (PlackettLuce) μ/σ, conservative = μ−3σ; Wald SPRT α=β=0.05; paired permutation test | existing implementations |
 | Hardware note | record runner class (GitHub-hosted 2-core vs local) in every experiment entry | — |

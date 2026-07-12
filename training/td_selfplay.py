@@ -27,7 +27,7 @@ import numpy as np
 
 from analytics.tournament.arena_runner import AgentConfig, build_agent
 from engine.board import Player
-from engine.game import BlokusGame
+from engine.game import SCORING_MODE_STANDARD, BlokusGame
 from training.rich_features import (
     FeatureCache,
     board_occupancy,
@@ -145,7 +145,9 @@ def play_game(
         if capture_agents is None or name in set(capture_agents)
     }
 
-    game = BlokusGame()
+    # Standard scoring is the training objective (D-002); final_scores recorded
+    # below label the TD trajectories, so the mode must match evaluation.
+    game = BlokusGame(scoring_mode=SCORING_MODE_STANDARD)
     traj = GameTrajectory(game_id=game_id, seed=seed, seat_agent=seat_agent)
     for p in _PLAYERS:
         traj.decisions[p.value] = []

@@ -39,6 +39,10 @@ Format per governing master prompt §21. Statuses: Proposed / Accepted / Superse
 - **Decision:** **Standard Blokus scoring** is the training/evaluation objective. Phase 2
   implements the monomino-last bonus and makes `SCORING_MODE_STANDARD` the default for all new
   evaluation. House mode remains available for historical comparability only.
+- **Implemented:** 2026-07-12 (Phase 2 task 1) — `Board.player_last_piece` + the +5 bonus in
+  `Board.get_score`; `BlokusGame`, arena `RunConfig`, TD self-play, browser worker, and API
+  schema defaults flipped to standard; protocol bumped to `rescue_v2`. Tests:
+  `tests/test_standard_scoring.py`.
 - **Consequences:** historical arena results (house-scored) are not directly comparable to
   post-Phase-2 results; benchmark baselines must be re-anchored under standard scoring
   (recorded in `BENCHMARK_PROTOCOL.md` as a protocol version bump when it happens).

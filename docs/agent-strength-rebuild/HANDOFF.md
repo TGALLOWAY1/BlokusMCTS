@@ -15,20 +15,21 @@ _For the next agent/session. Read `MASTER_PLAN.md`, `CURRENT_STATUS.md`, `DECISI
 
 ## Exact next action
 
-**Phase 2, task 1:** implement standard scoring correctly.
+**Phase 2, task 2** (task 1 — standard scoring — is DONE, 2026-07-12, protocol `rescue_v2`):
 
-1. Add the +5 monomino-last bonus to scoring (standard mode). Today `Board.get_score`
-   (`engine/board.py:562`) only has coverage + 15 all-pieces; `engine/game.py:25-38` defines
-   `SCORING_MODE_STANDARD`/`HOUSE` with house as default. The bonus needs "last piece played
-   was the monomino" state — check what `game_history` already records before adding board
-   state.
-2. Unit tests: all four bonus combinations (none / +15 / +5 / +20), both scoring modes,
-   ranking/`GameResult` under standard mode.
-3. Make standard mode the default for `mcts_lab.eval` / benchmark runs; bump
-   `BENCHMARK_PROTOCOL.md` to `rescue_v2` in the same commit; house mode stays available.
-4. Then: property-test suite (consider `hypothesis` — new dev dependency, record a decision)
-   and the full-game reference↔optimized differential harness
-   (naive movegen + grid legality vs frontier + bitboard, thousands of positions).
+1. Property-test suite for the engine invariants (occupancy monotonicity, piece-inventory
+   conservation incl. `player_last_piece`, turn order, clone independence, serialization
+   round-trip, terminal-implies-no-moves). Consider `hypothesis` — new dev dependency, record
+   a decision in `DECISIONS.md` either way.
+2. Full-game reference↔optimized differential harness: naive movegen + grid legality vs
+   frontier + bitboard across thousands of randomized positions/trajectories (legal moves,
+   resulting states, inventories, current player, terminal status, scores, rankings).
+3. Version the state/action formats (schema id surfaced in self-play records) — Phase 2 task 3.
+
+Notes from task 1: the browser bundle (`frontend/public/blokus_core.zip`) is generated — the
+next `scripts/build_browser_core.sh` run picks up the engine change automatically; do not edit
+`browser_python/` module copies. The Zobrist/TT terminal-state edge for the monomino bonus is
+documented in `CURRENT_STATUS.md` (accepted, negligible).
 
 ## Commands to reproduce current results
 

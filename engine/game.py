@@ -24,14 +24,14 @@ logger = logging.getLogger(__name__)
 
 # Scoring modes.
 #
-#   "standard" — standard Blokus scoring only: 1 point per covered square plus
-#                the +15 all-pieces bonus (see Board.get_score). No positional
-#                bonuses. This is the mode intended for public "Play the
-#                Champion" play.
+#   "standard" — standard Blokus scoring only: 1 point per covered square, +15
+#                for using all pieces, +5 more if the monomino was played last
+#                (see Board.get_score). No positional bonuses. This is the
+#                DEFAULT and the training/evaluation objective (decision D-002).
 #   "house"    — the project's historical house scoring: standard scoring PLUS
 #                non-standard corner-control (+5/corner) and center-control
-#                (+2/center square) bonuses. This is the default to preserve the
-#                behavior of all prior arena runs and experiments.
+#                (+2/center square) bonuses. Explicit opt-in only; kept for
+#                comparability with pre-2026-07 arena runs and experiments.
 SCORING_MODE_STANDARD = "standard"
 SCORING_MODE_HOUSE = "house"
 VALID_SCORING_MODES = (SCORING_MODE_STANDARD, SCORING_MODE_HOUSE)
@@ -63,7 +63,7 @@ class BlokusGame:
         self,
         enable_telemetry: bool = True,
         telemetry_fast_mode: bool = True,
-        scoring_mode: str = SCORING_MODE_HOUSE,
+        scoring_mode: str = SCORING_MODE_STANDARD,
     ):
         self.board = Board()
         self.move_generator = get_shared_generator()
@@ -77,9 +77,11 @@ class BlokusGame:
                 f"Invalid scoring_mode {scoring_mode!r}. "
                 f"Valid modes: {', '.join(VALID_SCORING_MODES)}."
             )
-        # Default is "house" to preserve historical behavior for all existing
-        # arena runs and experiments, which construct BlokusGame() with no
-        # explicit scoring_mode. Public play opts into "standard" explicitly.
+        # Default is "standard" — the target ruleset for training, evaluation,
+        # and public play (agent-strength rescue decision D-002, 2026-07-12).
+        # House mode remains available for historical comparability and must be
+        # requested explicitly. Results scored under different modes are not
+        # comparable (BENCHMARK_PROTOCOL.md).
         self.scoring_mode = scoring_mode
 
     def make_move(self, move: Move, player: Optional[Player] = None) -> bool:

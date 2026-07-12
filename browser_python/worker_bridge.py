@@ -33,7 +33,7 @@ _VALID_SCORING_MODES = ("standard", "house")
 class WebWorkerGameBridge:
     def __init__(self):
         self.game = BlokusGame()
-        self.scoring_mode = "house"
+        self.scoring_mode = "standard"
         self.agents = {}
         self.players_config = []
         self.mcts_top_moves = []
@@ -111,8 +111,8 @@ class WebWorkerGameBridge:
             return BlokusGame()
 
     def init_game(self, config_dict: Dict[str, Any]):
-        raw_mode = str(config_dict.get("scoring_mode") or "house").lower()
-        self.scoring_mode = raw_mode if raw_mode in _VALID_SCORING_MODES else "house"
+        raw_mode = str(config_dict.get("scoring_mode") or "standard").lower()
+        self.scoring_mode = raw_mode if raw_mode in _VALID_SCORING_MODES else "standard"
         self.game = self._new_game()
         # Convert config_dict to native Python objects to avoid Pyodide proxy destruction issues
         self.players_config = []

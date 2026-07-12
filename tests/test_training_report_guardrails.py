@@ -64,7 +64,7 @@ def test_verify_fails_when_state_missing(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 2. Exactly one scheduled training workflow
+# 2. No scheduled training workflow (Phase 0 freeze)
 # ---------------------------------------------------------------------------
 
 def _scheduled_workflows():
@@ -77,11 +77,17 @@ def _scheduled_workflows():
             scheduled.append(os.path.basename(path))
     return scheduled
 
-def test_exactly_one_scheduled_workflow():
+def test_no_scheduled_training_workflow():
+    # Phase 0 of the agent-strength rescue removed the nightly cron (decision
+    # D-003, docs/agent-strength-rebuild/): scheduled training stays frozen
+    # until a Phase 7+ gate earns it back. Training runs are manual
+    # (workflow_dispatch) only; zero schedules also still guarantees two
+    # workflows cannot both train + email.
     scheduled = _scheduled_workflows()
-    assert scheduled == ["nightly-mcts-training.yml"], (
-        "Exactly one scheduled (cron) training workflow must exist so two "
-        f"workflows cannot both train + email. Found: {scheduled}"
+    assert scheduled == [], (
+        "No scheduled (cron) training workflow may exist while the Phase 0 "
+        "freeze is in force (DECISIONS.md D-003 revisit conditions). "
+        f"Found: {scheduled}"
     )
 
 
