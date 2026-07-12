@@ -78,6 +78,37 @@ Next distinguishing experiments (one variable each, same protocol so results poo
 PW adoption into the minimal config is deferred until a scaling run passes — no config churn
 without a passed gate.
 
+## Addendum 2 (2026-07-12, EXP-003): attribution complete — the evaluator is the ceiling
+
+Remediation experiment 2 (one variable vs EXP-002: `rollout_cutoff_depth: 0`, pure
+static-eval leaves; full record in `../EXPERIMENT_LOG.md`):
+
+- **The entire strength margin over the heuristic anchor vanished**: all rungs ≈ heuristic
+  (paired diffs −2.0..+0.2, p ≥ 0.46; anchor tops first-place at 41.7%). In EXP-002 —
+  identical except rollout leaves — every rung was +11..+16 points at p ≤ 0.0006.
+- Pre-probe already showed why: static-eval Q is nearly flat across root moves (~1.3-point
+  spread on a ~47 scale, top-3 within 0.2).
+
+**Combined attribution (EXP-001 → 002 → 003):**
+| Suspect | Verdict |
+|---|---|
+| Tree shape (first-visit sweep, no concentration) | Real; **fixed by progressive widening** (EXP-002) |
+| Rollout noise | Real but secondary: rollouts carry ALL current value signal (informative vs anchor), yet extra visits don't convert to strength — the signal saturates |
+| **Static evaluator quality** | **The binding ceiling** — contributes nothing beyond the move-ordering prior (EXP-003) |
+| maxⁿ backup / selection mechanics | Exonerated (Phase 3 verification + PW behavior as predicted) |
+
+- **Gate result:** **FAIL — ATTRIBUTED.** The gate cannot pass with the current value
+  function; it stays open as the acceptance test for evaluator work.
+- **Consequence for the master plan:** the rescue proceeds to **Phase 5/6 with a narrow
+  mandate** — build a leaf evaluator that discriminates moves (Phase 6's candidate-scoring /
+  value-vector direction), with the Phase 5 equal-time comparison already answered at this
+  stage (rollouts ≻ static eval; neither scales). Any new evaluator's acceptance test is
+  THIS ladder (same protocol, `--pw --cutoff 0` with the new evaluator vs the EXP-002/003
+  baselines): it must (a) beat the rollout baseline at equal budget and (b) produce positive
+  scaling. Only then do Phases 7–8 (self-play/training loop) unblock.
+- This ordering is the master plan's own: a failed gate is remediated by the smallest
+  causal fix — here, the value function — not by more search variants or bigger runs.
+
 - **Failure response (per master prompt §11/§20 — no default escapes):** do NOT proceed to
   Phases 5–8. Targeted distinguishing experiments, one variable each:
   1. **EXP-002 (next): progressive widening ladder.** Same 50/150/500 ladder with

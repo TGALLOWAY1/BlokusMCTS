@@ -15,28 +15,34 @@ _For the next agent/session. Read `MASTER_PLAN.md`, `CURRENT_STATUS.md`, `DECISI
 
 ## Exact next action
 
-**Phase 4 remediation — EXP-003: value-signal isolation.** The gate FAILED at EXP-001 and
-remains OPEN after EXP-002 (PW ladder): progressive widening fixed the tree shape and raised
-absolute strength (all rungs now crush the heuristic anchor, p ≤ 0.0006) but budget→strength
-is STILL flat (50 ≈ 150 ≈ 500). Read `phases/PHASE_4_SEARCH_SCALING.md` incl. the EXP-002
-addendum first. Phases 5–8 remain blocked.
+**Evaluator improvement track (Phase 5/6 with a narrow mandate).** Phase 4's gate is
+**FAIL — ATTRIBUTED** after EXP-001/002/003 (read `phases/PHASE_4_SEARCH_SCALING.md`
+addenda): tree shape fixed by PW; **the Layer-6 static evaluator is the binding ceiling**
+(EXP-003: swapping rollouts for static-eval leaves erased the entire margin over the
+heuristic anchor); rollouts carry all current signal but saturate. Search mechanics are
+exonerated. Phases 7–8 stay blocked.
 
-1. **EXP-003 (one variable vs EXP-002):** same PW ladder/protocol, but budget agents get
-   `rollout_cutoff_depth: 0` — pure static-eval leaves (deterministic, TT-cacheable; the
-   `_rollout` depth-0 path returns `_evaluate_all_players`). Add a `--cutoff N` flag to
-   `training/experiments/search_scaling.py` (keep --pw; label e.g. `pw_c0_b50_150_500`).
-   Outcome A (scaling appears): rollout noise was the blocker → Phase 5 (replace rollouts
-   with static/learned leaves) is the confirmed direction. Outcome B (still flat): the
-   Layer-6 evaluator itself adds nothing beyond the move-ordering prior — search mechanics
-   are exonerated and the rescue pivots to leaf-evaluation QUALITY (Phase 5/6), with the
-   scaling gate re-run once a better evaluator exists.
-   Note: cutoff-0 searches are much cheaper per iteration (no 12-ply rollouts) — recalibrate
-   timing before sizing; consider adding a 1500 rung in the same run if it fits.
-2. Root-statistics pre-probe with cutoff 0 (confirm Q values differentiate siblings — beware
-   the old tanh clamp history, AUDIT_REPORT §8; evaluator returns ×100-scale values).
-3. Then: 1500-iter PW rung; then C / visit-floor probes if needed.
-4. Update the Phase 4 report addendum with each result; gate stays open until a run passes.
-   PW is NOT adopted into any production/minimal config until then. No default escapes (§20).
+1. **Define the evaluator target first** (decisions D-005/D-007, record before building):
+   per-player value vector from a leaf state; candidate targets = normalized final score vs
+   placement vs mixed (master prompt §13). Training data source available NOW without new
+   infrastructure: strong-rollout self-play labels (the EXP-002-style PW+rollout agent at
+   500 iters is the strongest validated player; `data/td_trajectories.csv` machinery and
+   `training/rich_features.py` 45-feature extraction already exist — but note the existing
+   TD weights WERE tried as `rich_leaf` candidates and lost; a fresh approach should change
+   the target/features/model, not just refit).
+2. **D-006 (framework):** sklearn/numpy is available; torch is NOT in requirements and the
+   browser path is numpy-only. A numpy-serving MLP or gradient-boosted trees (sklearn) on
+   the 45 rich features is the low-friction first rung; a candidate-scoring move evaluator
+   (master plan Phase 6) is the fuller direction if state-value alone can't discriminate.
+3. **Acceptance test is fixed and cheap (~1 h):** the EXP-003 ladder with the new evaluator
+   plugged into cutoff-0 leaves (`rich_leaf_eval_enabled` path or a new evaluator hook) —
+   `python -m training.experiments.search_scaling --pw --cutoff 0 ...` — must (a) beat the
+   EXP-002 rollout baseline at equal budgets and (b) show positive scaling. Compare against
+   the committed EXP-002/003 reports (same seeds/protocol — results pool).
+4. Root-statistics pre-probe for any candidate evaluator: Q spread across root moves must
+   substantially exceed the ~1.3-point flatness measured for Layer-6 (EXP-003 log entry).
+5. PW is NOT adopted into configs until a scaling run passes; no champion changes; no
+   default escapes (§20). Every training run needs held-out evaluation (risk #6, Phase 1).
 
 Notes: browser bundle (`frontend/public/blokus_core.zip`) is generated — next
 `scripts/build_browser_core.sh` run picks up engine changes; never edit `browser_python/`
