@@ -44,16 +44,17 @@
   2. Existing assets preserved/pinned.
   3. New experiments cannot silently consume legacy data.
 
-- **Gate result:** **PARTIAL — BLOCKED.**
-  Criteria 2 and 3 are met (hash-pinned assets; lineage rules in force for all rescue work).
-  Criterion 1 is met in this branch but **GitHub evaluates cron schedules from the default
-  branch**, so scheduled runs continue until this change merges to `main`. The gate flips to
-  PASS on merge with no further action; any corpus/ratings drift on `main` between the baseline
-  commit and the merge is detectable against the `DATA_LINEAGE.md` hashes and must be noted
-  there after merge.
+- **Gate result:** **PASS** (updated 2026-07-12 after PR #190 merged as `ea68caf`).
+  Criteria 2 and 3 were met at commit time (hash-pinned assets; lineage rules in force).
+  Criterion 1 became effective on merge: GitHub evaluates cron schedules from the default
+  branch, and `main` now carries the workflow with `workflow_dispatch` as its only trigger.
+  **Drift check:** the only commits on `main` between baseline `cabe2dd` and the merge are this
+  PR's own three commits — no nightly run fired in the window, so the `DATA_LINEAGE.md` hashes
+  remain exact for the state on `main`.
+  _(Gate was recorded as PARTIAL — BLOCKED between commit and merge, per the original text.)_
 
-- **Remaining risks:** delayed merge extends the drift window; a manually dispatched run would
-  also append to corpora (acceptable — dispatch is deliberate and attended by definition).
+- **Remaining risks:** a manually dispatched run would still append to corpora (acceptable —
+  dispatch is deliberate and attended by definition).
 
 - **Decision:** D-003 (freeze method) in `../DECISIONS.md`.
 
