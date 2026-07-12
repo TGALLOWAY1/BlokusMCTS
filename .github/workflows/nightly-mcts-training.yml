@@ -2,17 +2,19 @@ name: nightly-mcts-training
 
 # Durable, resumable Blokus MCTS self-play training.
 #
-# Runs every 6 hours, RESUMES from the committed durable state under training/state/,
-# trains within a wall-clock budget, evaluates + (internally) promotes a candidate,
-# regenerates reports, commits the updated state back to the repo, and ALWAYS emails
-# a summary — on success and on failure. See docs/03-implementation/NIGHTLY_TRAINING.md.
+# RESUMES from the committed durable state under training/state/, trains within a
+# wall-clock budget, evaluates + (internally) promotes a candidate, regenerates
+# reports, commits the updated state back to the repo, and ALWAYS emails a summary —
+# on success and on failure. See docs/03-implementation/NIGHTLY_TRAINING.md.
+#
+# SCHEDULED RUNS ARE FROZEN (Phase 0 of the agent-strength rescue,
+# docs/agent-strength-rebuild/MASTER_PLAN.md, decision D-003): the every-6-hours
+# cron was removed on 2026-07-12 so no uncontrolled training appends to the
+# corpora/ratings while the improvement loop is being rebuilt and re-validated.
+# Manual, attended runs via workflow_dispatch remain available. Do not restore the
+# cron without a passed Phase 7+ gate (see DECISIONS.md D-003 revisit conditions).
 
 on:
-  schedule:
-    # Every 6 hours at :00 (00/06/12/18 UTC) — ~20h/day of training with a ~1h
-    # buffer between runs for eval, reports, commit-back, and email. The
-    # `concurrency` block below queues (does not cancel) any overlap.
-    - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
       approaches:
