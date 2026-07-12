@@ -36,6 +36,19 @@ def test_record_carries_play_quality_block():
     assert rec["moves_made"] > 0
 
 
+def test_record_carries_provenance_stamps():
+    # Agent-strength rescue Phase 2: every game record declares which
+    # state/action encodings and scoring objective produced it.
+    from engine.board import STATE_SCHEMA_VERSION
+    from engine.game import SCORING_MODE_STANDARD
+    from engine.move_generator import ACTION_SCHEMA_VERSION
+
+    rec = _run_one()
+    assert rec["state_schema_version"] == STATE_SCHEMA_VERSION
+    assert rec["action_schema_version"] == ACTION_SCHEMA_VERSION
+    assert rec["scoring_mode"] == SCORING_MODE_STANDARD  # RunConfig default
+
+
 def test_play_quality_values_are_well_formed():
     pq = _run_one()["play_quality"]
 

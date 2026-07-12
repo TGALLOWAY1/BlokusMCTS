@@ -15,23 +15,31 @@ _For the next agent/session. Read `MASTER_PLAN.md`, `CURRENT_STATUS.md`, `DECISI
 
 ## Exact next action
 
-**Phase 2, task 3** (tasks 1–2 DONE 2026-07-12: standard scoring + protocol `rescue_v2`;
-property suite `tests/test_engine_properties.py` + differential harness
-`tests/test_engine_differential.py`, zero disagreements at 20-game scale):
+**Phase 3 — minimal trusted search** (Phase 2 is COMPLETE, gate PASS:
+`phases/PHASE_2_TRUSTED_ENGINE.md`).
 
-1. Version the state/action formats: a schema id for board state + move encoding, surfaced in
-   self-play records (`analytics/tournament/arena_runner.py` game records /
-   `training/td_selfplay.py` trajectories) so Phase 7 datasets can declare provenance.
-2. Board serialization round-trip: the engine currently has **no board deserializer** (only
-   `grid.tolist()` snapshots) — add serialize/deserialize with a round-trip property test
-   (this was the one Phase 2 invariant that could not be tested in task 2).
-3. Then write `phases/PHASE_2_TRUSTED_ENGINE.md` with the gate verdict (needs: differential
-   agreement ✔, property invariants ✔, standard scoring tested ✔, versioned formats — task 3).
+The candidate minimal search already exists: `MCTSAgent` with **all experimental layers off**
+(plain UCT + maxⁿ per-player vector backup, no tree reuse, deterministic-only TT, single
+thread, iteration budgets). Phase 3 is verification, not a rewrite:
+
+1. Search-correctness tests on hand-authored positions: near-terminal decisions with a known
+   best move (extend `tests/test_tactical_positions.py`), single-legal-move positions,
+   positions requiring passes (pass-node expansion), forced outcomes on reduced positions.
+   Assert node internals, not just the chosen move: root visit counts, per-player Q values
+   (mover-credited), terminal values, exploration behavior under fixed seeds.
+2. Node-statistics inspection CLI (build on `mcts/search_trace.py`): dump root children with
+   visits / per-player Q / prior ordering / depth histogram for any `Board.from_dict` position
+   (the new serialization API is the intended input format).
+3. Determinism matrix: same seed → identical tree stats across runs; iteration budgets only.
+4. Contingency if verification fails: a ~300-line reference MCTS for differential comparison.
+5. Then `phases/PHASE_3_MINIMAL_SEARCH.md` with the gate verdict, and on PASS proceed to the
+   **mandatory Phase 4 scaling gate** (`MASTER_PLAN.md` §4; builds on
+   `training/diagnostics/search_quality.py`).
 
 Notes: browser bundle (`frontend/public/blokus_core.zip`) is generated — next
 `scripts/build_browser_core.sh` run picks up engine changes; never edit `browser_python/`
-module copies. Zobrist/TT terminal-state edge documented in `CURRENT_STATUS.md` (accepted).
-Differential harness scales with `BLOKUS_DIFF_GAMES` (default 3; 20 ≈ 94 s).
+module copies. Zobrist/TT terminal-state edge + frontier-staleness finding documented in
+`CURRENT_STATUS.md`. Differential harness scales with `BLOKUS_DIFF_GAMES` (default 3; 20 ≈ 94 s).
 
 ## Commands to reproduce current results
 

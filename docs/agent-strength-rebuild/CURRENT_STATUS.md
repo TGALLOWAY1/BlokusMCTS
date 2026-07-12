@@ -2,6 +2,33 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-12 (session 4 — Phase 2 task 3: versioned formats + serialization) — PHASE 2 GATE: PASS
+
+- **Current phase:** Phase 2 **complete** (gate PASS — see `phases/PHASE_2_TRUSTED_ENGINE.md`);
+  next is Phase 3.
+- **Work completed:** `STATE_SCHEMA_VERSION="board_state_v1"` + `Board.to_dict()/from_dict()`
+  (authoritative fields persisted; bitboards/frontiers rebuilt from grid);
+  `ACTION_SCHEMA_VERSION="move_v1"` + `Move.to_dict()/from_dict()`; arena game records stamp
+  `state_schema_version`/`action_schema_version`/`scoring_mode` beside `audit_version`;
+  decision D-013 (TD corpus columns untouched — append-only header immutability); Phase 2 gate
+  report written.
+- **Tests added:** `tests/test_board_serialization.py` (10: full copy()-field round-trip on
+  fresh/midgame/terminal boards through real JSON, Zobrist-hash match, behavioral equivalence,
+  restored-board independence, version/malformed-payload guards, Move round-trip);
+  provenance-stamp assertions in `tests/test_arena_play_quality.py`.
+- **Tests passing:** engine group 98/98 (incl. new suites); `mcts_lab.checks` 7/7; end-to-end
+  arena run shows all three stamps in `games.jsonl`.
+- **Tests failing:** none.
+- **Unexpected finding:** live incremental frontiers hold stale entries for non-placing
+  players by design (`update_frontier_after_move` maintains only the mover's set) — harmless
+  (frontier = candidate superset, movegen re-checks legality; differential harness proves
+  move-set equality), now documented in `Board.from_dict`, which restores canonical form.
+- **Next recommended task:** Phase 3 — verify the minimal trusted search (`MCTSAgent` with all
+  experimental layers off): correctness tests on hand-authored tactical/near-terminal/
+  single-move/pass positions, deterministic seeded-search assertions on visit counts and
+  per-player Q values, and a node-statistics inspection CLI (build on `mcts/search_trace.py`).
+  Then the mandatory Phase 4 scaling gate.
+
 ## Session 2026-07-12 (session 3 — Phase 2 task 2: property tests + differential harness)
 
 - **Current phase:** Phase 2 (trusted engine), tasks 1–2 of 3 complete.

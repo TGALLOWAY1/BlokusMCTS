@@ -98,6 +98,26 @@ Format per governing master prompt §21. Statuses: Proposed / Accepted / Superse
   testing needs adversarial position generation the trajectories don't reach.
 - **Related:** Phase 2 in `MASTER_PLAN.md`; `tests/test_engine_differential.py`.
 
+## D-013 — Engine state/action schema v1; TD corpus keeps its existing columns
+
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** Phase 2 task 3 versions the state/action formats and surfaces them in self-play
+  records. `data/td_trajectories.csv` is an append-only corpus with a fixed header — adding a
+  column would misalign every existing row against the header, violating the DATA_LINEAGE
+  immutability rule.
+- **Decision:** `STATE_SCHEMA_VERSION = "board_state_v1"` (`engine/board.py`,
+  `Board.to_dict/from_dict`; frontiers/bitboards rebuilt from the grid on load) and
+  `ACTION_SCHEMA_VERSION = "move_v1"` (`engine/move_generator.py`, `Move.to_dict/from_dict`,
+  matching the shape already persisted by game_history/webapi/schemas). Arena game records
+  stamp both plus `scoring_mode`. The TD corpus is NOT modified — its rows already carry
+  `feature_set_version` + `agent_version` provenance; raw-state schema ids belong to the
+  Phase 7 fresh-manifest datasets.
+- **Consequences:** every new arena game is provenance-complete; the browser worker's
+  frontend-orientation remap is explicitly outside `move_v1` (documented at the constant).
+- **Revisit conditions:** Phase 7 dataset design (D-007) supersedes this for training data.
+- **Related:** `phases/PHASE_2_TRUSTED_ENGINE.md`, D-007.
+
 ---
 
 ## Open decisions (required before their phases)
