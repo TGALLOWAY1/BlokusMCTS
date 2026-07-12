@@ -24,6 +24,32 @@ Artifacts:
 
 ---
 
+## EXP-001 — Phase 4 search-scaling gate, primary ladder (50/150/500 + heuristic anchor)
+
+- **Experiment ID:** EXP-001
+- **Date:** 2026-07-12 (launched ~06:05 UTC)
+- **Commit:** the Phase 4 PR head (contains `training/experiments/search_scaling.py`; base `b6b8c1f`)
+- **Hypothesis:** with the Phase 3 reward-baseline fix in place, more search iterations
+  produce stronger play: mcts_it500 > mcts_it150 > mcts_it50 (> heuristic) in first-place
+  rate / avg rank / paired score difference.
+- **Independent variable:** exact iteration budget (50, 150, 500), pinned via `iterations`
+  param (thinking_time_ms None — build_agent cannot rewrite it).
+- **Controlled variables:** identical minimal search config for all budget agents
+  (greedy_sample K=12, cutoff 12, heuristic ordering, C=1.414, TT on, 1 worker, maxⁿ,
+  root reward baseline); engine @ standard scoring; mixed 4-seat table; round_robin seats;
+  max_turns 2500; scoring_mode standard.
+- **Agents:** mcts_it50, mcts_it150, mcts_it500, heuristic (anchor).
+- **Game count:** 12 games/seed × 2 seeds = 24 (deadline-capped at 170 min).
+- **Seat-balancing method:** round_robin (rotates each game).
+- **Seeds:** 20260620, 20260621 (game seeds derived via SHA256 per arena_runner).
+- **Hardware:** session container (Linux, single process, num_workers=1).
+- **Result:** _recorded on completion below._
+- **Uncertainty:** Wilson 95% CIs on first-place rate; paired sign-flip permutation tests
+  (10k permutations) on per-game score differences for all 6 pairs; TrueSkill μ/σ.
+- **Interpretation / Decision:** _on completion._
+- **Artifacts:** `training/reports/experiments/search_scaling/b50_150_500/report.json`
+  (+ per-seed run dirs with games.jsonl).
+
 ## EXP-000 — Rescue baseline snapshot (no new games played)
 
 - **Experiment ID:** EXP-000
