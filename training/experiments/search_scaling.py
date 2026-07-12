@@ -50,8 +50,20 @@ MINIMAL_SEARCH_PARAMS: Dict[str, Any] = {
 }
 
 
-def budget_agent(iterations: int) -> Dict[str, Any]:
+# EXP-002 variant: progressive widening (the existing teacher-profile setting)
+# caps expanded children at ceil(pw_c * N^pw_alpha) so visits concentrate on
+# top-ordered moves instead of a one-visit-per-child sweep.
+PW_PARAMS: Dict[str, Any] = {
+    "progressive_widening_enabled": True,
+    "pw_c": 2.0,
+    "pw_alpha": 0.5,
+}
+
+
+def budget_agent(iterations: int, pw: bool = False) -> Dict[str, Any]:
     params = dict(MINIMAL_SEARCH_PARAMS)
+    if pw:
+        params.update(PW_PARAMS)
     params["iterations"] = int(iterations)
     return {
         "name": f"mcts_it{iterations}",
@@ -70,14 +82,15 @@ def anchor_agent(kind: str) -> Dict[str, Any]:
 def _build_agents(args: argparse.Namespace):
     budgets = sorted({int(b) for b in args.budgets.split(",")})
     anchors = [a for a in args.anchor.split(",") if a] if args.anchor else []
-    agents = [budget_agent(b) for b in budgets] + [anchor_agent(a) for a in anchors]
+    pw = bool(getattr(args, "pw", False))
+    agents = [budget_agent(b, pw=pw) for b in budgets] + [anchor_agent(a) for a in anchors]
     if len(agents) != 4:
         raise SystemExit(
             f"Arena needs exactly 4 agents; got {len(agents)} "
             f"({len(budgets)} budgets + {len(anchors)} anchors)."
         )
     seeds = [int(s) for s in args.seeds.split(",")]
-    label = args.label or ("b" + "_".join(str(b) for b in budgets))
+    label = args.label or (("pw_" if pw else "") + "b" + "_".join(str(b) for b in budgets))
     return agents, seeds, label
 
 
@@ -178,6 +191,9 @@ def _analyze(all_games, agents, seeds, label, args, elapsed, run_dirs) -> Dict[s
         "budgets": budgets,
         "anchors": anchors,
         "minimal_search_params": MINIMAL_SEARCH_PARAMS,
+        "agent_params": {
+            a["name"]: a["params"] for a in agents if a["type"] == "mcts"
+        },
         "seeds": seeds,
         "games_per_seed": args.games_per_seed,
         "completed_games": len(all_games),
@@ -239,6 +255,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="hard wall-clock cutoff (checked between games)")
     parser.add_argument("--label", default=None)
     parser.add_argument("--out-root", default=str(DEFAULT_OUTPUT_ROOT))
+    parser.add_argument("--pw", action="store_true",
+                        help="enable progressive widening on the budget agents "
+                             "(pw_c=2.0, pw_alpha=0.5 — EXP-002 variant)")
     parser.add_argument("--stat-seed", type=int, default=20260712)
     parser.add_argument("--reanalyze", action="store_true",
                         help="rebuild report.json from the label dir's existing "

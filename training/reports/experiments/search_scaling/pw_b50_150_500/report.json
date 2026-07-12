@@ -1,0 +1,641 @@
+{
+  "experiment": "phase4_search_scaling",
+  "label": "pw_b50_150_500",
+  "budgets": [
+    50,
+    150,
+    500
+  ],
+  "anchors": [
+    "heuristic"
+  ],
+  "minimal_search_params": {
+    "deterministic_time_budget": false,
+    "rollout_policy": "greedy_sample",
+    "greedy_sample_size": 12,
+    "rollout_cutoff_depth": 12,
+    "heuristic_move_ordering": true,
+    "exploration_constant": 1.414,
+    "use_transposition_table": true,
+    "num_workers": 1
+  },
+  "agent_params": {
+    "mcts_it50": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 50
+    },
+    "mcts_it150": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 150
+    },
+    "mcts_it500": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500
+    }
+  },
+  "seeds": [
+    20260620,
+    20260621
+  ],
+  "games_per_seed": 12,
+  "completed_games": 24,
+  "seat_policy": "round_robin",
+  "scoring_mode": "standard",
+  "elapsed_sec": 9314.6,
+  "run_dirs": [
+    "training/reports/experiments/search_scaling/pw_b50_150_500/seed_20260620/20260712_134431_28b9d5b7",
+    "training/reports/experiments/search_scaling/pw_b50_150_500/seed_20260621/20260712_150110_dd0c682f"
+  ],
+  "leaderboard": [
+    {
+      "name": "heuristic",
+      "games_played": 24,
+      "win_rate": 0.041666666666666664,
+      "win_rate_ci_lower": 0.007393265354805112,
+      "win_rate_ci_upper": 0.20242226248842232,
+      "outright_wins": 1,
+      "shared_wins": 0,
+      "avg_score": 66.54166666666667,
+      "trueskill_mu": 7.8438742287983985,
+      "trueskill_sigma": 7.482574862911845,
+      "trueskill_conservative": -14.603850359937134,
+      "avg_rank": 3.375,
+      "rank_distribution": {
+        "1": 1,
+        "2": 1,
+        "3": 10,
+        "4": 12
+      }
+    },
+    {
+      "name": "mcts_it150",
+      "games_played": 24,
+      "win_rate": 0.3125,
+      "win_rate_ci_lower": 0.16426336992211885,
+      "win_rate_ci_upper": 0.512479346013747,
+      "outright_wins": 7,
+      "shared_wins": 1,
+      "avg_score": 82.91666666666667,
+      "trueskill_mu": 33.237311835902055,
+      "trueskill_sigma": 7.606265449240904,
+      "trueskill_conservative": 10.418515488179345,
+      "avg_rank": 2.0416666666666665,
+      "rank_distribution": {
+        "1": 8,
+        "2": 9,
+        "3": 5,
+        "4": 2
+      }
+    },
+    {
+      "name": "mcts_it50",
+      "games_played": 24,
+      "win_rate": 0.3333333333333333,
+      "win_rate_ci_lower": 0.17971978688379642,
+      "win_rate_ci_upper": 0.5329404050591954,
+      "outright_wins": 8,
+      "shared_wins": 0,
+      "avg_score": 81.29166666666667,
+      "trueskill_mu": 34.82832310221621,
+      "trueskill_sigma": 7.6172699321026816,
+      "trueskill_conservative": 11.976513305908163,
+      "avg_rank": 2.0,
+      "rank_distribution": {
+        "1": 8,
+        "2": 10,
+        "3": 4,
+        "4": 2
+      }
+    },
+    {
+      "name": "mcts_it500",
+      "games_played": 24,
+      "win_rate": 0.3125,
+      "win_rate_ci_lower": 0.16426336992211885,
+      "win_rate_ci_upper": 0.512479346013747,
+      "outright_wins": 7,
+      "shared_wins": 1,
+      "avg_score": 77.58333333333333,
+      "trueskill_mu": 24.222049921981405,
+      "trueskill_sigma": 7.577058277717415,
+      "trueskill_conservative": 1.49087508882916,
+      "avg_rank": 2.375,
+      "rank_distribution": {
+        "1": 8,
+        "2": 5,
+        "3": 5,
+        "4": 6
+      }
+    }
+  ],
+  "pairwise_permutation": {
+    "mcts_it50 vs mcts_it150": {
+      "observed_diff": -1.625,
+      "p_value": 0.6639,
+      "n_games": 24
+    },
+    "mcts_it50 vs mcts_it500": {
+      "observed_diff": 3.7083333333333335,
+      "p_value": 0.4236,
+      "n_games": 24
+    },
+    "mcts_it50 vs heuristic": {
+      "observed_diff": 14.75,
+      "p_value": 0.0002,
+      "n_games": 24
+    },
+    "mcts_it150 vs mcts_it500": {
+      "observed_diff": 5.333333333333333,
+      "p_value": 0.2952,
+      "n_games": 24
+    },
+    "mcts_it150 vs heuristic": {
+      "observed_diff": 16.375,
+      "p_value": 0.0,
+      "n_games": 24
+    },
+    "mcts_it500 vs heuristic": {
+      "observed_diff": 11.041666666666666,
+      "p_value": 0.0006,
+      "n_games": 24
+    }
+  },
+  "pooled_summary": {
+    "run_id": "gauntlet_pooled",
+    "seed": 20260620,
+    "seat_policy": "round_robin",
+    "num_games": 24,
+    "completed_games": 24,
+    "error_games": 0,
+    "run_config": {
+      "phase": "phase4_search_scaling",
+      "label": "pw_b50_150_500"
+    },
+    "win_stats": {
+      "heuristic": {
+        "games_played": 24.0,
+        "outright_wins": 1.0,
+        "shared_wins": 0.0,
+        "win_points": 1.0,
+        "win_rate": 0.041666666666666664
+      },
+      "mcts_it150": {
+        "games_played": 24.0,
+        "outright_wins": 7.0,
+        "shared_wins": 1.0,
+        "win_points": 7.5,
+        "win_rate": 0.3125
+      },
+      "mcts_it50": {
+        "games_played": 24.0,
+        "outright_wins": 8.0,
+        "shared_wins": 0.0,
+        "win_points": 8.0,
+        "win_rate": 0.3333333333333333
+      },
+      "mcts_it500": {
+        "games_played": 24.0,
+        "outright_wins": 7.0,
+        "shared_wins": 1.0,
+        "win_points": 7.5,
+        "win_rate": 0.3125
+      }
+    },
+    "wins_by_seat": {
+      "heuristic": {
+        "0": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "1": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "2": {
+          "games": 6,
+          "win_points": 1.0,
+          "win_rate": 0.16666666666666666
+        },
+        "3": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        }
+      },
+      "mcts_it150": {
+        "0": {
+          "games": 6,
+          "win_points": 1.0,
+          "win_rate": 0.16666666666666666
+        },
+        "1": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        },
+        "2": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        },
+        "3": {
+          "games": 6,
+          "win_points": 2.5,
+          "win_rate": 0.4166666666666667
+        }
+      },
+      "mcts_it50": {
+        "0": {
+          "games": 6,
+          "win_points": 3.0,
+          "win_rate": 0.5
+        },
+        "1": {
+          "games": 6,
+          "win_points": 3.0,
+          "win_rate": 0.5
+        },
+        "2": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "3": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        }
+      },
+      "mcts_it500": {
+        "0": {
+          "games": 6,
+          "win_points": 3.5,
+          "win_rate": 0.5833333333333334
+        },
+        "1": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        },
+        "2": {
+          "games": 6,
+          "win_points": 1.0,
+          "win_rate": 0.16666666666666666
+        },
+        "3": {
+          "games": 6,
+          "win_points": 1.0,
+          "win_rate": 0.16666666666666666
+        }
+      }
+    },
+    "score_stats": {
+      "heuristic": {
+        "count": 24,
+        "mean": 66.54166666666667,
+        "median": 67.0,
+        "std": 6.38343668323646,
+        "p25": 63.0,
+        "p75": 69.25,
+        "min": 54.0,
+        "max": 80.0
+      },
+      "mcts_it150": {
+        "count": 24,
+        "mean": 82.91666666666667,
+        "median": 79.5,
+        "std": 14.127150770374358,
+        "p25": 74.0,
+        "p75": 84.25,
+        "min": 61.0,
+        "max": 108.0
+      },
+      "mcts_it50": {
+        "count": 24,
+        "mean": 81.29166666666667,
+        "median": 80.0,
+        "std": 13.383693955290852,
+        "p25": 72.25,
+        "p75": 84.0,
+        "min": 57.0,
+        "max": 108.0
+      },
+      "mcts_it500": {
+        "count": 24,
+        "mean": 77.58333333333333,
+        "median": 75.5,
+        "std": 12.622455739232715,
+        "p25": 70.0,
+        "p75": 80.25,
+        "min": 56.0,
+        "max": 108.0
+      }
+    },
+    "pairwise_matchups": {
+      "heuristic__vs__mcts_it150": {
+        "agent_a": "heuristic",
+        "agent_b": "mcts_it150",
+        "a_beats_b": 3,
+        "b_beats_a": 21,
+        "tie": 0,
+        "total": 24
+      },
+      "heuristic__vs__mcts_it50": {
+        "agent_a": "heuristic",
+        "agent_b": "mcts_it50",
+        "a_beats_b": 3,
+        "b_beats_a": 21,
+        "tie": 0,
+        "total": 24
+      },
+      "heuristic__vs__mcts_it500": {
+        "agent_a": "heuristic",
+        "agent_b": "mcts_it500",
+        "a_beats_b": 7,
+        "b_beats_a": 17,
+        "tie": 0,
+        "total": 24
+      },
+      "mcts_it150__vs__mcts_it50": {
+        "agent_a": "mcts_it150",
+        "agent_b": "mcts_it50",
+        "a_beats_b": 12,
+        "b_beats_a": 11,
+        "tie": 1,
+        "total": 24
+      },
+      "mcts_it150__vs__mcts_it500": {
+        "agent_a": "mcts_it150",
+        "agent_b": "mcts_it500",
+        "a_beats_b": 12,
+        "b_beats_a": 11,
+        "tie": 1,
+        "total": 24
+      },
+      "mcts_it50__vs__mcts_it500": {
+        "agent_a": "mcts_it50",
+        "agent_b": "mcts_it500",
+        "a_beats_b": 14,
+        "b_beats_a": 10,
+        "tie": 0,
+        "total": 24
+      }
+    },
+    "pairwise_total_comparisons": 144,
+    "time_sim_efficiency": {
+      "heuristic": {
+        "moves": 375.0,
+        "total_time_ms": 12308.631110000477,
+        "avg_time_ms_per_move": 32.823016293334604,
+        "move_time_ms_p50": 12.131694000004245,
+        "move_time_ms_p95": 103.8294523002151,
+        "move_time_ms_max": 197.97338600074,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": null,
+        "avg_simulations_per_move": null,
+        "simulations_per_second": null,
+        "win_rate_per_second": 1.2694344204779238,
+        "score_per_second": 2027.2867695032446
+      },
+      "mcts_it150": {
+        "moves": 453.0,
+        "total_time_ms": 1791002.9554367065,
+        "avg_time_ms_per_move": 3953.6489082488,
+        "move_time_ms_p50": 3751.371145248413,
+        "move_time_ms_p95": 6670.138645172117,
+        "move_time_ms_max": 10381.991624832153,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": 67950.0,
+        "avg_simulations_per_move": 150.0,
+        "simulations_per_second": 37.93963588598965,
+        "win_rate_per_second": 0.07904090809581178,
+        "score_per_second": 20.972187614755395
+      },
+      "mcts_it50": {
+        "moves": 449.0,
+        "total_time_ms": 628688.3642673492,
+        "avg_time_ms_per_move": 1400.19680237717,
+        "move_time_ms_p50": 1383.5113048553467,
+        "move_time_ms_p95": 2280.7140350341797,
+        "move_time_ms_max": 3378.132104873657,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": 22450.0,
+        "avg_simulations_per_move": 50.0,
+        "simulations_per_second": 35.709265951124166,
+        "win_rate_per_second": 0.23806177300749443,
+        "score_per_second": 58.057314892202704
+      },
+      "mcts_it500": {
+        "moves": 433.0,
+        "total_time_ms": 6007349.627971649,
+        "avg_time_ms_per_move": 13873.786669680483,
+        "move_time_ms_p50": 13629.700660705566,
+        "move_time_ms_p95": 22652.216672897324,
+        "move_time_ms_max": 35629.52375411987,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": 216500.0,
+        "avg_simulations_per_move": 500.0,
+        "simulations_per_second": 36.03918756316837,
+        "win_rate_per_second": 0.022524492226980233,
+        "score_per_second": 5.592080603551626
+      }
+    },
+    "game_duration_sec": {
+      "count": 24,
+      "mean": 388.10708664895833,
+      "median": 384.7366696594996,
+      "std": 29.554865925549283,
+      "p25": 373.71516326375,
+      "p75": 400.3766642127498,
+      "min": 327.61314786599996,
+      "max": 462.4326363960008
+    },
+    "trueskill_ratings": {
+      "leaderboard": [
+        {
+          "mu": 34.82832310221621,
+          "sigma": 7.6172699321026816,
+          "conservative": 11.976513305908163,
+          "games_played": 24,
+          "agent_id": "mcts_it50",
+          "rank": 1
+        },
+        {
+          "mu": 33.237311835902055,
+          "sigma": 7.606265449240904,
+          "conservative": 10.418515488179345,
+          "games_played": 24,
+          "agent_id": "mcts_it150",
+          "rank": 2
+        },
+        {
+          "mu": 24.222049921981405,
+          "sigma": 7.577058277717415,
+          "conservative": 1.49087508882916,
+          "games_played": 24,
+          "agent_id": "mcts_it500",
+          "rank": 3
+        },
+        {
+          "mu": 7.8438742287983985,
+          "sigma": 7.482574862911845,
+          "conservative": -14.603850359937134,
+          "games_played": 24,
+          "agent_id": "heuristic",
+          "rank": 4
+        }
+      ],
+      "converged": false
+    },
+    "score_margins": {
+      "mean_margin": 29.33,
+      "median_margin": 21.0,
+      "std_margin": 14.92,
+      "min_margin": 7.0,
+      "max_margin": 54.0,
+      "n_games": 24
+    },
+    "score_by_seat_position": {
+      "mcts_it50": {
+        "P1": {
+          "mean": 83.0,
+          "std": 13.51,
+          "se": 5.51,
+          "n": 6
+        },
+        "P2": {
+          "mean": 85.67,
+          "std": 17.33,
+          "se": 7.07,
+          "n": 6
+        },
+        "P3": {
+          "mean": 77.0,
+          "std": 5.18,
+          "se": 2.11,
+          "n": 6
+        },
+        "P4": {
+          "mean": 79.5,
+          "std": 17.26,
+          "se": 7.05,
+          "n": 6
+        }
+      },
+      "mcts_it150": {
+        "P1": {
+          "mean": 79.33,
+          "std": 15.64,
+          "se": 6.39,
+          "n": 6
+        },
+        "P2": {
+          "mean": 83.0,
+          "std": 13.19,
+          "se": 5.39,
+          "n": 6
+        },
+        "P3": {
+          "mean": 86.0,
+          "std": 11.26,
+          "se": 4.6,
+          "n": 6
+        },
+        "P4": {
+          "mean": 83.33,
+          "std": 19.63,
+          "se": 8.02,
+          "n": 6
+        }
+      },
+      "mcts_it500": {
+        "P1": {
+          "mean": 83.67,
+          "std": 19.31,
+          "se": 7.89,
+          "n": 6
+        },
+        "P2": {
+          "mean": 78.5,
+          "std": 13.29,
+          "se": 5.43,
+          "n": 6
+        },
+        "P3": {
+          "mean": 74.17,
+          "std": 6.31,
+          "se": 2.57,
+          "n": 6
+        },
+        "P4": {
+          "mean": 74.0,
+          "std": 10.02,
+          "se": 4.09,
+          "n": 6
+        }
+      },
+      "heuristic": {
+        "P1": {
+          "mean": 64.17,
+          "std": 6.46,
+          "se": 2.64,
+          "n": 6
+        },
+        "P2": {
+          "mean": 66.67,
+          "std": 4.84,
+          "se": 1.98,
+          "n": 6
+        },
+        "P3": {
+          "mean": 72.17,
+          "std": 6.27,
+          "se": 2.56,
+          "n": 6
+        },
+        "P4": {
+          "mean": 63.17,
+          "std": 5.71,
+          "se": 2.33,
+          "n": 6
+        }
+      }
+    }
+  }
+}

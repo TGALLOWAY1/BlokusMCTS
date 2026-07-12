@@ -24,6 +24,54 @@ Artifacts:
 
 ---
 
+## EXP-002 — Phase 4 remediation: progressive-widening ladder (one variable vs EXP-001)
+
+- **Experiment ID:** EXP-002
+- **Date:** 2026-07-12 (launched ~08:15 UTC)
+- **Commit:** the EXP-002 PR head (base `d2ea3ff`; harness gains `--pw`)
+- **Hypothesis:** progressive widening (pw_c=2.0, α=0.5) restores positive scaling —
+  mcts_it500 > mcts_it150 > mcts_it50 — by concentrating visits on top-ordered moves
+  instead of the one-visit-per-child sweep that made EXP-001 fail.
+- **Independent variable (vs EXP-001):** `progressive_widening_enabled: true, pw_c: 2.0,
+  pw_alpha: 0.5` on the three budget agents. EVERYTHING else identical to EXP-001
+  (same budgets, seeds, seat policy, scoring, table composition, game counts, stat seed).
+- **Pre-probe (mechanism check before spending arena time):** with PW at bf-325/385
+  positions — 500 iters: 44 expanded children (vs all 325–385), best child 116 visits /
+  23% share (vs 3 visits / 0.6%), depth 4 (vs 2); concentration grows with budget.
+- **Agents:** mcts_it50, mcts_it150, mcts_it500 (all +PW), heuristic (anchor).
+- **Game count:** 12 games/seed × 2 seeds = 24 (deadline 170 min).
+- **Seat-balancing method:** round_robin. **Seeds:** 20260620, 20260621.
+- **Hardware:** session container (single process, num_workers=1).
+- **Result:** 24/24 games in 155.2 min (session container was suspended mid-run; all games
+  completed).
+  | agent | 1st% | Wilson 95% | avg rank | TS μ (σ) | EXP-001 comparison |
+  |---|---|---|---|---|---|
+  | mcts_it50 | 33.3% | [0.18, 0.53] | 2.00 | 34.83 (7.62) | ≈ unchanged |
+  | mcts_it150 | 31.2% | [0.16, 0.51] | 2.04 | 33.24 (7.61) | ≈ unchanged |
+  | mcts_it500 | 31.2% | [0.16, 0.51] | 2.38 | 24.22 (7.58) | **up from 22.2% / μ 14.5** |
+  | heuristic | 4.2% | [0.01, 0.20] | 3.38 | 7.84 (7.48) | down from 8.3% |
+  Paired permutation: it50−it150 = −1.62 (p=0.66); it50−it500 = +3.71 (p=0.42);
+  it150−it500 = +5.33 (p=0.30); vs heuristic: it50 **+14.75 (p=0.0002)**, it150 **+16.38
+  (p<0.0001)**, it500 **+11.04 (p=0.0006)** — every rung now beats the anchor decisively
+  (EXP-001's it500 was p=0.22).
+- **Uncertainty:** Wilson 95% CIs; 10k-permutation sign-flip tests; 24 games/condition —
+  budget-vs-budget differences remain within noise; anchor comparisons are decisive.
+- **Interpretation:** progressive widening **fixed the tree-shape pathology and raised
+  absolute strength** (biggest gain exactly where EXP-001 was worst, the 500 rung; the
+  pre-probe's concentration/depth predictions held), **but the scaling curve is still flat**:
+  50 ≈ 150 ≈ 500, with it500 still trending slightly behind. With concentration no longer the
+  bottleneck, the remaining suspect is the VALUE SIGNAL — greedy_sample rollout deltas /
+  tanh×100 static-eval mix appears to add no reliable information beyond the move-ordering
+  prior at these budgets, so extra visits refine noise.
+- **Decision:** Phase 4 gate remains **FAIL/OPEN**. PW is necessary-but-insufficient;
+  adopting PW into the minimal config is deferred until a scaling experiment passes (no
+  config churn without a passed gate). Next distinguishing experiments (one variable each):
+  (a) value-signal probe — same PW ladder with pure static-eval leaves (`rollout_cutoff_depth
+  0`) to isolate rollout noise vs evaluator quality; (b) a 1500-iteration PW rung to test
+  whether scaling appears beyond 500; (c) exploration-constant / visit-floor robustness.
+- **Artifacts:** `training/reports/experiments/search_scaling/pw_b50_150_500/report.json`
+  (+ per-seed run dirs), pre-probe numbers above.
+
 ## EXP-001 — Phase 4 search-scaling gate, primary ladder (50/150/500 + heuristic anchor)
 
 - **Experiment ID:** EXP-001
