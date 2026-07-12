@@ -1,0 +1,597 @@
+{
+  "experiment": "phase4_search_scaling",
+  "label": "b50_150_500",
+  "budgets": [
+    50,
+    150,
+    500
+  ],
+  "anchors": [
+    "heuristic"
+  ],
+  "minimal_search_params": {
+    "deterministic_time_budget": false,
+    "rollout_policy": "greedy_sample",
+    "greedy_sample_size": 12,
+    "rollout_cutoff_depth": 12,
+    "heuristic_move_ordering": true,
+    "exploration_constant": 1.414,
+    "use_transposition_table": true,
+    "num_workers": 1
+  },
+  "seeds": [
+    20260620,
+    20260621
+  ],
+  "games_per_seed": 12,
+  "completed_games": 24,
+  "seat_policy": "round_robin",
+  "scoring_mode": "standard",
+  "elapsed_sec": 6571.0,
+  "run_dirs": [
+    "training/reports/experiments/search_scaling/b50_150_500/seed_20260620/20260712_060417_de5a1a78",
+    "training/reports/experiments/search_scaling/b50_150_500/seed_20260621/20260712_065822_a6b974f7"
+  ],
+  "leaderboard": [
+    {
+      "name": "heuristic",
+      "games_played": 24,
+      "win_rate": 0.08333333333333333,
+      "win_rate_ci_lower": 0.02315832784297353,
+      "win_rate_ci_upper": 0.2584921520145059,
+      "outright_wins": 2,
+      "shared_wins": 0,
+      "avg_score": 69.91666666666667,
+      "trueskill_mu": 15.586346763985137,
+      "trueskill_sigma": 7.438268904573143,
+      "trueskill_conservative": -6.728459949734294,
+      "avg_rank": 2.9583333333333335,
+      "rank_distribution": {
+        "1": 2,
+        "2": 4,
+        "3": 11,
+        "4": 7
+      }
+    },
+    {
+      "name": "mcts_it150",
+      "games_played": 24,
+      "win_rate": 0.34722222222222215,
+      "win_rate_ci_lower": 0.1902045409795613,
+      "win_rate_ci_upper": 0.5464006349681811,
+      "outright_wins": 8,
+      "shared_wins": 1,
+      "avg_score": 79.29166666666667,
+      "trueskill_mu": 35.68986742870317,
+      "trueskill_sigma": 7.677851032449864,
+      "trueskill_conservative": 12.656314331353578,
+      "avg_rank": 2.0,
+      "rank_distribution": {
+        "1": 9,
+        "2": 10,
+        "3": 1,
+        "4": 4
+      }
+    },
+    {
+      "name": "mcts_it50",
+      "games_played": 24,
+      "win_rate": 0.34722222222222215,
+      "win_rate_ci_lower": 0.1902045409795613,
+      "win_rate_ci_upper": 0.5464006349681811,
+      "outright_wins": 8,
+      "shared_wins": 1,
+      "avg_score": 77.5,
+      "trueskill_mu": 34.615243562806185,
+      "trueskill_sigma": 7.614230651393603,
+      "trueskill_conservative": 11.772551608625378,
+      "avg_rank": 1.9583333333333333,
+      "rank_distribution": {
+        "1": 9,
+        "2": 9,
+        "3": 4,
+        "4": 2
+      }
+    },
+    {
+      "name": "mcts_it500",
+      "games_played": 24,
+      "win_rate": 0.2222222222222222,
+      "win_rate_ci_lower": 0.10143534166588708,
+      "win_rate_ci_upper": 0.4196649782390992,
+      "outright_wins": 5,
+      "shared_wins": 1,
+      "avg_score": 73.41666666666667,
+      "trueskill_mu": 14.493056614006257,
+      "trueskill_sigma": 7.509555017324333,
+      "trueskill_conservative": -8.035608437966744,
+      "avg_rank": 2.75,
+      "rank_distribution": {
+        "1": 6,
+        "2": 2,
+        "3": 8,
+        "4": 8
+      }
+    }
+  ],
+  "pairwise_permutation": {
+    "mcts_it50 vs mcts_it150": {
+      "observed_diff": -1.7916666666666667,
+      "p_value": 0.5852,
+      "n_games": 24
+    },
+    "mcts_it50 vs mcts_it500": {
+      "observed_diff": 4.083333333333333,
+      "p_value": 0.2764,
+      "n_games": 24
+    },
+    "mcts_it50 vs heuristic": {
+      "observed_diff": 7.583333333333333,
+      "p_value": 0.0007,
+      "n_games": 24
+    },
+    "mcts_it150 vs mcts_it500": {
+      "observed_diff": 5.875,
+      "p_value": 0.1494,
+      "n_games": 24
+    },
+    "mcts_it150 vs heuristic": {
+      "observed_diff": 9.375,
+      "p_value": 0.004,
+      "n_games": 24
+    },
+    "mcts_it500 vs heuristic": {
+      "observed_diff": 3.5,
+      "p_value": 0.2198,
+      "n_games": 24
+    }
+  },
+  "pooled_summary": {
+    "run_id": "gauntlet_pooled",
+    "seed": 20260620,
+    "seat_policy": "round_robin",
+    "num_games": 24,
+    "completed_games": 24,
+    "error_games": 0,
+    "run_config": {
+      "phase": "phase4_search_scaling",
+      "label": "b50_150_500"
+    },
+    "win_stats": {
+      "heuristic": {
+        "games_played": 24.0,
+        "outright_wins": 2.0,
+        "shared_wins": 0.0,
+        "win_points": 2.0,
+        "win_rate": 0.08333333333333333
+      },
+      "mcts_it150": {
+        "games_played": 24.0,
+        "outright_wins": 8.0,
+        "shared_wins": 1.0,
+        "win_points": 8.333333333333332,
+        "win_rate": 0.34722222222222215
+      },
+      "mcts_it50": {
+        "games_played": 24.0,
+        "outright_wins": 8.0,
+        "shared_wins": 1.0,
+        "win_points": 8.333333333333332,
+        "win_rate": 0.34722222222222215
+      },
+      "mcts_it500": {
+        "games_played": 24.0,
+        "outright_wins": 5.0,
+        "shared_wins": 1.0,
+        "win_points": 5.333333333333333,
+        "win_rate": 0.2222222222222222
+      }
+    },
+    "wins_by_seat": {
+      "heuristic": {
+        "0": {
+          "games": 6,
+          "win_points": 1.0,
+          "win_rate": 0.16666666666666666
+        },
+        "1": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "2": {
+          "games": 6,
+          "win_points": 1.0,
+          "win_rate": 0.16666666666666666
+        },
+        "3": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        }
+      },
+      "mcts_it150": {
+        "0": {
+          "games": 6,
+          "win_points": 2.3333333333333335,
+          "win_rate": 0.3888888888888889
+        },
+        "1": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        },
+        "2": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        },
+        "3": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        }
+      },
+      "mcts_it50": {
+        "0": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        },
+        "1": {
+          "games": 6,
+          "win_points": 3.0,
+          "win_rate": 0.5
+        },
+        "2": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        },
+        "3": {
+          "games": 6,
+          "win_points": 1.3333333333333333,
+          "win_rate": 0.2222222222222222
+        }
+      },
+      "mcts_it500": {
+        "0": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        },
+        "1": {
+          "games": 6,
+          "win_points": 1.3333333333333333,
+          "win_rate": 0.2222222222222222
+        },
+        "2": {
+          "games": 6,
+          "win_points": 2.0,
+          "win_rate": 0.3333333333333333
+        },
+        "3": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        }
+      }
+    },
+    "score_stats": {
+      "heuristic": {
+        "count": 24,
+        "mean": 69.91666666666667,
+        "median": 70.0,
+        "std": 5.322254117278589,
+        "p25": 67.75,
+        "p75": 74.0,
+        "min": 53.0,
+        "max": 77.0
+      },
+      "mcts_it150": {
+        "count": 24,
+        "mean": 79.29166666666667,
+        "median": 79.0,
+        "std": 11.911056371661116,
+        "p25": 72.5,
+        "p75": 84.0,
+        "min": 54.0,
+        "max": 108.0
+      },
+      "mcts_it50": {
+        "count": 24,
+        "mean": 77.5,
+        "median": 76.0,
+        "std": 8.558621384311845,
+        "p25": 72.75,
+        "p75": 80.25,
+        "min": 58.0,
+        "max": 108.0
+      },
+      "mcts_it500": {
+        "count": 24,
+        "mean": 73.41666666666667,
+        "median": 72.0,
+        "std": 11.838907138001472,
+        "p25": 69.0,
+        "p75": 76.0,
+        "min": 52.0,
+        "max": 108.0
+      }
+    },
+    "pairwise_matchups": {
+      "heuristic__vs__mcts_it150": {
+        "agent_a": "heuristic",
+        "agent_b": "mcts_it150",
+        "a_beats_b": 5,
+        "b_beats_a": 18,
+        "tie": 1,
+        "total": 24
+      },
+      "heuristic__vs__mcts_it50": {
+        "agent_a": "heuristic",
+        "agent_b": "mcts_it50",
+        "a_beats_b": 4,
+        "b_beats_a": 20,
+        "tie": 0,
+        "total": 24
+      },
+      "heuristic__vs__mcts_it500": {
+        "agent_a": "heuristic",
+        "agent_b": "mcts_it500",
+        "a_beats_b": 12,
+        "b_beats_a": 11,
+        "tie": 1,
+        "total": 24
+      },
+      "mcts_it150__vs__mcts_it50": {
+        "agent_a": "mcts_it150",
+        "agent_b": "mcts_it50",
+        "a_beats_b": 11,
+        "b_beats_a": 12,
+        "tie": 1,
+        "total": 24
+      },
+      "mcts_it150__vs__mcts_it500": {
+        "agent_a": "mcts_it150",
+        "agent_b": "mcts_it500",
+        "a_beats_b": 16,
+        "b_beats_a": 7,
+        "tie": 1,
+        "total": 24
+      },
+      "mcts_it50__vs__mcts_it500": {
+        "agent_a": "mcts_it50",
+        "agent_b": "mcts_it500",
+        "a_beats_b": 15,
+        "b_beats_a": 8,
+        "tie": 1,
+        "total": 24
+      }
+    },
+    "pairwise_total_comparisons": 144,
+    "time_sim_efficiency": {
+      "heuristic": {
+        "moves": 393.0,
+        "total_time_ms": 10629.71648000098,
+        "avg_time_ms_per_move": 27.04762463104575,
+        "move_time_ms_p50": 11.35862699993595,
+        "move_time_ms_p95": 84.4245769997542,
+        "move_time_ms_max": 144.94601800015516,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": null,
+        "avg_simulations_per_move": null,
+        "simulations_per_second": null,
+        "win_rate_per_second": 3.080985279486681,
+        "score_per_second": 2584.946649489326
+      },
+      "mcts_it150": {
+        "moves": 441.0,
+        "total_time_ms": 1296013.0681991577,
+        "avg_time_ms_per_move": 2938.8051433087476,
+        "move_time_ms_p50": 2519.770383834839,
+        "move_time_ms_p95": 5927.283048629761,
+        "move_time_ms_max": 9757.194757461548,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": 66150.0,
+        "avg_simulations_per_move": 150.0,
+        "simulations_per_second": 51.04115199387385,
+        "win_rate_per_second": 0.11815081480063389,
+        "score_per_second": 26.980920067872763
+      },
+      "mcts_it50": {
+        "moves": 438.0,
+        "total_time_ms": 457039.7117137909,
+        "avg_time_ms_per_move": 1043.4696614470113,
+        "move_time_ms_p50": 913.9430522918701,
+        "move_time_ms_p95": 1999.5558261871338,
+        "move_time_ms_max": 3265.909194946289,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": 21900.0,
+        "avg_simulations_per_move": 50.0,
+        "simulations_per_second": 47.917061556599045,
+        "win_rate_per_second": 0.33275737192082655,
+        "score_per_second": 74.27144541272851
+      },
+      "mcts_it500": {
+        "moves": 416.0,
+        "total_time_ms": 4196958.806276321,
+        "avg_time_ms_per_move": 10088.84328431808,
+        "move_time_ms_p50": 9145.851612091064,
+        "move_time_ms_p95": 18129.134476184845,
+        "move_time_ms_max": 27303.298473358154,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": 208000.0,
+        "avg_simulations_per_move": 500.0,
+        "simulations_per_second": 49.559695389182146,
+        "win_rate_per_second": 0.022026531284080955,
+        "score_per_second": 7.277015272978246
+      }
+    },
+    "game_duration_sec": {
+      "count": 24,
+      "mean": 273.791514525375,
+      "median": 272.00425181799983,
+      "std": 22.034918034125916,
+      "p25": 263.85663584675,
+      "p75": 286.0631635482499,
+      "min": 227.41816049600038,
+      "max": 320.93141067600027
+    },
+    "trueskill_ratings": {
+      "leaderboard": [
+        {
+          "mu": 35.68986742870317,
+          "sigma": 7.677851032449864,
+          "conservative": 12.656314331353578,
+          "games_played": 24,
+          "agent_id": "mcts_it150",
+          "rank": 1
+        },
+        {
+          "mu": 34.615243562806185,
+          "sigma": 7.614230651393603,
+          "conservative": 11.772551608625378,
+          "games_played": 24,
+          "agent_id": "mcts_it50",
+          "rank": 2
+        },
+        {
+          "mu": 15.586346763985137,
+          "sigma": 7.438268904573143,
+          "conservative": -6.728459949734294,
+          "games_played": 24,
+          "agent_id": "heuristic",
+          "rank": 3
+        },
+        {
+          "mu": 14.493056614006257,
+          "sigma": 7.509555017324333,
+          "conservative": -8.035608437966744,
+          "games_played": 24,
+          "agent_id": "mcts_it500",
+          "rank": 4
+        }
+      ],
+      "converged": false
+    },
+    "score_margins": {
+      "mean_margin": 21.5,
+      "median_margin": 15.0,
+      "std_margin": 13.75,
+      "min_margin": 5.0,
+      "max_margin": 56.0,
+      "n_games": 24
+    },
+    "score_by_seat_position": {
+      "mcts_it50": {
+        "P1": {
+          "mean": 76.0,
+          "std": 4.94,
+          "se": 2.02,
+          "n": 6
+        },
+        "P2": {
+          "mean": 81.83,
+          "std": 13.2,
+          "se": 5.39,
+          "n": 6
+        },
+        "P3": {
+          "mean": 74.0,
+          "std": 9.44,
+          "se": 3.86,
+          "n": 6
+        },
+        "P4": {
+          "mean": 78.17,
+          "std": 4.83,
+          "se": 1.97,
+          "n": 6
+        }
+      },
+      "mcts_it150": {
+        "P1": {
+          "mean": 79.67,
+          "std": 15.77,
+          "se": 6.44,
+          "n": 6
+        },
+        "P2": {
+          "mean": 74.67,
+          "std": 11.0,
+          "se": 4.49,
+          "n": 6
+        },
+        "P3": {
+          "mean": 82.33,
+          "std": 11.04,
+          "se": 4.51,
+          "n": 6
+        },
+        "P4": {
+          "mean": 80.5,
+          "std": 12.28,
+          "se": 5.01,
+          "n": 6
+        }
+      },
+      "mcts_it500": {
+        "P1": {
+          "mean": 83.5,
+          "std": 17.46,
+          "se": 7.13,
+          "n": 6
+        },
+        "P2": {
+          "mean": 67.33,
+          "std": 10.73,
+          "se": 4.38,
+          "n": 6
+        },
+        "P3": {
+          "mean": 73.17,
+          "std": 4.02,
+          "se": 1.64,
+          "n": 6
+        },
+        "P4": {
+          "mean": 69.67,
+          "std": 7.31,
+          "se": 2.99,
+          "n": 6
+        }
+      },
+      "heuristic": {
+        "P1": {
+          "mean": 72.17,
+          "std": 3.19,
+          "se": 1.3,
+          "n": 6
+        },
+        "P2": {
+          "mean": 70.5,
+          "std": 4.04,
+          "se": 1.65,
+          "n": 6
+        },
+        "P3": {
+          "mean": 67.5,
+          "std": 4.85,
+          "se": 1.98,
+          "n": 6
+        },
+        "P4": {
+          "mean": 69.5,
+          "std": 8.5,
+          "se": 3.47,
+          "n": 6
+        }
+      }
+    }
+  }
+}

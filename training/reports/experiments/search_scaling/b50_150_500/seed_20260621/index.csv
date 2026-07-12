@@ -1,0 +1,2 @@
+run_id,timestamp,num_games,completed_games,agents,seed,seat_policy,notes,audit_version
+20260712_065822_a6b974f7,2026-07-12T06:58:22,12,12,mcts_it50:mcts:None|mcts_it150:mcts:None|mcts_it500:mcts:None|heuristic:heuristic:None,20260621,round_robin,phase4 search-scaling :: b50_150_500 :: seed 20260621,v1_2026-03-28

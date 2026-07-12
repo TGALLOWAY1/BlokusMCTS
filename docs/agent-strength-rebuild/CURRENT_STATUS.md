@@ -2,6 +2,28 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-12 (session 6 — Phase 4: search-scaling gate) — PHASE 4 GATE: FAIL
+
+- **Current phase:** Phase 4 — gate **FAIL** (`phases/PHASE_4_SEARCH_SCALING.md`).
+  **Phases 5–8 (all learning work) are BLOCKED** until a scaling re-run passes.
+- **Headline result (EXP-001, 24 games, round_robin, standard scoring):** no positive scaling
+  over a 10× budget span; 500 iterations trends WORSE than 50/150 (TS μ 14.5 vs ~35;
+  paired diffs −4.1/−5.9, p=0.28/0.15); all budgets beat the heuristic anchor (it50 p=0.0007).
+- **Mechanism established (root-statistics probe):** budgets below the ~300+ branching factor
+  give every child exactly 1 visit → max-visits ties → the agent plays the ordering
+  heuristic's top move; at 500, revisits follow single-rollout noise and override the
+  ordering. No functioning search signal at practical budgets — this coherently explains the
+  training plateau (nightly evals at 50–250 iters could not express evaluator improvements).
+- **Work completed:** `training/experiments/search_scaling.py` (reproducible gate CLI:
+  pinned iteration budgets, round_robin, deadline, Wilson/TrueSkill/paired-permutation
+  reporting, --reanalyze); timing calibration; EXP-001 run + full log entry; mechanistic
+  probe; PR #196 review feedback addressed (avg-rank metrics).
+- **Tests added:** none (experiment session; harness smoke-tested end-to-end).
+- **Current blockers:** Phase 4 remediation — EXP-002 (progressive-widening ladder) is the
+  next distinguishing experiment; see `HANDOFF.md`.
+- **Next recommended task:** EXP-002, same protocol, one variable: `progressive_widening_
+  enabled` (pw_c=2.0, α=0.5). Then selection-robustness probes if needed. No default escapes.
+
 ## Session 2026-07-12 (session 5 — Phase 3: minimal trusted search) — PHASE 3 GATE: PASS (after fix)
 
 - **Current phase:** Phase 3 **complete** (gate PASS after the D-014 fix —
