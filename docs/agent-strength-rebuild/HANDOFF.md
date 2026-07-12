@@ -6,12 +6,10 @@ _For the next agent/session. Read `MASTER_PLAN.md`, `CURRENT_STATUS.md`, `DECISI
 ## Where things stand (after session 1, 2026-07-12)
 
 - The governing plan, audit, decisions, protocol, and lineage docs all live in this directory.
-- Phase 0: cron trigger removed from `.github/workflows/nightly-mcts-training.yml`
-  (`workflow_dispatch` kept). **Not effective until the PR merges to `main`** — until then the
-  6-hourly nightly job keeps running and appending to `data/*.csv` + `training/state/`.
-  If the merge is delayed, expect drift from the `DATA_LINEAGE.md` hashes (baseline commit
-  `cabe2dd` is the authoritative pin).
-- Phase 1: audit complete — `AUDIT_INVENTORY.md` + `phases/PHASE_1_FORENSIC_AUDIT.md`.
+- Phase 0: **complete and live** — PR #190 merged (`ea68caf`); the nightly cron is removed on
+  `main` (`workflow_dispatch` kept) and no nightly run fired between baseline `cabe2dd` and
+  the merge, so the `DATA_LINEAGE.md` hashes remain exact. Gate: PASS.
+- Phase 1: audit complete — `AUDIT_INVENTORY.md` + `phases/PHASE_1_FORENSIC_AUDIT.md`. Gate: PASS.
 - Decisions taken: stay in this repo (D-001); **standard Blokus scoring is the target ruleset**
   (D-002, explicit user decision); freeze method (D-003); branch naming (D-004).
 
@@ -51,8 +49,7 @@ sha256sum data/*.csv training/state/champion.json   # compare against DATA_LINEA
 3. **Dual champion registries** (`training/state/champion.json` gen140 vs
    `data/champion_registry.json` v2) — serving champion is not the validated training champion.
    Decision D-009 reserved for Phase 9; do not "fix" this casually, the web demo depends on it.
-4. Nightly job may still run until merge (see above).
-5. `docs/00-overview/DOCUMENTATION_INDEX.md` has dead links (hygiene debt only).
+4. `docs/00-overview/DOCUMENTATION_INDEX.md` has dead links (hygiene debt only).
 
 ## Session protocol reminders
 
