@@ -67,7 +67,7 @@ def anchor_agent(kind: str) -> Dict[str, Any]:
     return {"name": kind, "type": kind, "thinking_time_ms": None, "params": {}}
 
 
-def run(args: argparse.Namespace) -> Dict[str, Any]:
+def _build_agents(args: argparse.Namespace):
     budgets = sorted({int(b) for b in args.budgets.split(",")})
     anchors = [a for a in args.anchor.split(",") if a] if args.anchor else []
     agents = [budget_agent(b) for b in budgets] + [anchor_agent(a) for a in anchors]
@@ -78,6 +78,28 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
         )
     seeds = [int(s) for s in args.seeds.split(",")]
     label = args.label or ("b" + "_".join(str(b) for b in budgets))
+    return agents, seeds, label
+
+
+def reanalyze(args: argparse.Namespace) -> Dict[str, Any]:
+    """Rebuild report.json from an existing label dir's persisted games.
+
+    Use after a deadline-truncated run or a reporting fix — no games replayed.
+    """
+    agents, seeds, label = _build_agents(args)
+    out_dir = Path(args.out_root) / label
+    run_dirs = sorted(str(p.parent) for p in out_dir.glob("seed_*/*/games.jsonl"))
+    if not run_dirs:
+        raise SystemExit(f"No games.jsonl found under {out_dir}/seed_*/")
+    all_games: List[Dict[str, Any]] = []
+    for run_dir in run_dirs:
+        all_games.extend(_load_games(run_dir))
+    elapsed = sum(float(g.get("duration_sec") or 0.0) for g in all_games)
+    return _analyze(all_games, agents, seeds, label, args, elapsed, run_dirs)
+
+
+def run(args: argparse.Namespace) -> Dict[str, Any]:
+    agents, seeds, label = _build_agents(args)
     out_dir = Path(args.out_root) / label
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -108,6 +130,14 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
         print(f"seed {seed}: {len(games)} games -> {result['run_dir']}", flush=True)
 
     elapsed = time.monotonic() - t0
+    report = _analyze(all_games, agents, seeds, label, args, elapsed, run_dirs)
+    return report
+
+
+def _analyze(all_games, agents, seeds, label, args, elapsed, run_dirs) -> Dict[str, Any]:
+    if not all_games:
+        raise SystemExit("No completed games to analyze.")
+    out_dir = Path(args.out_root) / label
     names = [a["name"] for a in agents]
     pooled = gauntlet.aggregate_summary(
         all_games, agent_names=sorted(names),
@@ -117,6 +147,21 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
     )
     leaderboard = gauntlet.build_leaderboard(pooled)
 
+    # build_leaderboard does not populate avg_rank; compute it (and the rank
+    # distribution) from the per-game records — average finishing rank is a
+    # required Phase 4 metric.
+    rank_sums: Dict[str, List[int]] = {n: [] for n in names}
+    for game in all_games:
+        for name, rank in (game.get("agent_ranks") or {}).items():
+            if name in rank_sums and rank is not None:
+                rank_sums[name].append(int(rank))
+    for row in leaderboard:
+        ranks = rank_sums.get(row["name"], [])
+        row["avg_rank"] = (sum(ranks) / len(ranks)) if ranks else None
+        row["rank_distribution"] = {
+            r: ranks.count(r) for r in sorted(set(ranks))
+        }
+
     # Paired sign-flip permutation tests on per-game score differences for
     # every agent pair (mixed table => every game is a paired observation).
     pairwise = {}
@@ -124,6 +169,9 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
         test = paired_permutation_test(all_games, a, b, seed=args.stat_seed)
         pairwise[f"{a} vs {b}"] = test
 
+    budgets = sorted(int(a["params"]["iterations"]) for a in agents
+                     if a["type"] == "mcts")
+    anchors = [a["name"] for a in agents if a["type"] != "mcts"]
     report = {
         "experiment": "phase4_search_scaling",
         "label": label,
@@ -147,12 +195,15 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
     print(f"\n{len(all_games)} games in {elapsed / 60:.1f} min "
           f"({elapsed / max(len(all_games), 1):.0f}s/game)\n")
     print(f"{'agent':<14} {'1st%':>6} {'95% CI':>14} {'avg rank':>9} {'TS mu':>7} {'sigma':>6}")
+    def _num(value, default=float("nan")):
+        return default if value is None else value
+
     for row in leaderboard:
-        ci = f"[{row.get('win_rate_ci_lower', 0):.2f},{row.get('win_rate_ci_upper', 0):.2f}]"
-        print(f"{row['name']:<14} {row.get('win_rate', 0) * 100:>5.1f}% {ci:>14} "
-              f"{row.get('avg_rank', 0):>9.2f} "
-              f"{row.get('trueskill_mu', float('nan')):>7.2f} "
-              f"{row.get('trueskill_sigma', float('nan')):>6.2f}")
+        ci = f"[{_num(row.get('win_rate_ci_lower'), 0):.2f},{_num(row.get('win_rate_ci_upper'), 0):.2f}]"
+        print(f"{row['name']:<14} {_num(row.get('win_rate'), 0) * 100:>5.1f}% {ci:>14} "
+              f"{_num(row.get('avg_rank')):>9.2f} "
+              f"{_num(row.get('trueskill_mu')):>7.2f} "
+              f"{_num(row.get('trueskill_sigma')):>6.2f}")
     print("\nPaired permutation tests (per-game score diff, sign-flip):")
     for pair, test in pairwise.items():
         print(f"  {pair:<28} diff={test['observed_diff']:>7.2f}  "
@@ -189,8 +240,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--label", default=None)
     parser.add_argument("--out-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--stat-seed", type=int, default=20260712)
+    parser.add_argument("--reanalyze", action="store_true",
+                        help="rebuild report.json from the label dir's existing "
+                             "games (no games played)")
     args = parser.parse_args(argv)
-    run(args)
+    if args.reanalyze:
+        reanalyze(args)
+    else:
+        run(args)
     return 0
 
 
