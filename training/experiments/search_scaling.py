@@ -60,10 +60,16 @@ PW_PARAMS: Dict[str, Any] = {
 }
 
 
-def budget_agent(iterations: int, pw: bool = False) -> Dict[str, Any]:
+def budget_agent(iterations: int, pw: bool = False,
+                 cutoff: Optional[int] = None) -> Dict[str, Any]:
     params = dict(MINIMAL_SEARCH_PARAMS)
     if pw:
         params.update(PW_PARAMS)
+    if cutoff is not None:
+        # EXP-003 variant: cutoff 0 = pure static-eval leaves (no rollouts;
+        # deterministic, TT-cacheable) — isolates rollout noise from
+        # evaluator quality.
+        params["rollout_cutoff_depth"] = int(cutoff)
     params["iterations"] = int(iterations)
     return {
         "name": f"mcts_it{iterations}",
@@ -83,14 +89,20 @@ def _build_agents(args: argparse.Namespace):
     budgets = sorted({int(b) for b in args.budgets.split(",")})
     anchors = [a for a in args.anchor.split(",") if a] if args.anchor else []
     pw = bool(getattr(args, "pw", False))
-    agents = [budget_agent(b, pw=pw) for b in budgets] + [anchor_agent(a) for a in anchors]
+    cutoff = getattr(args, "cutoff", None)
+    agents = ([budget_agent(b, pw=pw, cutoff=cutoff) for b in budgets]
+              + [anchor_agent(a) for a in anchors])
     if len(agents) != 4:
         raise SystemExit(
             f"Arena needs exactly 4 agents; got {len(agents)} "
             f"({len(budgets)} budgets + {len(anchors)} anchors)."
         )
     seeds = [int(s) for s in args.seeds.split(",")]
-    label = args.label or (("pw_" if pw else "") + "b" + "_".join(str(b) for b in budgets))
+    label = args.label or (
+        ("pw_" if pw else "")
+        + (f"c{cutoff}_" if cutoff is not None else "")
+        + "b" + "_".join(str(b) for b in budgets)
+    )
     return agents, seeds, label
 
 
@@ -258,6 +270,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--pw", action="store_true",
                         help="enable progressive widening on the budget agents "
                              "(pw_c=2.0, pw_alpha=0.5 — EXP-002 variant)")
+    parser.add_argument("--cutoff", type=int, default=None,
+                        help="override rollout_cutoff_depth on the budget agents "
+                             "(0 = pure static-eval leaves — EXP-003 variant)")
     parser.add_argument("--stat-seed", type=int, default=20260712)
     parser.add_argument("--reanalyze", action="store_true",
                         help="rebuild report.json from the label dir's existing "

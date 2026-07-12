@@ -24,6 +24,33 @@ Artifacts:
 
 ---
 
+## EXP-003 — Phase 4 remediation: value-signal isolation (PW + pure static-eval leaves)
+
+- **Experiment ID:** EXP-003
+- **Date:** 2026-07-12 (launched ~16:45 UTC)
+- **Commit:** the EXP-003 PR head (base `859b163`; harness gains `--cutoff`)
+- **Hypothesis (discriminating):** replacing noisy rollout values with deterministic
+  static-eval leaves (`rollout_cutoff_depth: 0`) either (A) restores positive scaling —
+  rollout NOISE was the blocker, confirming the Phase 5 direction — or (B) leaves the curve
+  flat — the Layer-6 evaluator itself adds nothing beyond the ordering prior, exonerating
+  search mechanics and pivoting the rescue to leaf-evaluation quality.
+- **Independent variable (vs EXP-002):** `rollout_cutoff_depth: 0` on the budget agents.
+  Everything else identical (PW pw_c=2.0 α=0.5, budgets 50/150/500, heuristic anchor,
+  round_robin, seeds 20260620/20260621, 12 games/seed, standard scoring, stat seed).
+- **Pre-probe:** cutoff-0 costs ~9–11 ms/it early/mid, ~3.4 ms/it late (2–4× cheaper than
+  rollouts). **Static-eval Q is nearly flat across root moves**: top-3 children within
+  ~0.2 pts, full spread ~1.3 on a ~47 scale; best-child visit share drops to 5–9% at
+  bf-325/385 (vs 23% with rollout values); depth still grows with budget (3→4 midgame,
+  4→8 at bf 7). Early lean toward outcome B, arena decides.
+- **Agents:** mcts_it50, mcts_it150, mcts_it500 (all PW + cutoff 0), heuristic.
+- **Game count:** 12 games/seed × 2 seeds = 24 (deadline 170 min; est. ~1 h).
+- **Seat-balancing method:** round_robin. **Seeds:** 20260620, 20260621.
+- **Hardware:** session container (single process, num_workers=1).
+- **Result:** _recorded on completion below._
+- **Uncertainty:** Wilson 95% CIs; 10k-permutation sign-flip tests; TrueSkill μ/σ.
+- **Interpretation / Decision:** _on completion._
+- **Artifacts:** `training/reports/experiments/search_scaling/pw_c0_b50_150_500/report.json`.
+
 ## EXP-002 — Phase 4 remediation: progressive-widening ladder (one variable vs EXP-001)
 
 - **Experiment ID:** EXP-002
