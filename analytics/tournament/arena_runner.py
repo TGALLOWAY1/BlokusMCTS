@@ -30,9 +30,9 @@ from analytics.winprob.features import (
     coerce_feature_dict,
     extract_player_snapshot_features,
 )
-from engine.board import Player
+from engine.board import STATE_SCHEMA_VERSION, Player
 from engine.game import SCORING_MODE_STANDARD, VALID_SCORING_MODES, BlokusGame
-from engine.move_generator import LegalMoveGenerator, Move
+from engine.move_generator import ACTION_SCHEMA_VERSION, LegalMoveGenerator, Move
 from engine.pieces import PieceGenerator
 from mcts.champion_profile import CHALLENGE_CHAMPION_PROFILE, build_mcts_kwargs, load_challenge_champion_profile
 from mcts.mcts_agent import MCTSAgent
@@ -962,6 +962,11 @@ def run_single_game(
         "is_valid_result": True,
         "invalid_reason": "",
         "audit_version": AUDIT_VERSION,
+        # Provenance stamps (agent-strength rescue Phase 2): which state/action
+        # encodings and scoring objective produced this game.
+        "state_schema_version": STATE_SCHEMA_VERSION,
+        "action_schema_version": ACTION_SCHEMA_VERSION,
+        "scoring_mode": run_config.scoring_mode,
     }
     return record, snapshot_rows
 

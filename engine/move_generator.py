@@ -87,6 +87,13 @@ DEBUG_BITBOARD = _env_flag("BLOKUS_DEBUG_BITBOARD", False)
 #            to full offsets if no legal moves are found (safe heuristic mode)
 USE_HEURISTIC_ANCHORS = _env_flag("BLOKUS_USE_HEURISTIC_ANCHORS", False)
 
+# Version id of the canonical Move encoding ({piece_id, orientation, anchor_row,
+# anchor_col}, backend orientation index). Bump on any field/semantic change;
+# stamped into self-play records (agent-strength rescue Phase 2). Note the
+# browser worker remaps orientation to a frontend index — that mapping is NOT
+# part of this schema.
+ACTION_SCHEMA_VERSION = "move_v1"
+
 
 class Move:
     """Represents a legal move in Blokus."""
@@ -102,6 +109,24 @@ class Move:
         shape = piece_orientations[self.orientation]
         positions = PiecePlacement.get_piece_positions(shape, self.anchor_row, self.anchor_col)
         return [Position(row, col) for row, col in positions]
+
+    def to_dict(self) -> dict:
+        """Canonical ACTION_SCHEMA_VERSION encoding of this move."""
+        return {
+            "piece_id": self.piece_id,
+            "orientation": self.orientation,
+            "anchor_row": self.anchor_row,
+            "anchor_col": self.anchor_col,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Move':
+        return cls(
+            int(data["piece_id"]),
+            int(data["orientation"]),
+            int(data["anchor_row"]),
+            int(data["anchor_col"]),
+        )
 
     def __str__(self):
         return f"Move(piece_id={self.piece_id}, orientation={self.orientation}, anchor=({self.anchor_row}, {self.anchor_col}))"

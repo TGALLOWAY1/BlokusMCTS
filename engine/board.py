@@ -30,6 +30,11 @@ _PLAYERS = list(Player)
 # literal so board.py stays independent of the piece catalogue).
 MONOMINO_PIECE_ID = 1
 
+# Version id of the Board.to_dict()/from_dict() state format. Bump on any
+# field/semantic change; stamped into self-play records so datasets can
+# declare which state encoding produced them (agent-strength rescue Phase 2).
+STATE_SCHEMA_VERSION = "board_state_v1"
+
 
 @dataclass
 class Position:
@@ -671,6 +676,86 @@ class Board:
         new_board.occupied_bits = self.occupied_bits
         new_board.player_bits = self.player_bits.copy()
         return new_board
+
+    def to_dict(self) -> Dict[str, object]:
+        """Serialize the full authoritative board state to a JSON-safe dict.
+
+        Only authoritative state is persisted (schema STATE_SCHEMA_VERSION);
+        derived caches — frontiers and bitboards — are rebuilt by from_dict.
+        Player-keyed maps use str(player.value) keys so the dict survives a
+        JSON round-trip unchanged.
+        """
+        return {
+            "schema_version": STATE_SCHEMA_VERSION,
+            "grid": self.grid.tolist(),
+            "player_pieces_used": {
+                str(p.value): sorted(self.player_pieces_used[p]) for p in Player
+            },
+            "player_last_piece": {
+                str(p.value): self.player_last_piece[p] for p in Player
+            },
+            "player_first_move": {
+                str(p.value): bool(self.player_first_move[p]) for p in Player
+            },
+            "current_player": self.current_player.value,
+            "move_count": int(self.move_count),
+            "game_over": bool(self.game_over),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, object]) -> 'Board':
+        """Reconstruct a fully independent Board from a to_dict() payload.
+
+        Raises ValueError on an unknown schema_version or malformed grid.
+
+        Frontiers are restored in canonical form (_compute_full_frontier). A
+        live board's incrementally-maintained frontier can additionally hold
+        stale entries for NON-placing players (update_frontier_after_move only
+        maintains the mover's set); consumers treat the frontier as a candidate
+        superset and re-check legality, so the two forms are behaviorally
+        equivalent (proven by tests/test_engine_differential.py move-set
+        equality and asserted by tests/test_board_serialization.py).
+        """
+        version = data.get("schema_version")
+        if version != STATE_SCHEMA_VERSION:
+            raise ValueError(
+                f"Unsupported board state schema {version!r}; "
+                f"expected {STATE_SCHEMA_VERSION!r}."
+            )
+        grid = np.array(data["grid"], dtype=int)
+        if grid.shape != (cls.SIZE, cls.SIZE):
+            raise ValueError(f"Board grid must be {cls.SIZE}x{cls.SIZE}; got {grid.shape}.")
+
+        board = cls()
+        board.grid = grid
+        board.player_pieces_used = {
+            p: set(data["player_pieces_used"][str(p.value)]) for p in Player
+        }
+        board.player_last_piece = {
+            p: data["player_last_piece"][str(p.value)] for p in Player
+        }
+        board.player_first_move = {
+            p: bool(data["player_first_move"][str(p.value)]) for p in Player
+        }
+        board.current_player = Player(int(data["current_player"]))
+        board.move_count = int(data["move_count"])
+        board.game_over = bool(data["game_over"])
+
+        # Rebuild derived state (bitboards + frontiers) from the grid.
+        board.occupied_bits = 0
+        board.player_bits = defaultdict(int)
+        for p in Player:
+            coords = [(int(r), int(c)) for r, c in np.argwhere(grid == p.value)]
+            mask = coords_to_mask(coords)
+            board.player_bits[p] = mask
+            board.occupied_bits |= mask
+        for p in Player:
+            if board.player_first_move[p]:
+                board.player_frontiers[p] = set()
+                board.init_frontier_for_player(p)
+            else:
+                board.player_frontiers[p] = board._compute_full_frontier(p)
+        return board
 
     def __str__(self) -> str:
         """String representation of the board."""
