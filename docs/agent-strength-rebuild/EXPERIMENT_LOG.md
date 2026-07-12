@@ -24,6 +24,30 @@ Artifacts:
 
 ---
 
+## EXP-002 — Phase 4 remediation: progressive-widening ladder (one variable vs EXP-001)
+
+- **Experiment ID:** EXP-002
+- **Date:** 2026-07-12 (launched ~08:15 UTC)
+- **Commit:** the EXP-002 PR head (base `d2ea3ff`; harness gains `--pw`)
+- **Hypothesis:** progressive widening (pw_c=2.0, α=0.5) restores positive scaling —
+  mcts_it500 > mcts_it150 > mcts_it50 — by concentrating visits on top-ordered moves
+  instead of the one-visit-per-child sweep that made EXP-001 fail.
+- **Independent variable (vs EXP-001):** `progressive_widening_enabled: true, pw_c: 2.0,
+  pw_alpha: 0.5` on the three budget agents. EVERYTHING else identical to EXP-001
+  (same budgets, seeds, seat policy, scoring, table composition, game counts, stat seed).
+- **Pre-probe (mechanism check before spending arena time):** with PW at bf-325/385
+  positions — 500 iters: 44 expanded children (vs all 325–385), best child 116 visits /
+  23% share (vs 3 visits / 0.6%), depth 4 (vs 2); concentration grows with budget.
+- **Agents:** mcts_it50, mcts_it150, mcts_it500 (all +PW), heuristic (anchor).
+- **Game count:** 12 games/seed × 2 seeds = 24 (deadline 170 min).
+- **Seat-balancing method:** round_robin. **Seeds:** 20260620, 20260621.
+- **Hardware:** session container (single process, num_workers=1).
+- **Result:** _recorded on completion below._
+- **Uncertainty:** Wilson 95% CIs; 10k-permutation sign-flip tests; TrueSkill μ/σ.
+  Results pool with EXP-001 for cross-condition comparison (same seeds/protocol).
+- **Interpretation / Decision:** _on completion._
+- **Artifacts:** `training/reports/experiments/search_scaling/pw_b50_150_500/report.json`.
+
 ## EXP-001 — Phase 4 search-scaling gate, primary ladder (50/150/500 + heuristic anchor)
 
 - **Experiment ID:** EXP-001
