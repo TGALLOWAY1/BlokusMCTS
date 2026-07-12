@@ -46,10 +46,34 @@ Artifacts:
 - **Game count:** 12 games/seed × 2 seeds = 24 (deadline 170 min; est. ~1 h).
 - **Seat-balancing method:** round_robin. **Seeds:** 20260620, 20260621.
 - **Hardware:** session container (single process, num_workers=1).
-- **Result:** _recorded on completion below._
-- **Uncertainty:** Wilson 95% CIs; 10k-permutation sign-flip tests; TrueSkill μ/σ.
-- **Interpretation / Decision:** _on completion._
-- **Artifacts:** `training/reports/experiments/search_scaling/pw_c0_b50_150_500/report.json`.
+- **Result:** 24/24 games in 55.5 min (139 s/game). **Outcome B, decisively.**
+  | agent | 1st% | Wilson 95% | avg rank | TS μ (σ) | vs heuristic (paired) |
+  |---|---|---|---|---|---|
+  | heuristic | 41.7% | [0.24, 0.61] | 2.12 | 30.83 (7.64) | — |
+  | mcts_it50 | 37.5% | [0.21, 0.57] | 2.21 | 28.26 (7.59) | −0.58 (p=0.78) |
+  | mcts_it150 | 12.5% | [0.04, 0.31] | 2.42 | 25.60 (7.52) | +0.21 (p=0.94) |
+  | mcts_it500 | 8.3% | [0.02, 0.26] | 2.83 | 15.35 (7.46) | −2.00 (p=0.48) |
+  Budget pairs all flat (p=0.46–0.75).
+- **Uncertainty:** Wilson 95% CIs; 10k-permutation sign-flip tests; 24 games — but the
+  cross-experiment contrast is the finding, and it is large: EXP-002 (identical except
+  rollout leaves) had every rung +11..+16 pts over the anchor at p ≤ 0.0006; EXP-003's
+  advantage is zero.
+- **Interpretation:** **the Layer-6 static evaluator contributes nothing beyond the
+  move-ordering prior** — replacing rollouts with static-eval leaves erased the ENTIRE
+  strength margin over the heuristic anchor (consistent with the pre-probe's ~1.3-point Q
+  spread on a ~47 scale). Conversely, the rollouts carry all of the current value signal:
+  informative (EXP-002's anchor margins) but too noisy/saturating to convert extra visits
+  into strength (flat scaling in EXP-001/002). Combined attribution across EXP-001/002/003:
+  tree shape — fixed by PW; value signal — rollouts = all signal + noise-limited; static
+  evaluator = uninformative. **The strength ceiling is leaf-evaluation quality.**
+- **Decision:** Phase 4 gate: **FAIL — ATTRIBUTED** (stays open). Search mechanics are
+  exonerated; the rescue pivots to Phase 5 (formal equal-time leaf-evaluation comparison is
+  effectively done: rollouts ≻ static eval) and Phase 6 (build a leaf evaluator that actually
+  discriminates — the candidate-scoring/value-vector model), then RE-RUN this scaling ladder
+  as the acceptance test for any new evaluator. PW remains un-adopted until that re-run
+  passes.
+- **Artifacts:** `training/reports/experiments/search_scaling/pw_c0_b50_150_500/report.json`
+  (+ per-seed run dirs).
 
 ## EXP-002 — Phase 4 remediation: progressive-widening ladder (one variable vs EXP-001)
 

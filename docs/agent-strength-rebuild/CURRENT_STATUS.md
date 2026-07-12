@@ -2,6 +2,26 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-12 (session 8 — EXP-003) — PHASE 4 FAIL ATTRIBUTED: evaluator is the ceiling
+
+- **Current phase:** Phase 4 gate **FAIL — ATTRIBUTED** (stays open as the acceptance test
+  for evaluator work). Search mechanics exonerated. The rescue pivots to Phase 5/6 with a
+  narrow mandate: build a leaf evaluator that discriminates moves.
+- **EXP-003 result (24/24 games, one variable = static-eval leaves):** the entire strength
+  margin over the heuristic anchor VANISHED (all rungs ≈ heuristic, p ≥ 0.46; anchor tops
+  the table) — vs EXP-002's +11..+16 pts at p ≤ 0.0006 with rollout leaves. The Layer-6
+  evaluator adds nothing beyond the ordering prior; rollouts carry all current signal but
+  saturate (no scaling).
+- **Combined attribution across EXP-001/002/003:** tree shape → fixed by PW; rollout noise →
+  real but secondary; **static evaluator quality → the binding ceiling**; backup/selection →
+  exonerated. Full table in `phases/PHASE_4_SEARCH_SCALING.md` addendum 2.
+- **Acceptance test for any new evaluator:** this exact ladder (`--pw --cutoff 0`, same
+  seeds/protocol) must beat the EXP-002 rollout baseline at equal budget AND show positive
+  scaling. Phases 7–8 stay blocked until then.
+- **Next recommended task:** see `HANDOFF.md` — evaluator improvement track (Phase 5/6-lite):
+  candidate direction is a move/state discriminating evaluator trained from strong-rollout
+  self-play labels; decisions D-005/D-006/D-007 now become active.
+
 ## Session 2026-07-12 (session 7 — Phase 4 remediation: EXP-002 PW ladder) — GATE STILL OPEN
 
 - **Current phase:** Phase 4, remediation loop. Gate remains **FAIL/OPEN** after EXP-002.
