@@ -118,6 +118,34 @@ Format per governing master prompt §21. Statuses: Proposed / Accepted / Superse
 - **Revisit conditions:** Phase 7 dataset design (D-007) supersedes this for training data.
 - **Related:** `phases/PHASE_2_TRUSTED_ENGINE.md`, D-007.
 
+## D-014 — Rollout reward baseline: root-board deltas (fixing sibling-blind endgame values)
+
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** Phase 3 node-level verification found both children of the endgame-pocket
+  position at exactly Q = 0.0: `MCTSAgent._rollout` measured per-player rewards as score
+  deltas from the expanded leaf's own board, subtracting the points banked by the move that
+  created the leaf out of its own value. End-of-game rollouts (the only ones returning
+  deltas — cutoff-hit rollouts return static evals) could not distinguish sibling moves whose
+  difference was immediate banked points. The tactical regression test passed only via
+  move-ordering tie-break.
+- **Options considered:** root-board baseline (constant per search → child values reflect true
+  final-score differences, magnitudes unchanged in scale); absolute final scores (equivalent
+  argmax, larger magnitudes vs C=1.414 calibration); leave as-is and rely on static-eval
+  cutoff (leaves endgames blind).
+- **Evidence:** deterministic probe — legacy baseline Q 0.0/0.0 and 40/40 visits; root
+  baseline Q 5.0/1.0 (exact final-score difference) with correct visit dominance. Pinned as
+  an A/B regression test in `tests/test_minimal_search_semantics.py`. Bounded post-fix sanity
+  arena showed no collapse.
+- **Decision:** `rollout_reward_baseline="root"` is the default; "leaf" retained strictly for
+  A/B experiments; value validated in the constructor; propagated to root-parallel workers.
+- **Consequences:** rollout rewards change for every MCTS agent including the champion —
+  absolute ratings drift across this boundary (era note in `DATA_LINEAGE.md`). Reward-scale
+  mix (score-delta+bonus vs tanh×100 static eval) unchanged and flagged for Phase 4/5.
+- **Revisit conditions:** Phase 4 scaling results; Phase 5 leaf-evaluation selection may
+  replace rollout deltas entirely.
+- **Related:** `phases/PHASE_3_MINIMAL_SEARCH.md`; AUDIT_REPORT §3.1 (the sibling maxⁿ fix).
+
 ---
 
 ## Open decisions (required before their phases)

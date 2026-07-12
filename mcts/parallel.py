@@ -67,6 +67,7 @@ def _extract_agent_config(agent) -> dict:
         "rollout_policy": agent.rollout_policy,
         "two_ply_top_k": agent.two_ply_top_k,
         "rollout_cutoff_depth": agent.rollout_cutoff_depth,
+        "rollout_reward_baseline": agent.rollout_reward_baseline,
         "state_eval_weights": None,  # weights are internal to evaluator
         "state_eval_phase_weights": None,
         "minimax_backup_alpha": agent.minimax_backup_alpha,
@@ -195,6 +196,7 @@ def _worker_fn_with_tree(args: Tuple) -> dict:
 
     agent = MCTSAgent(**config)
     agent._root_player = player
+    agent._root_score_baseline = {p: board.get_score(p) for p in Player}
 
     move_gen = get_shared_generator()
     legal_moves = move_gen.get_legal_moves(board, player)

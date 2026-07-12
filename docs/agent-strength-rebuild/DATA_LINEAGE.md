@@ -19,6 +19,7 @@ Rules and inventory for every dataset and model artifact. Governing rules:
 | Multi-agent framework | `MULTI_AGENT_EPOCH_RUN_ID = 20260626T055723Z` | Reporting-era cutoff for approach comparisons |
 | Rescue baseline | commit `cabe2dd7738daca661798d422ee487179640e34f` (2026-07-12) | All hashes below pinned at this commit |
 | Standard-scoring switch | Phase 2 task 1 commit (2026-07-12, protocol `rescue_v2`) | Arena results, ratings rows, and self-play `final_score` labels produced **before** this commit are house-scored; everything after defaults to standard scoring (+5 monomino-last implemented). Never mix across this boundary |
+| Rollout-baseline fix (D-014) | Phase 3 commit (2026-07-12) | All MCTS agents (champion included) evaluate endgame rollouts with root-board reward baselines from this commit on; absolute ratings and self-play data generated before/after are not strength-comparable |
 
 ## Frozen-asset inventory (sha256 @ rescue baseline)
 

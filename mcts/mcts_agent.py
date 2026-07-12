@@ -484,6 +484,7 @@ class MCTSAgent:
         greedy_sample_size: int = 12,
         two_ply_top_k: Optional[int] = None,
         rollout_cutoff_depth: Optional[int] = None,
+        rollout_reward_baseline: str = "root",
         state_eval_weights: Optional[Dict[str, float]] = None,
         state_eval_phase_weights: Optional[Dict[str, Dict[str, float]]] = None,
         minimax_backup_alpha: float = 0.0,
@@ -605,6 +606,21 @@ class MCTSAgent:
         self.potential_mode = potential_mode
         self.learned_model_path = learned_model_path
         self.max_rollout_moves = int(max_rollout_moves)
+        # Rollout reward baseline (agent-strength rescue Phase 3 fix): "root"
+        # measures each player's score delta from the SEARCH ROOT board, so
+        # sibling leaves share one baseline and a move's own banked points
+        # count toward its value. The pre-fix "leaf" baseline (delta from the
+        # expanded leaf's board) subtracted the immediate gain of the move
+        # that created the leaf out of its own evaluation — end-of-game
+        # rollouts could not distinguish siblings whose difference was the
+        # points banked on the way in (tests/test_minimal_search_semantics).
+        # "leaf" is kept for A/B comparison only.
+        if rollout_reward_baseline not in ("root", "leaf"):
+            raise ValueError(
+                f"rollout_reward_baseline must be 'root' or 'leaf', "
+                f"got {rollout_reward_baseline!r}"
+            )
+        self.rollout_reward_baseline = rollout_reward_baseline
 
         # Layer 3 params
         self.progressive_widening_enabled = bool(progressive_widening_enabled)
@@ -789,6 +805,10 @@ class MCTSAgent:
         self._search_counter = 0
         # Track root player for minimax backups
         self._root_player: Optional[Player] = None
+        # Per-search per-player score baseline at the root board (used when
+        # rollout_reward_baseline == "root"); set wherever a search root is
+        # created (select_action, root-parallel workers, node_stats helper).
+        self._root_score_baseline: Optional[Dict[Player, int]] = None
 
         # Progressive history table: {(player, action_key): [total_reward, count]}
         # Keyed per acting player so each player's move statistics reflect
@@ -872,6 +892,7 @@ class MCTSAgent:
         # Run MCTS
         start_time = time.time()
         self._root_player = player  # Layer 4: track for minimax backups
+        self._root_score_baseline = {p: board.get_score(p) for p in _PLAYERS}
 
         # Layer 9: Compute adaptive per-move parameters
         if self.adaptive_exploration_enabled:
@@ -1838,8 +1859,15 @@ class MCTSAgent:
         sim_board = board.copy()
         current_player = player
 
-        # Initial scores for every player (rewards are score deltas per player)
-        initial_scores = {p: sim_board.get_score(p) for p in _PLAYERS}
+        # Baseline for the per-player reward deltas. "root": the search-root
+        # board's scores (shared by all sibling leaves, so a move's own banked
+        # points count toward its value). "leaf" (legacy/A-B only): this
+        # leaf's scores — erases the immediate-gain differential between
+        # siblings in end-of-game rollouts.
+        if self.rollout_reward_baseline == "root" and self._root_score_baseline is not None:
+            initial_scores = self._root_score_baseline
+        else:
+            initial_scores = {p: sim_board.get_score(p) for p in _PLAYERS}
         initial_potential = None
         if self.potential_shaping_enabled and self.learned_evaluator is not None:
             try:

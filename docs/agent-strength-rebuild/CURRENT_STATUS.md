@@ -2,6 +2,30 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-12 (session 5 — Phase 3: minimal trusted search) — PHASE 3 GATE: PASS (after fix)
+
+- **Current phase:** Phase 3 **complete** (gate PASS after the D-014 fix —
+  `phases/PHASE_3_MINIMAL_SEARCH.md`); next is the mandatory Phase 4 scaling gate.
+- **Defect found & fixed:** rollout rewards used LEAF-board score baselines, erasing the
+  immediate-gain differential between sibling moves in end-of-game rollouts (pocket position:
+  both children Q = 0.0, correct move chosen only by tie-break). Fix: `rollout_reward_baseline
+  ="root"` default (D-014); A/B pinned in tests (leaf → 0.0/0.0 blind; root → 5.0/1.0 exact).
+  Plausible plateau contributor. Era note added to `DATA_LINEAGE.md`.
+- **Work completed:** `mcts_lab/node_stats.py` CLI (root-children table, tree size, depth
+  histogram; takes `board_state_v1` JSON or seeded plies; `run_search_with_root` doubles as
+  the test harness); `tests/test_minimal_search_semantics.py` (9 tests: layer-off defaults,
+  visit conservation, pass-node sentinel, terminal reward vectors, determinism, the A/B pin).
+- **Tests passing:** search group (minimal-semantics + maxn + tactical) 17/17; layer/contract
+  suites re-run green; `mcts_lab.checks` 7/7; bounded sanity arena (champion 62.5% first-place
+  over 4 games at 100 ms — no collapse; not a strength claim).
+- **Observed for Phase 4:** the CLI makes the branching-vs-budget pathology visible — 317
+  legal moves at 16 plies: 200 iterations → pure depth-1 tree; 1 500 iterations → depth 2 with
+  visit concentration. This is exactly what the scaling study must quantify.
+- **Next recommended task:** Phase 4 — strength-vs-iteration-budget study under
+  `BENCHMARK_PROTOCOL.md` conditions (fixed pool/seeds/seat policy, iteration budgets e.g.
+  50/150/500/1500/5000), building on `training/diagnostics/search_quality.py`. Mandatory gate:
+  larger budgets must convincingly beat much smaller ones before ANY learning work.
+
 ## Session 2026-07-12 (session 4 — Phase 2 task 3: versioned formats + serialization) — PHASE 2 GATE: PASS
 
 - **Current phase:** Phase 2 **complete** (gate PASS — see `phases/PHASE_2_TRUSTED_ENGINE.md`);
