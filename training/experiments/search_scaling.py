@@ -191,9 +191,9 @@ def _analyze(all_games, agents, seeds, label, args, elapsed, run_dirs) -> Dict[s
         "budgets": budgets,
         "anchors": anchors,
         "minimal_search_params": MINIMAL_SEARCH_PARAMS,
-        "budget_agent_params": next(
-            (a["params"] for a in agents if a["type"] == "mcts"), None
-        ),
+        "agent_params": {
+            a["name"]: a["params"] for a in agents if a["type"] == "mcts"
+        },
         "seeds": seeds,
         "games_per_seed": args.games_per_seed,
         "completed_games": len(all_games),
