@@ -1,0 +1,56 @@
+{
+  "experiment": "value_model_v1",
+  "dataset": "data/value_dataset_v1",
+  "split": {
+    "train_games": 48,
+    "test_games": 12,
+    "train_rows": 13928,
+    "test_rows": 3480
+  },
+  "metrics": {
+    "ridge_baseline": {
+      "held_out_r2": 0.26351380233613675,
+      "held_out_mae_points": 5.610605959047379,
+      "pairwise_rank_accuracy": 0.6819704433497537
+    },
+    "hist_gb": {
+      "held_out_r2": 0.24576657150773085,
+      "held_out_mae_points": 5.663819243111619,
+      "pairwise_rank_accuracy": 0.6803940886699508
+    },
+    "mlp": {
+      "held_out_r2": 0.22134661640674047,
+      "held_out_mae_points": 5.8674827599973,
+      "pairwise_rank_accuracy": 0.6644334975369458
+    }
+  },
+  "gate1_beat_linear_baseline": false,
+  "best_model": "hist_gb",
+  "q_spread_probe": {
+    "seed20260620_ply8": {
+      "branching_factor": 325,
+      "expanded_children": 44,
+      "max_depth": 5,
+      "best_child_visit_share": 0.234,
+      "q_top3": [
+        82.42,
+        81.19,
+        80.83
+      ],
+      "q_spread": 6.34
+    },
+    "seed20260620_ply24": {
+      "branching_factor": 385,
+      "expanded_children": 44,
+      "max_depth": 4,
+      "best_child_visit_share": 0.114,
+      "q_top3": [
+        75.2,
+        75.14,
+        75.14
+      ],
+      "q_spread": 4.57
+    }
+  },
+  "artifact": "training/artifacts/value_models/v1/value_v1_hist_gb.joblib"
+}

@@ -22,27 +22,33 @@ addenda): tree shape fixed by PW; **the Layer-6 static evaluator is the binding 
 heuristic anchor); rollouts carry all current signal but saturate. Search mechanics are
 exonerated. Phases 7–8 stay blocked.
 
-1. **Define the evaluator target first** (decisions D-005/D-007, record before building):
-   per-player value vector from a leaf state; candidate targets = normalized final score vs
-   placement vs mixed (master prompt §13). Training data source available NOW without new
-   infrastructure: strong-rollout self-play labels (the EXP-002-style PW+rollout agent at
-   500 iters is the strongest validated player; `data/td_trajectories.csv` machinery and
-   `training/rich_features.py` 45-feature extraction already exist — but note the existing
-   TD weights WERE tried as `rich_leaf` candidates and lost; a fresh approach should change
-   the target/features/model, not just refit).
-2. **D-006 (framework):** sklearn/numpy is available; torch is NOT in requirements and the
-   browser path is numpy-only. A numpy-serving MLP or gradient-boosted trees (sklearn) on
-   the 45 rich features is the low-friction first rung; a candidate-scoring move evaluator
-   (master plan Phase 6) is the fuller direction if state-value alone can't discriminate.
-3. **Acceptance test is fixed and cheap (~1 h):** the EXP-003 ladder with the new evaluator
-   plugged into cutoff-0 leaves (`rich_leaf_eval_enabled` path or a new evaluator hook) —
-   `python -m training.experiments.search_scaling --pw --cutoff 0 ...` — must (a) beat the
-   EXP-002 rollout baseline at equal budgets and (b) show positive scaling. Compare against
-   the committed EXP-002/003 reports (same seeds/protocol — results pool).
-4. Root-statistics pre-probe for any candidate evaluator: Q spread across root moves must
-   substantially exceed the ~1.3-point flatness measured for Layer-6 (EXP-003 log entry).
-5. PW is NOT adopted into configs until a scaling run passes; no champion changes; no
-   default escapes (§20). Every training run needs held-out evaluation (risk #6, Phase 1).
+**Status after EXP-004 (gate 1 FAIL, feature ceiling):** dataset `data/value_dataset_v1`
+(17 408 rows) exists and is manifested; `training/experiments/value_model.py` trains and
+probes; non-linear ≤ linear on the 45 rich features (pairwise rank acc caps at 0.682); the
+model-as-leaf Q-spread is 4.6–6.3 pts (vs Layer-6's 1.3). The 45-feature state-value family
+is one gate from closure.
+
+**Exact next action — gate 3, the acceptance ladder with the ridge model:**
+1. Plumb a joblib model artifact into arena-buildable agents: extend
+   `mcts/rich_leaf_evaluator.RichLeafEvaluator` (or add a sibling evaluator) to load
+   `training/artifacts/value_models/v1/value_v1_*.joblib`-style artifacts
+   ({model, feature_names, target}) and predict instead of dot(weights); expose via a
+   `build_agent` param (e.g. `rich_leaf_model_path`). Keep `evaluate(board, player)`
+   semantics (already duck-typed-proven by `ValueModelLeafEvaluator` in value_model.py —
+   reuse that logic; note it caches per-board 4-player predictions). Add a unit test
+   (artifact round-trip + evaluate returns finite per-player values).
+   NOTE: retrain/save the RIDGE artifact (best model) — value_model.py currently saves the
+   best NON-linear model; add `--save-model ridge_baseline` or similar.
+2. Run the fixed ladder: `python -m training.experiments.search_scaling --pw --cutoff 0`
+   variant where budget agents use the model evaluator (extend the harness with
+   `--value-model PATH`). Same seeds/protocol; compare directly against the committed
+   EXP-002 (rollout) and EXP-003 (Layer-6) reports. PASS = beats EXP-002 baseline at equal
+   budget AND positive scaling. (~1 h.)
+3. On FAIL: D-015's consequence clause closes the state-value-on-45-features family; begin
+   the Phase 6 candidate-scoring (move-level) evaluator design with D-005/D-006/D-007 in
+   full, using the ladder result as the calibration baseline.
+4. Standing rules: PW not adopted into configs until a scaling run passes; no champion
+   changes; held-out splits mandatory; no default escapes (§20).
 
 Notes: browser bundle (`frontend/public/blokus_core.zip`) is generated — next
 `scripts/build_browser_core.sh` run picks up engine changes; never edit `browser_python/`

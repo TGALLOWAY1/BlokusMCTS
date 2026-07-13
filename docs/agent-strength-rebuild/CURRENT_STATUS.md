@@ -2,6 +2,26 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-13 (session 10 — evaluator v1 models: gate 1 FAIL, feature ceiling found)
+
+- **Current phase:** Phase 5/6 evaluator track. **EXP-004: D-015 gate 1 FAIL — informatively.**
+  Non-linear models add nothing over ridge on the 45 rich features (R² 0.264/0.246/0.221;
+  pairwise rank acc 0.682/0.680/0.664): **the feature representation, not model capacity, is
+  the ceiling** — which also explains why historical linear refits plateaued.
+- **Gate 2 probe:** even so, the model as a leaf evaluator produces root Q-spread 4.6–6.3
+  points (vs Layer-6's 1.3 flatness), 23% best-child share, depth 5 — mechanically far more
+  discriminating in-tree.
+- **Work completed:** `training/experiments/value_model.py` (game-level held-out training,
+  pairwise-rank discrimination metric, duck-typed `ValueModelLeafEvaluator` for the MCTS
+  rich-leaf slot, Q-spread probe, joblib artifact + report); artifacts committed under
+  `training/artifacts/value_models/v1/`.
+- **Next recommended task (gate 3):** plumb a model-artifact leaf evaluator into arena agent
+  configs (extend `RichLeafEvaluator` or `build_agent` to accept a joblib artifact) and run
+  the fixed acceptance ladder with the RIDGE model (best on all metrics) vs the EXP-002
+  rollout baseline. If it fails, D-015's consequence clause closes the
+  state-value-on-45-features family and Phase 6 candidate-scoring design begins with the
+  ladder result as its calibration baseline. See `HANDOFF.md`.
+
 ## Session 2026-07-12 (session 9 — evaluator track v1: dataset generation)
 
 - **Current phase:** Phase 5/6 evaluator track (Phase 4 gate open as acceptance test).
