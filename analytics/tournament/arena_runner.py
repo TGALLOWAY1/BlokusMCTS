@@ -525,6 +525,9 @@ def build_agent(config: AgentConfig, seed: int) -> _ArenaAgentAdapter:
             rich_leaf_weights_path=params.get("rich_leaf_weights_path"),
             # None -> serve the subset the artifact was trained with
             rich_leaf_feature_subset=params.get("rich_leaf_feature_subset"),
+            # Model-artifact leaf evaluator (D-015 gate 3); takes precedence
+            # over rich_leaf weights when set
+            value_model_path=params.get("value_model_path"),
         )
         return _SelectActionAdapter(agent)
 

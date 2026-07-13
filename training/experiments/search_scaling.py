@@ -61,7 +61,8 @@ PW_PARAMS: Dict[str, Any] = {
 
 
 def budget_agent(iterations: int, pw: bool = False,
-                 cutoff: Optional[int] = None) -> Dict[str, Any]:
+                 cutoff: Optional[int] = None,
+                 value_model: Optional[str] = None) -> Dict[str, Any]:
     params = dict(MINIMAL_SEARCH_PARAMS)
     if pw:
         params.update(PW_PARAMS)
@@ -70,6 +71,9 @@ def budget_agent(iterations: int, pw: bool = False,
         # deterministic, TT-cacheable) — isolates rollout noise from
         # evaluator quality.
         params["rollout_cutoff_depth"] = int(cutoff)
+    if value_model:
+        # D-015 gate 3: model-artifact leaf evaluator replaces rollouts.
+        params["value_model_path"] = str(value_model)
     params["iterations"] = int(iterations)
     return {
         "name": f"mcts_it{iterations}",
@@ -90,7 +94,9 @@ def _build_agents(args: argparse.Namespace):
     anchors = [a for a in args.anchor.split(",") if a] if args.anchor else []
     pw = bool(getattr(args, "pw", False))
     cutoff = getattr(args, "cutoff", None)
-    agents = ([budget_agent(b, pw=pw, cutoff=cutoff) for b in budgets]
+    value_model = getattr(args, "value_model", None)
+    agents = ([budget_agent(b, pw=pw, cutoff=cutoff, value_model=value_model)
+               for b in budgets]
               + [anchor_agent(a) for a in anchors])
     if len(agents) != 4:
         raise SystemExit(
@@ -101,6 +107,7 @@ def _build_agents(args: argparse.Namespace):
     label = args.label or (
         ("pw_" if pw else "")
         + (f"c{cutoff}_" if cutoff is not None else "")
+        + ("vm_" if value_model else "")
         + "b" + "_".join(str(b) for b in budgets)
     )
     return agents, seeds, label
@@ -273,6 +280,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--cutoff", type=int, default=None,
                         help="override rollout_cutoff_depth on the budget agents "
                              "(0 = pure static-eval leaves — EXP-003 variant)")
+    parser.add_argument("--value-model", default=None,
+                        help="joblib value-model artifact for the budget agents' "
+                             "leaf evaluator (D-015 gate 3)")
     parser.add_argument("--stat-seed", type=int, default=20260712)
     parser.add_argument("--reanalyze", action="store_true",
                         help="rebuild report.json from the label dir's existing "

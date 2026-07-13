@@ -24,6 +24,31 @@ Artifacts:
 
 ---
 
+## EXP-005 — D-015 gate 3: acceptance ladder with the ridge value model as leaf evaluator
+
+- **Experiment ID:** EXP-005
+- **Date:** 2026-07-13 (launched ~19:5x UTC)
+- **Commit:** the gate-3 PR head (adds `mcts/value_model_evaluator.py`, `value_model_path`
+  plumbing through MCTSAgent/build_agent/parallel config, `--value-model` ladder flag)
+- **Hypothesis (the decisive one):** the ridge value model (pairwise rank acc 0.682,
+  in-tree Q-spread 4.6–6.3 pts) as the leaf evaluator (a) beats the EXP-002 rollout
+  baseline at equal budgets and (b) produces positive scaling. PASS reopens the Phase 4
+  gate path; FAIL closes the state-value-on-45-features family (D-015 consequence clause).
+- **Independent variable (vs EXP-002/003):** budget agents' leaf source =
+  `value_model_path=training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib`
+  (replaces rollouts via the rich-leaf slot; deterministic).
+- **Controlled variables:** everything else identical to EXP-002/003 (PW pw_c=2.0 α=0.5,
+  budgets 50/150/500, heuristic anchor, round_robin, seeds 20260620/20260621, 12 games/seed,
+  standard scoring, stat seed 20260712) — results pool across the three conditions.
+- **Agents:** mcts_it50/150/500 (PW + ridge-model leaves), heuristic.
+- **Game count:** 24 (deadline 170 min). **Seat-balancing:** round_robin.
+- **Hardware:** session container (single process, num_workers=1).
+- **Result:** _recorded on completion below._
+- **Uncertainty:** Wilson 95% CIs; 10k-permutation sign-flip tests; cross-condition
+  comparison against committed EXP-002/003 reports.
+- **Interpretation / Decision:** _on completion._
+- **Artifacts:** `training/reports/experiments/search_scaling/pw_vm_b50_150_500/report.json`.
+
 ## EXP-004 — Evaluator track v1: model training + D-015 gates 1–2
 
 - **Experiment ID:** EXP-004
