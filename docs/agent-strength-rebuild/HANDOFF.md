@@ -22,33 +22,34 @@ addenda): tree shape fixed by PW; **the Layer-6 static evaluator is the binding 
 heuristic anchor); rollouts carry all current signal but saturate. Search mechanics are
 exonerated. Phases 7–8 stay blocked.
 
-**Status after EXP-004 (gate 1 FAIL, feature ceiling):** dataset `data/value_dataset_v1`
-(17 408 rows) exists and is manifested; `training/experiments/value_model.py` trains and
-probes; non-linear ≤ linear on the 45 rich features (pairwise rank acc caps at 0.682); the
-model-as-leaf Q-spread is 4.6–6.3 pts (vs Layer-6's 1.3). The 45-feature state-value family
-is one gate from closure.
+**Status after EXP-005 (gate 3 PARTIAL — first positive scaling):** ridge-model leaves
+(`training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib`, plumbed via
+`value_model_path` through MCTSAgent/build_agent) produced the investigation's first
+positive budget→strength curve (rank 2.12→1.83→1.75; it500−it50 +5.71 pts p=0.054) and
+beat rollout leaves' anchor margins at every rung. Saturation above ~150 iters at this
+evaluator quality. Phase 4 is PARTIAL — two confirmations from PASS.
 
-**Exact next action — gate 3, the acceptance ladder with the ridge model:**
-1. Plumb a joblib model artifact into arena-buildable agents: extend
-   `mcts/rich_leaf_evaluator.RichLeafEvaluator` (or add a sibling evaluator) to load
-   `training/artifacts/value_models/v1/value_v1_*.joblib`-style artifacts
-   ({model, feature_names, target}) and predict instead of dot(weights); expose via a
-   `build_agent` param (e.g. `rich_leaf_model_path`). Keep `evaluate(board, player)`
-   semantics (already duck-typed-proven by `ValueModelLeafEvaluator` in value_model.py —
-   reuse that logic; note it caches per-board 4-player predictions). Add a unit test
-   (artifact round-trip + evaluate returns finite per-player values).
-   NOTE: retrain/save the RIDGE artifact (best model) — value_model.py currently saves the
-   best NON-linear model; add `--save-model ridge_baseline` or similar.
-2. Run the fixed ladder: `python -m training.experiments.search_scaling --pw --cutoff 0`
-   variant where budget agents use the model evaluator (extend the harness with
-   `--value-model PATH`). Same seeds/protocol; compare directly against the committed
-   EXP-002 (rollout) and EXP-003 (Layer-6) reports. PASS = beats EXP-002 baseline at equal
-   budget AND positive scaling. (~1 h.)
-3. On FAIL: D-015's consequence clause closes the state-value-on-45-features family; begin
-   the Phase 6 candidate-scoring (move-level) evaluator design with D-005/D-006/D-007 in
-   full, using the ladder result as the calibration baseline.
-4. Standing rules: PW not adopted into configs until a scaling run passes; no champion
-   changes; held-out splits mandatory; no default escapes (§20).
+**Exact next actions:**
+1. **EXP-006a — direct equal-budget test (~2.5 h):** one mixed table
+   [model-500 (PW + value_model_path), rollout-500 (exact EXP-002 config: PW, greedy_sample,
+   cutoff 12), heuristic, random], round_robin, seeds 20260620/20260621, 12 games/seed.
+   Needs a small harness extension (mixed leaf-source tables — budgets currently share one
+   leaf source; e.g. `--mixed-pair model:rollout` or explicit agent-config JSONs via a new
+   flag). The paired model-vs-rollout permutation test is the clean (a) criterion.
+2. **EXP-006b — saturation/teacher-budget ladder (~4 h):** 150/500/1500 model-leaf rungs +
+   heuristic (`--pw --value-model ... --budgets 150,500,1500`). Cost warning: model leaves
+   run ~427 s/game at 50/150/500 — the 1500 rung roughly doubles that; size with the
+   deadline flag. Locates saturation → teacher budget (D-008).
+3. On both confirming: declare **Phase 4 PASS** (report update), formalize the PW +
+   model-leaf configuration as the new minimal-search candidate (decision; PW adoption was
+   deferred pending exactly this), then proceed to Phase 5 closure (rollouts formally
+   deprecated as leaf source) and Phase 7 (teacher self-play data pipeline) — with the
+   evaluator-improvement loop (better features/models → re-run ladder) as the ongoing
+   strength axis.
+4. Optimization axis (not blocking): leaf-eval cost — 45-feature 4-player extraction is the
+   new hot path; the rich-leaf machinery already supports cheaper feature subsets.
+5. Standing rules unchanged: no champion changes outside the gate; held-out splits
+   mandatory; no default escapes (§20).
 
 Notes: browser bundle (`frontend/public/blokus_core.zip`) is generated — next
 `scripts/build_browser_core.sh` run picks up engine changes; never edit `browser_python/`

@@ -109,6 +109,32 @@ static-eval leaves; full record in `../EXPERIMENT_LOG.md`):
 - This ordering is the master plan's own: a failed gate is remediated by the smallest
   causal fix — here, the value function — not by more search variants or bigger runs.
 
+## Addendum 3 (2026-07-13, EXP-005): first positive scaling — gate now PARTIAL
+
+Gate-3 ladder with the ridge value model (pairwise 0.682) as leaf evaluator, identical
+protocol (full record: `../EXPERIMENT_LOG.md` EXP-005):
+
+- **Positive scaling, first time measured**: avg rank monotonic in budget
+  (2.12 → 1.83 → 1.75); it500−it50 = +5.71 pts, p=0.054; strength rises 50→150 and
+  saturates by 500 at this evaluator quality.
+- **Model leaves beat rollout leaves**: anchor margins +15.0/+19.9/+20.8 vs EXP-002's
+  +14.75/+16.38/+11.04 (decisive at 500); the heuristic anchor is shut out (0% first place,
+  TS μ 1.5).
+- Cost note: 427 s/game — the 4-player 45-feature leaf extraction is the new hot path
+  (future optimization axis; a cheaper feature subset exists in the rich-leaf machinery).
+
+**Gate result: FAIL → PARTIAL — MORE EVIDENCE REQUIRED.** Outstanding before PASS:
+1. **EXP-006a** — direct same-table equal-budget test: [model-500, rollout-500 (exact
+   EXP-002 config), heuristic, random], round_robin, same seeds — the clean
+   "beats rollouts at equal budget" criterion without cross-condition caveats.
+2. **EXP-006b** — 150/500/1500 model-leaf ladder to locate saturation and set the teacher
+   budget (D-008).
+
+The evaluator-quality attribution stands confirmed in reverse: improving ONLY the value
+function turned scaling positive with search mechanics untouched. The 45-feature family is
+not closed (D-015 consequence clause superseded); representation upgrades are now an
+optimization axis, not a prerequisite.
+
 - **Failure response (per master prompt §11/§20 — no default escapes):** do NOT proceed to
   Phases 5–8. Targeted distinguishing experiments, one variable each:
   1. **EXP-002 (next): progressive widening ladder.** Same 50/150/500 ladder with
