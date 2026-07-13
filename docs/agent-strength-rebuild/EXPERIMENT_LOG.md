@@ -24,6 +24,45 @@ Artifacts:
 
 ---
 
+## EXP-004 — Evaluator track v1: model training + D-015 gates 1–2
+
+- **Experiment ID:** EXP-004
+- **Date:** 2026-07-13 (early UTC)
+- **Commit:** the evaluator-v1 PR head (harness `training/experiments/value_model.py`)
+- **Hypothesis:** a non-linear model (GBM/MLP) on the 45 `rich_blokus_v1` features beats the
+  linear baseline at predicting standard final scores (D-015 gate 1), and its in-tree root
+  Q-spread far exceeds Layer-6's measured 1.3-point flatness (gate 2).
+- **Independent variable:** model family (ridge baseline vs HistGB vs MLP), same features,
+  same data.
+- **Controlled variables:** dataset `data/value_dataset_v1` (17 408 rows / 60 games,
+  standard-scored PW-50 teacher self-play); GAME-level 80/20 held-out split (48/12 games,
+  split seed 20260713); target = final_score/100; identical probe protocol to EXP-003's
+  pre-probe (PW, 500 iterations, seeds/plies matched).
+- **Result:**
+  | model | held-out R² | MAE (pts) | pairwise rank accuracy |
+  |---|---|---|---|
+  | ridge (linear baseline) | **0.264** | **5.61** | **0.682** |
+  | hist_gb | 0.246 | 5.66 | 0.680 |
+  | mlp | 0.221 | 5.87 | 0.664 |
+  **Gate 1: FAIL** — no non-linear lift on any metric. Gate 2 probe (hist_gb as leaf
+  evaluator): root Q-spread **6.34 / 4.57** points at ply 8/24 (vs Layer-6's ~1.3), best-child
+  share 23%, depth 5 — the bar "substantially exceed the flatness" is met, though top-3 Q at
+  ply 24 remain within 0.06.
+- **Uncertainty:** single split (12 held-out games); metric ordering consistent across all
+  three metrics; gate-1 differences are small but uniformly non-positive for non-linear.
+- **Interpretation:** **capacity is not the bottleneck — the 45-feature representation is.**
+  The features carry genuine ordering signal (0.68 pairwise ≫ 0.5 chance) but saturate at
+  R² ≈ 0.26 regardless of model family. This explains why historical `rich_leaf`/TD linear
+  refits plateaued: they were already at the feature ceiling. Whether 0.68-pairwise value
+  quality is enough to beat rollout leaves in actual play is exactly gate 3.
+- **Decision:** run gate 3 (the fixed Phase 4 acceptance ladder) with the **ridge** model
+  (best on every metric; trivially numpy-servable) before designing the Phase 6 move-level /
+  richer-representation evaluator — the ladder verdict calibrates any future design either
+  way. D-015 consequence clause is armed: if gate 3 fails, the state-value-on-45-features
+  family is closed.
+- **Artifacts:** `training/artifacts/value_models/v1/report.json`,
+  `value_v1_hist_gb.joblib` (fitted artifact incl. dataset manifest + split + metrics).
+
 ## EXP-003 — Phase 4 remediation: value-signal isolation (PW + pure static-eval leaves)
 
 - **Experiment ID:** EXP-003
