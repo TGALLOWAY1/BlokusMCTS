@@ -52,6 +52,12 @@ state).
 | `td_evaluator_weights.json` (45-feature TD, full subset, 732 rows) | `2860a0791d957f272a2c7413aea687c34d1d64f6e84a8b843373c4806d73a7cc` | **Unknown** strength value; post-fix data |
 | `rich_leaf_weights.json` (TD, score subset, 2 120 rows) | `0dbdbd3f46341ed6199251417a2795ec33ec56b4b8e3e5ca985d02dbe4220b48` | **Unknown** strength value; its candidate lost to champion (−60 Elo, run 20260711T190001Z) |
 
+### Rescue-era datasets (fresh, manifested)
+
+| Dataset | sha256 | Status |
+|---|---|---|
+| `data/value_dataset_v1/trajectories.csv` (17 408 rows, 60 games, PW+rollout-50 self-play, standard scoring, `rich_blokus_v1` features, per-ply capture, seed 20260713) | `2ae265b3c65c39ee825dea27759f8e90670dc5e28c76f19fbb24c616d42fbd81` | **Verified & finalized** — immutable (generator refuses appends); manifest `4c3b1578…` records commit/agents/seeds/schema ids |
+
 ### Not versioned
 
 Per-game `training/state/selfplay_runs/*/games.jsonl` are gitignored (bulk). Consequence:

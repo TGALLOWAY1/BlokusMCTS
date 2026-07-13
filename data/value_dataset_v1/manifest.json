@@ -1,0 +1,94 @@
+{
+  "dataset_schema_version": "value_dataset_v1",
+  "purpose": "value-evaluator training (Phase 5/6 evaluator track)",
+  "generating_commit": "2b104f8bb9affc5fe4d55ccf3d8ecc52840c3bc4",
+  "run_id": "vds1_s20260713",
+  "scoring_mode": "standard",
+  "engine_state_schema": "board_state_v1",
+  "feature_set_version": "rich_blokus_v1",
+  "agent_version": "rescue_pw50_std",
+  "teacher_agents": [
+    {
+      "name": "pw50_1",
+      "type": "mcts",
+      "thinking_time_ms": null,
+      "params": {
+        "deterministic_time_budget": false,
+        "rollout_policy": "greedy_sample",
+        "greedy_sample_size": 12,
+        "rollout_cutoff_depth": 12,
+        "heuristic_move_ordering": true,
+        "exploration_constant": 1.414,
+        "use_transposition_table": true,
+        "num_workers": 1,
+        "progressive_widening_enabled": true,
+        "pw_c": 2.0,
+        "pw_alpha": 0.5,
+        "iterations": 50
+      }
+    },
+    {
+      "name": "pw50_2",
+      "type": "mcts",
+      "thinking_time_ms": null,
+      "params": {
+        "deterministic_time_budget": false,
+        "rollout_policy": "greedy_sample",
+        "greedy_sample_size": 12,
+        "rollout_cutoff_depth": 12,
+        "heuristic_move_ordering": true,
+        "exploration_constant": 1.414,
+        "use_transposition_table": true,
+        "num_workers": 1,
+        "progressive_widening_enabled": true,
+        "pw_c": 2.0,
+        "pw_alpha": 0.5,
+        "iterations": 50
+      }
+    },
+    {
+      "name": "pw50_3",
+      "type": "mcts",
+      "thinking_time_ms": null,
+      "params": {
+        "deterministic_time_budget": false,
+        "rollout_policy": "greedy_sample",
+        "greedy_sample_size": 12,
+        "rollout_cutoff_depth": 12,
+        "heuristic_move_ordering": true,
+        "exploration_constant": 1.414,
+        "use_transposition_table": true,
+        "num_workers": 1,
+        "progressive_widening_enabled": true,
+        "pw_c": 2.0,
+        "pw_alpha": 0.5,
+        "iterations": 50
+      }
+    },
+    {
+      "name": "pw50_4",
+      "type": "mcts",
+      "thinking_time_ms": null,
+      "params": {
+        "deterministic_time_budget": false,
+        "rollout_policy": "greedy_sample",
+        "greedy_sample_size": 12,
+        "rollout_cutoff_depth": 12,
+        "heuristic_move_ordering": true,
+        "exploration_constant": 1.414,
+        "use_transposition_table": true,
+        "num_workers": 1,
+        "progressive_widening_enabled": true,
+        "pw_c": 2.0,
+        "pw_alpha": 0.5,
+        "iterations": 50
+      }
+    }
+  ],
+  "seed": 20260713,
+  "num_games_requested": 60,
+  "capture_every_ply": true,
+  "status": "finalized",
+  "rows_written": 17408,
+  "elapsed_sec": 7036.6
+}
