@@ -145,9 +145,17 @@ class ValueModelLeafEvaluator:
         self._cache: Dict[int, float] = {}
 
     def evaluate(self, board, player) -> float:
+        from engine.board import Player as _P
         from training.rich_features import FeatureCache, extract_rich_features
 
-        key = (board.occupied_bits, board.current_player.value, board.move_count)
+        # Key on the full authoritative state: identical union occupancy can
+        # hide different per-player ownership or piece inventories, and the
+        # features depend on both.
+        key = (
+            tuple(board.player_bits[p] for p in _P),
+            tuple(tuple(sorted(board.player_pieces_used[p])) for p in _P),
+            board.current_player.value,
+        )
         if key != self._cache_key:
             cache = FeatureCache()
             self._cache = {}
