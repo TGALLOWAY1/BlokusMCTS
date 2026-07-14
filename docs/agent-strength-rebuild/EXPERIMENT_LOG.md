@@ -24,6 +24,56 @@ Artifacts:
 
 ---
 
+## EXP-005 — D-015 gate 3: acceptance ladder with the ridge value model as leaf evaluator
+
+- **Experiment ID:** EXP-005
+- **Date:** 2026-07-13 (launched ~19:5x UTC)
+- **Commit:** the gate-3 PR head (adds `mcts/value_model_evaluator.py`, `value_model_path`
+  plumbing through MCTSAgent/build_agent/parallel config, `--value-model` ladder flag)
+- **Hypothesis (the decisive one):** the ridge value model (pairwise rank acc 0.682,
+  in-tree Q-spread 4.6–6.3 pts) as the leaf evaluator (a) beats the EXP-002 rollout
+  baseline at equal budgets and (b) produces positive scaling. PASS reopens the Phase 4
+  gate path; FAIL closes the state-value-on-45-features family (D-015 consequence clause).
+- **Independent variable (vs EXP-002/003):** budget agents' leaf source =
+  `value_model_path=training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib`
+  (replaces rollouts via the rich-leaf slot; deterministic).
+- **Controlled variables:** everything else identical to EXP-002/003 (PW pw_c=2.0 α=0.5,
+  budgets 50/150/500, heuristic anchor, round_robin, seeds 20260620/20260621, 12 games/seed,
+  standard scoring, stat seed 20260712) — results pool across the three conditions.
+- **Agents:** mcts_it50/150/500 (PW + ridge-model leaves), heuristic.
+- **Game count:** 24 (deadline 170 min). **Seat-balancing:** round_robin.
+- **Hardware:** session container (single process, num_workers=1).
+- **Result:** 24/24 games in 171 min (427 s/game — model leaves cost more than rollouts;
+  4-player 45-feature extraction dominates).
+  | agent | 1st% | Wilson 95% | avg rank | TS μ (σ) | vs heuristic (paired) |
+  |---|---|---|---|---|---|
+  | mcts_it50 | 16.0% | [0.06, 0.35] | 2.12 | 30.41 (7.57) | +15.04 (p=0.0001) |
+  | mcts_it150 | 45.1% | [0.27, 0.64] | 1.83 | 37.00 (7.66) | +19.88 (p<0.0001) |
+  | mcts_it500 | 38.9% | [0.22, 0.59] | 1.75 | 31.52 (7.60) | +20.75 (p<0.0001) |
+  | heuristic | 0.0% | [0.00, 0.14] | 3.38 | 1.46 (7.50) | — |
+  Budget pairs: it500−it50 = **+5.71 (p=0.054)**; it150−it50 = +4.83 (p=0.29);
+  it150−it500 = +0.88 (p=0.86).
+- **Uncertainty:** 24 games; the 10× pair is borderline-significant; cross-condition
+  anchor-margin comparison shares seeds/protocol but the anchor faces different budget
+  opponents per condition (directional, not exact).
+- **Interpretation:** **the first positive scaling signal of the entire investigation.**
+  (b) Scaling: avg rank improves monotonically with budget (2.12 → 1.83 → 1.75); the 10×
+  pair reaches p=0.054; strength rises 50→150 then saturates by 500 at this evaluator
+  quality. (a) vs rollout leaves: anchor margins exceed EXP-002 at every rung
+  (+15.0/+19.9/+20.8 vs +14.75/+16.38/+11.04), decisively at 500 — and the anchor is
+  shut out entirely (0% first place). A 0.68-pairwise evaluator already outperforms
+  rollouts as the leaf source AND converts budget into strength at the low end.
+- **Decision:** **Gate 3: PARTIAL — MORE EVIDENCE REQUIRED** (per the report vocabulary):
+  direction validated, two confirmations outstanding before Phase 4 can be declared
+  PASSED: (1) EXP-006a — a DIRECT same-table equal-budget test: [model-500, rollout-500
+  (exact EXP-002 config), heuristic, random], round_robin, same seeds — the clean (a)
+  criterion; (2) EXP-006b — a 150/500/1500 model-leaf rung to locate the saturation point
+  and the teacher budget (D-008). The 45-feature family is NOT closed — D-015's
+  consequence clause is superseded by this result; feature/representation upgrades become
+  an optimization axis rather than a prerequisite.
+- **Artifacts:** `training/reports/experiments/search_scaling/pw_vm_b50_150_500/report.json`
+  (+ per-seed run dirs).
+
 ## EXP-004 — Evaluator track v1: model training + D-015 gates 1–2
 
 - **Experiment ID:** EXP-004

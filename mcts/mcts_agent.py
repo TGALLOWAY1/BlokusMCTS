@@ -520,6 +520,7 @@ class MCTSAgent:
         rich_leaf_eval_enabled: bool = False,
         rich_leaf_weights_path: Optional[str] = None,
         rich_leaf_feature_subset: Optional[str] = None,
+        value_model_path: Optional[str] = None,
         # --- Search Trace (Visualization) ---
         enable_search_trace: bool = False,
         search_trace_sample_rate: int = 10,
@@ -779,7 +780,15 @@ class MCTSAgent:
         # Constructed only when enabled; falls back to the 8-feature evaluator
         # (shared with state_evaluator) when the TD artifact is unavailable.
         self.rich_leaf_evaluator: Optional["RichLeafEvaluator"] = None
-        if self.rich_leaf_eval_enabled:
+        # A model-artifact leaf evaluator (D-015 gate 3) plugs into the same
+        # rich-leaf slot and takes precedence over linear rich-leaf weights.
+        self.value_model_path = value_model_path
+        if value_model_path:
+            from .value_model_evaluator import ValueModelLeafEvaluator
+
+            self.rich_leaf_eval_enabled = True
+            self.rich_leaf_evaluator = ValueModelLeafEvaluator(value_model_path)
+        elif self.rich_leaf_eval_enabled:
             from .rich_leaf_evaluator import (
                 DEFAULT_RICH_LEAF_WEIGHTS_PATH,
                 RichLeafEvaluator,

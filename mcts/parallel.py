@@ -68,6 +68,7 @@ def _extract_agent_config(agent) -> dict:
         "two_ply_top_k": agent.two_ply_top_k,
         "rollout_cutoff_depth": agent.rollout_cutoff_depth,
         "rollout_reward_baseline": agent.rollout_reward_baseline,
+        "value_model_path": agent.value_model_path,
         "state_eval_weights": None,  # weights are internal to evaluator
         "state_eval_phase_weights": None,
         "minimax_backup_alpha": agent.minimax_backup_alpha,

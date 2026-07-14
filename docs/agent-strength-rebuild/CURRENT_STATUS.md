@@ -2,6 +2,25 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-13/14 (session 11 — gate 3: FIRST POSITIVE SCALING) — Phase 4 now PARTIAL
+
+- **Current phase:** Phase 4 gate **PARTIAL — MORE EVIDENCE REQUIRED** (was FAIL-attributed).
+  EXP-005: ridge-model leaves produce the first positive budget→strength signal of the
+  investigation (avg rank monotonic 2.12→1.83→1.75; it500−it50 +5.71 pts p=0.054; anchor
+  shut out at 0% first place) and beat rollout leaves' anchor margins at every rung
+  (decisively at 500: +20.8 vs +11.0).
+- **Work completed:** `mcts/value_model_evaluator.py` + `value_model_path` plumbing
+  (MCTSAgent, build_agent, parallel config) + 5 unit tests; ridge artifact saved;
+  `--value-model` ladder flag; EXP-005 run + full log entry; Phase 4 addendum 3.
+- **Interpretation:** the evaluator-quality attribution is confirmed in reverse — changing
+  ONLY the leaf value source turned scaling positive with search mechanics untouched. The
+  45-feature family is NOT closed; saturation above ~150 iters at this evaluator quality is
+  the next boundary.
+- **Next recommended task:** EXP-006a (direct same-table model-500 vs rollout-500 test — the
+  clean equal-budget criterion) and EXP-006b (150/500/1500 model-leaf ladder → saturation
+  point → teacher budget D-008). Then, if both confirm: Phase 4 PASS, PW+model-leaf config
+  formalized, and Phases 5→7 proceed. See `HANDOFF.md`.
+
 ## Session 2026-07-13 (session 10 — evaluator v1 models: gate 1 FAIL, feature ceiling found)
 
 - **Current phase:** Phase 5/6 evaluator track. **EXP-004: D-015 gate 1 FAIL — informatively.**

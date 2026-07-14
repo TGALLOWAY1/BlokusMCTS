@@ -25,32 +25,7 @@
     }
   },
   "gate1_beat_linear_baseline": false,
-  "best_model": "hist_gb",
-  "q_spread_probe": {
-    "seed20260620_ply8": {
-      "branching_factor": 325,
-      "expanded_children": 44,
-      "max_depth": 5,
-      "best_child_visit_share": 0.234,
-      "q_top3": [
-        82.42,
-        81.19,
-        80.83
-      ],
-      "q_spread": 6.34
-    },
-    "seed20260620_ply24": {
-      "branching_factor": 385,
-      "expanded_children": 44,
-      "max_depth": 4,
-      "best_child_visit_share": 0.114,
-      "q_top3": [
-        75.2,
-        75.14,
-        75.14
-      ],
-      "q_spread": 4.57
-    }
-  },
-  "artifact": "training/artifacts/value_models/v1/value_v1_hist_gb.joblib"
+  "best_model": "ridge_baseline",
+  "q_spread_probe": null,
+  "artifact": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
 }

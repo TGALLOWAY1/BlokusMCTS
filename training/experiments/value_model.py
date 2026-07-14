@@ -130,47 +130,6 @@ def train_and_evaluate(df, feature_cols, args):
 # Gate 2: root Q-spread probe with the model as the leaf evaluator
 # ---------------------------------------------------------------------------
 
-class ValueModelLeafEvaluator:
-    """Duck-typed drop-in for the MCTSAgent rich-leaf slot.
-
-    evaluate(board, player) returns the model's normalized-final-score
-    prediction (final_score / 100); MCTSAgent multiplies by its x100 reward
-    scale, landing values back on the score-point scale.
-    """
-
-    def __init__(self, model, feature_names: List[str]):
-        self.model = model
-        self.feature_names = list(feature_names)
-        self._cache_key = None
-        self._cache: Dict[int, float] = {}
-
-    def evaluate(self, board, player) -> float:
-        from engine.board import Player as _P
-        from training.rich_features import FeatureCache, extract_rich_features
-
-        # Key on the full authoritative state: identical union occupancy can
-        # hide different per-player ownership or piece inventories, and the
-        # features depend on both.
-        key = (
-            tuple(board.player_bits[p] for p in _P),
-            tuple(tuple(sorted(board.player_pieces_used[p])) for p in _P),
-            board.current_player.value,
-        )
-        if key != self._cache_key:
-            cache = FeatureCache()
-            self._cache = {}
-            from engine.board import Player
-            rows = []
-            players = list(Player)
-            for p in players:
-                feats = extract_rich_features(board, p, cache=cache)
-                rows.append([float(feats.get(n, 0.0)) for n in self.feature_names])
-            preds = self.model.predict(np.asarray(rows, dtype=float))
-            self._cache = {p.value: float(v) for p, v in zip(players, preds)}
-            self._cache_key = key
-        return self._cache[player.value]
-
-
 def q_spread_probe(model, feature_names, seeds=(20260620,), plies=(8, 24)) -> Dict:
     from engine.board import Board
     from engine.move_generator import get_shared_generator
@@ -204,8 +163,12 @@ def q_spread_probe(model, feature_names, seeds=(20260620,), plies=(8, 24)) -> Di
             board = board_at(n_plies, seed)
             bf = len(gen.get_legal_moves(board, board.current_player))
             agent = MCTSAgent(iterations=500, seed=7, **params)
+            from mcts.value_model_evaluator import ValueModelLeafEvaluator
+
             agent.rich_leaf_eval_enabled = True
-            agent.rich_leaf_evaluator = ValueModelLeafEvaluator(model, feature_names)
+            agent.rich_leaf_evaluator = ValueModelLeafEvaluator.from_fitted(
+                model, feature_names
+            )
             root = run_search_with_root(agent, board, board.current_player)
             _, depth_hist = tree_statistics(root)
             qs = sorted((c.total_reward / c.visits for c in root.children if c.visits),
@@ -237,6 +200,9 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--test-frac", type=float, default=0.2)
     parser.add_argument("--split-seed", type=int, default=20260713)
     parser.add_argument("--skip-probe", action="store_true")
+    parser.add_argument("--save-model", default=None,
+                        help="save this model's artifact instead of the best "
+                             "non-linear one (e.g. ridge_baseline)")
     args = parser.parse_args(argv)
 
     dataset_dir = Path(args.dataset)
@@ -254,7 +220,13 @@ def main(argv: Optional[list] = None) -> int:
     # skill AND pairwise discrimination.
     baseline = results["ridge_baseline"]
     non_linear = {k: v for k, v in results.items() if k != "ridge_baseline"}
-    best_name = max(non_linear, key=lambda k: non_linear[k]["pairwise_rank_accuracy"])
+    if args.save_model:
+        best_name = args.save_model
+        if best_name not in fitted:
+            raise SystemExit(f"--save-model must be one of {sorted(fitted)}")
+    else:
+        best_name = max(non_linear,
+                        key=lambda k: non_linear[k]["pairwise_rank_accuracy"])
     best = results[best_name]
     gate1 = (best["held_out_r2"] > baseline["held_out_r2"]
              and best["pairwise_rank_accuracy"] > baseline["pairwise_rank_accuracy"])
