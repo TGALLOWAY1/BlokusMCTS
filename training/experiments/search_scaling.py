@@ -90,6 +90,18 @@ def anchor_agent(kind: str) -> Dict[str, Any]:
 
 
 def _build_agents(args: argparse.Namespace):
+    # Explicit-table mode (EXP-006a style): a JSON file with exactly 4 arena
+    # agent configs — allows mixed leaf sources in one table.
+    agents_json = getattr(args, "agents_json", None)
+    if agents_json:
+        agents = json.loads(Path(agents_json).read_text())
+        if not isinstance(agents, list) or len(agents) != 4:
+            raise SystemExit(f"{agents_json} must hold a list of exactly 4 agent configs")
+        if not args.label:
+            raise SystemExit("--label is required with --agents-json")
+        seeds = [int(s) for s in args.seeds.split(",")]
+        return agents, seeds, args.label
+
     budgets = sorted({int(b) for b in args.budgets.split(",")})
     anchors = [a for a in args.anchor.split(",") if a] if args.anchor else []
     pw = bool(getattr(args, "pw", False))
@@ -283,6 +295,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--value-model", default=None,
                         help="joblib value-model artifact for the budget agents' "
                              "leaf evaluator (D-015 gate 3)")
+    parser.add_argument("--agents-json", default=None,
+                        help="JSON file with exactly 4 explicit arena agent "
+                             "configs (mixed-leaf-source tables); requires --label")
     parser.add_argument("--stat-seed", type=int, default=20260712)
     parser.add_argument("--reanalyze", action="store_true",
                         help="rebuild report.json from the label dir's existing "

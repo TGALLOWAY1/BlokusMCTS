@@ -24,6 +24,40 @@ Artifacts:
 
 ---
 
+## EXP-006a — Phase 4 confirmation 1: direct same-table model-500 vs rollout-500
+
+- **Experiment ID:** EXP-006a
+- **Date:** 2026-07-14 (launched ~00:4x UTC)
+- **Commit:** the EXP-006 PR head (harness gains `--agents-json` mixed-table mode)
+- **Hypothesis:** at equal budget (500 iterations, identical PW/search config), the
+  ridge-model leaf agent beats the rollout leaf agent head-to-head in the SAME games —
+  the clean version of gate-3 criterion (a), no cross-condition caveats.
+- **Independent variable:** leaf source per seat (vm500 = `value_model_path` ridge artifact;
+  rollout500 = greedy_sample rollouts, cutoff 12 — exact EXP-002 config).
+- **Controlled variables:** one mixed table [vm500, rollout500, heuristic, random];
+  round_robin; seeds 20260620/20260621; 10 games/seed; standard scoring; stat seed 20260712.
+- **Game count:** 20 (deadline 260 min). **Hardware:** session container (concurrent with
+  EXP-006b — iteration budgets, so contention affects wall-clock only).
+- **Result:** _recorded on completion below._
+- **Uncertainty:** paired sign-flip permutation test on vm500−rollout500 per-game score
+  diffs (primary); Wilson CIs; TrueSkill.
+- **Artifacts:** `training/reports/experiments/search_scaling/exp006a_vm_vs_rollout/`.
+
+## EXP-006b — Phase 4 confirmation 2: model-leaf saturation ladder (150/500/1500)
+
+- **Experiment ID:** EXP-006b
+- **Date:** 2026-07-14 (launched ~00:4x UTC)
+- **Commit:** the EXP-006 PR head
+- **Hypothesis:** model-leaf scaling continues past 500 (1500 > 500), or saturates —
+  locating the knee sets the teacher budget (D-008).
+- **Independent variable:** iteration budget (150/500/1500), all with PW + ridge leaves.
+- **Controlled variables:** heuristic anchor; round_robin; seeds 20260620/20260621;
+  6 games/seed; standard scoring; stat seed 20260712. (Fewer games — the 1500 rung costs
+  ~2× an entire EXP-005 game; deadline 330 min, partials analyzable via --reanalyze.)
+- **Game count:** 12 requested (deadline-capped).
+- **Result:** _recorded on completion below._
+- **Artifacts:** `training/reports/experiments/search_scaling/pw_vm_b150_500_1500/`.
+
 ## EXP-005 — D-015 gate 3: acceptance ladder with the ridge value model as leaf evaluator
 
 - **Experiment ID:** EXP-005
