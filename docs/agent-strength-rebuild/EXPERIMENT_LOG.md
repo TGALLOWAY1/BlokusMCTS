@@ -38,9 +38,26 @@ Artifacts:
   round_robin; seeds 20260620/20260621; 10 games/seed; standard scoring; stat seed 20260712.
 - **Game count:** 20 (deadline 260 min). **Hardware:** session container (concurrent with
   EXP-006b — iteration budgets, so contention affects wall-clock only).
-- **Result:** _recorded on completion below._
-- **Uncertainty:** paired sign-flip permutation test on vm500−rollout500 per-game score
-  diffs (primary); Wilson CIs; TrueSkill.
+- **Result:** 20/20 games in 180.7 min.
+  | agent | 1st% | avg rank | TS μ (σ) |
+  |---|---|---|---|
+  | vm500 | 47.5% | **1.45** | 42.50 (7.80) |
+  | rollout500 | 42.5% | 1.60 | 39.39 (7.82) |
+  | heuristic | 10.0% | 2.50 | 21.89 (7.56) |
+  | random | 0.0% | 3.70 | −2.92 (7.64) |
+  **vm500 − rollout500 = +2.40 pts, p=0.556** (primary test). Both crush the anchors
+  (vm +23.8 vs heuristic p<0.0001; rollout +21.4 p=0.0002).
+- **Uncertainty:** 20 paired games; the primary comparison is far from significant.
+- **Interpretation:** **parity at equal budget, slight positive trend for model leaves** —
+  NOT the "decisively better at 500" the EXP-005 cross-condition anchor margins suggested
+  (that comparison overstated; the anchor faces different opposition per condition). The
+  honest criterion-(a) verdict: model leaves EQUAL rollout leaves in strength at 500 iters
+  today, while being deterministic, TT-cacheable, and — unlike rollouts — improvable
+  through the training loop.
+- **Decision:** criterion (a) as originally worded ("beats rollouts at equal budget") is
+  NOT met at n=20; parity is. The architectural argument for model leaves survives on
+  improvability, not present superiority. Verdict rolls into the combined Phase 4 update
+  with EXP-006b.
 - **Artifacts:** `training/reports/experiments/search_scaling/exp006a_vm_vs_rollout/`.
 
 ## EXP-006b — Phase 4 confirmation 2: model-leaf saturation ladder (150/500/1500)
