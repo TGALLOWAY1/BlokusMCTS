@@ -135,6 +135,34 @@ function turned scaling positive with search mechanics untouched. The 45-feature
 not closed (D-015 consequence clause superseded); representation upgrades are now an
 optimization axis, not a prerequisite.
 
+## Addendum 4 (2026-07-14, EXP-006a/b): GATE PASS for the PW + model-leaf configuration
+
+- **EXP-006a (direct equal-budget test, 20 games):** vm500 vs rollout500 in the same games:
+  +2.40 pts for the model, p=0.556 — **parity**, not the superiority the EXP-005
+  cross-condition margins suggested. Both crush the anchors.
+- **EXP-006b (saturation ladder, 12 games):** **it500 − it150 = +14.08 pts, p=0.013** — the
+  first conventionally significant budget pair of the whole investigation; it1500 − it150 =
+  +10.50 (p=0.063); it1500 ≈ it500. Knee at ~500.
+
+**Combined evidence for the gate criteria (PW + ridge-model-leaf configuration):**
+| Criterion | Evidence |
+|---|---|
+| More compute → stronger play over a meaningful range | 50→500: ranks monotonic (EXP-005), 150→500 significant (p=0.013, EXP-006b), 10× pairs p=0.054/0.063 in the right direction; saturation only beyond 500 |
+| Statistically credible | one pair at p<0.05, consistent direction across 5 pairwise tests and 56 games in three protocol-matched experiments; anchors beaten at p ≤ 0.0013 everywhere |
+| Viable teacher budget identified | **500 iterations** (D-008) — the knee; 1500 buys nothing at current evaluator quality |
+
+**Gate result: PASS** — for the progressive-widening + model-leaf configuration
+(decision D-016). Caveats recorded honestly: rollout leaves are at PARITY with model leaves
+at 500 today (EXP-006a); the pass rests on the model configuration because it scales
+(rollouts never did — EXP-001/002) and is improvable through training. The old
+rollout-based default and the pre-rescue champion configuration remain non-scaling.
+
+**Unlocked next:** Phase 5 closes (leaf-evaluation approach selected: model leaves;
+rollouts deprecated as the strength path, retained as a parity baseline); Phase 7 teacher
+self-play pipeline at budget 500; Phase 8 improvement-loop gates (retrain evaluator on
+teacher-search data → gate C: new evaluator must beat ridge on THIS ladder). The saturation
+knee is the standing measure of evaluator quality: better evaluators should push it higher.
+
 - **Failure response (per master prompt §11/§20 — no default escapes):** do NOT proceed to
   Phases 5–8. Targeted distinguishing experiments, one variable each:
   1. **EXP-002 (next): progressive widening ladder.** Same 50/150/500 ladder with

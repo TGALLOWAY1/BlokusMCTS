@@ -72,7 +72,25 @@ Artifacts:
   6 games/seed; standard scoring; stat seed 20260712. (Fewer games — the 1500 rung costs
   ~2× an entire EXP-005 game; deadline 330 min, partials analyzable via --reanalyze.)
 - **Game count:** 12 requested (deadline-capped).
-- **Result:** _recorded on completion below._
+- **Result:** 12/12 games in 247.8 min.
+  | agent | 1st% | avg rank | TS μ (σ) |
+  |---|---|---|---|
+  | mcts_it150 | 8.3% | 2.50 | 23.96 (7.83) |
+  | mcts_it500 | 50.0% | **1.50** | 35.77 (8.00) |
+  | mcts_it1500 | 41.7% | 1.67 | 35.55 (8.01) |
+  | heuristic | 0.0% | 3.75 | 5.18 (7.83) |
+  Paired: **it500 − it150 = +14.08 pts, p=0.013** (first conventionally significant budget
+  pair of the investigation); it1500 − it150 = +10.50 (p=0.063); it1500 ≈ it500 (+3.58 for
+  500, p=0.54). All rungs beat the anchor (p ≤ 0.0013).
+- **Uncertainty:** 12 games — yet the 150→500 step clears p<0.05; direction consistent
+  across both 006b pairs and with EXP-005's monotonic ranks.
+- **Interpretation:** **positive scaling confirmed with significance over 150→500; knee at
+  ~500** (1500 adds nothing at this evaluator quality — the saturation point is where
+  evaluator improvements, not budget, buy strength next).
+- **Decision:** combined with EXP-005 and EXP-006a → **Phase 4 gate PASS** for the
+  PW + model-leaf configuration (addendum 4); **teacher budget = 500 iterations (D-008)**;
+  PW + ridge-model leaves adopted as the experimental baseline config (D-016) on
+  scaling + improvability grounds (rollouts: parity today, flat scaling, not trainable).
 - **Artifacts:** `training/reports/experiments/search_scaling/pw_vm_b150_500_1500/`.
 
 ## EXP-005 — D-015 gate 3: acceptance ladder with the ridge value model as leaf evaluator

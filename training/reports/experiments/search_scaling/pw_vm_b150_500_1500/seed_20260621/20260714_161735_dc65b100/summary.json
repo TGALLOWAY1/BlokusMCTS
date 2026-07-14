@@ -1,0 +1,529 @@
+{
+  "audit_version": "v1_2026-03-28",
+  "completed_games": 6,
+  "error_games": 0,
+  "game_duration_sec": {
+    "count": 6,
+    "max": 1294.245652997999,
+    "mean": 1232.045960999333,
+    "median": 1216.8299653864997,
+    "min": 1181.9484963979994,
+    "p25": 1206.6100892309992,
+    "p75": 1263.6211578325,
+    "std": 40.10773999947362
+  },
+  "num_games": 6,
+  "pairwise_matchups": {
+    "heuristic__vs__mcts_it150": {
+      "a_beats_b": 0,
+      "agent_a": "heuristic",
+      "agent_b": "mcts_it150",
+      "b_beats_a": 6,
+      "tie": 0,
+      "total": 6
+    },
+    "heuristic__vs__mcts_it1500": {
+      "a_beats_b": 0,
+      "agent_a": "heuristic",
+      "agent_b": "mcts_it1500",
+      "b_beats_a": 6,
+      "tie": 0,
+      "total": 6
+    },
+    "heuristic__vs__mcts_it500": {
+      "a_beats_b": 0,
+      "agent_a": "heuristic",
+      "agent_b": "mcts_it500",
+      "b_beats_a": 6,
+      "tie": 0,
+      "total": 6
+    },
+    "mcts_it1500__vs__mcts_it500": {
+      "a_beats_b": 2,
+      "agent_a": "mcts_it1500",
+      "agent_b": "mcts_it500",
+      "b_beats_a": 3,
+      "tie": 1,
+      "total": 6
+    },
+    "mcts_it150__vs__mcts_it1500": {
+      "a_beats_b": 3,
+      "agent_a": "mcts_it150",
+      "agent_b": "mcts_it1500",
+      "b_beats_a": 3,
+      "tie": 0,
+      "total": 6
+    },
+    "mcts_it150__vs__mcts_it500": {
+      "a_beats_b": 1,
+      "agent_a": "mcts_it150",
+      "agent_b": "mcts_it500",
+      "b_beats_a": 5,
+      "tie": 0,
+      "total": 6
+    }
+  },
+  "pairwise_total_comparisons": 36,
+  "run_config": {
+    "agents": [
+      {
+        "name": "mcts_it150",
+        "params": {
+          "deterministic_time_budget": false,
+          "exploration_constant": 1.414,
+          "greedy_sample_size": 12,
+          "heuristic_move_ordering": true,
+          "iterations": 150,
+          "num_workers": 1,
+          "progressive_widening_enabled": true,
+          "pw_alpha": 0.5,
+          "pw_c": 2.0,
+          "rollout_cutoff_depth": 12,
+          "rollout_policy": "greedy_sample",
+          "use_transposition_table": true,
+          "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+        },
+        "thinking_time_ms": null,
+        "type": "mcts"
+      },
+      {
+        "name": "mcts_it500",
+        "params": {
+          "deterministic_time_budget": false,
+          "exploration_constant": 1.414,
+          "greedy_sample_size": 12,
+          "heuristic_move_ordering": true,
+          "iterations": 500,
+          "num_workers": 1,
+          "progressive_widening_enabled": true,
+          "pw_alpha": 0.5,
+          "pw_c": 2.0,
+          "rollout_cutoff_depth": 12,
+          "rollout_policy": "greedy_sample",
+          "use_transposition_table": true,
+          "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+        },
+        "thinking_time_ms": null,
+        "type": "mcts"
+      },
+      {
+        "name": "mcts_it1500",
+        "params": {
+          "deterministic_time_budget": false,
+          "exploration_constant": 1.414,
+          "greedy_sample_size": 12,
+          "heuristic_move_ordering": true,
+          "iterations": 1500,
+          "num_workers": 1,
+          "progressive_widening_enabled": true,
+          "pw_alpha": 0.5,
+          "pw_c": 2.0,
+          "rollout_cutoff_depth": 12,
+          "rollout_policy": "greedy_sample",
+          "use_transposition_table": true,
+          "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+        },
+        "thinking_time_ms": null,
+        "type": "mcts"
+      },
+      {
+        "name": "heuristic",
+        "params": {},
+        "thinking_time_ms": null,
+        "type": "heuristic"
+      }
+    ],
+    "created_at": "2026-07-14T16:17:35",
+    "max_turns": 2500,
+    "notes": "phase4 search-scaling :: pw_vm_b150_500_1500 :: seed 20260621",
+    "num_games": 6,
+    "output_root": "training/reports/experiments/search_scaling/pw_vm_b150_500_1500/seed_20260621",
+    "run_id": "20260714_161735_dc65b100",
+    "scoring_mode": "standard",
+    "seat_policy": "round_robin",
+    "seed": 20260621,
+    "snapshots": {
+      "checkpoints": [],
+      "enabled": false,
+      "strategy": "fixed_ply"
+    }
+  },
+  "run_id": "20260714_161735_dc65b100",
+  "score_by_seat_position": {
+    "heuristic": {
+      "P1": {
+        "mean": 68.0,
+        "n": 1,
+        "se": 0.0,
+        "std": 0.0
+      },
+      "P2": {
+        "mean": 61.0,
+        "n": 1,
+        "se": 0.0,
+        "std": 0.0
+      },
+      "P3": {
+        "mean": 65.5,
+        "n": 2,
+        "se": 6.5,
+        "std": 9.19
+      },
+      "P4": {
+        "mean": 59.0,
+        "n": 2,
+        "se": 2.0,
+        "std": 2.83
+      }
+    },
+    "mcts_it150": {
+      "P1": {
+        "mean": 82.5,
+        "n": 2,
+        "se": 1.5,
+        "std": 2.12
+      },
+      "P2": {
+        "mean": 83.0,
+        "n": 1,
+        "se": 0.0,
+        "std": 0.0
+      },
+      "P3": {
+        "mean": 85.0,
+        "n": 1,
+        "se": 0.0,
+        "std": 0.0
+      },
+      "P4": {
+        "mean": 77.0,
+        "n": 2,
+        "se": 4.0,
+        "std": 5.66
+      }
+    },
+    "mcts_it1500": {
+      "P1": {
+        "mean": 81.0,
+        "n": 1,
+        "se": 0.0,
+        "std": 0.0
+      },
+      "P2": {
+        "mean": 96.0,
+        "n": 2,
+        "se": 12.0,
+        "std": 16.97
+      },
+      "P3": {
+        "mean": 92.5,
+        "n": 2,
+        "se": 15.5,
+        "std": 21.92
+      },
+      "P4": {
+        "mean": 72.0,
+        "n": 1,
+        "se": 0.0,
+        "std": 0.0
+      }
+    },
+    "mcts_it500": {
+      "P1": {
+        "mean": 96.5,
+        "n": 2,
+        "se": 11.5,
+        "std": 16.26
+      },
+      "P2": {
+        "mean": 96.0,
+        "n": 2,
+        "se": 12.0,
+        "std": 16.97
+      },
+      "P3": {
+        "mean": 103.0,
+        "n": 1,
+        "se": 0.0,
+        "std": 0.0
+      },
+      "P4": {
+        "mean": 69.0,
+        "n": 1,
+        "se": 0.0,
+        "std": 0.0
+      }
+    }
+  },
+  "score_margins": {
+    "max_margin": 51.0,
+    "mean_margin": 36.5,
+    "median_margin": 41.0,
+    "min_margin": 13.0,
+    "n_games": 6,
+    "std_margin": 14.07
+  },
+  "score_stats": {
+    "heuristic": {
+      "count": 6,
+      "max": 72.0,
+      "mean": 63.0,
+      "median": 61.0,
+      "min": 57.0,
+      "p25": 59.5,
+      "p75": 66.25,
+      "std": 5.259911279353167
+    },
+    "mcts_it150": {
+      "count": 6,
+      "max": 85.0,
+      "mean": 81.16666666666667,
+      "median": 82.0,
+      "min": 73.0,
+      "p25": 81.0,
+      "p75": 83.75,
+      "std": 3.9334745737353156
+    },
+    "mcts_it1500": {
+      "count": 6,
+      "max": 108.0,
+      "mean": 88.33333333333333,
+      "median": 82.5,
+      "min": 72.0,
+      "p25": 78.0,
+      "p75": 102.0,
+      "std": 14.383632673594278
+    },
+    "mcts_it500": {
+      "count": 6,
+      "max": 108.0,
+      "mean": 92.83333333333333,
+      "median": 94.0,
+      "min": 69.0,
+      "p25": 84.25,
+      "p75": 106.75,
+      "std": 14.55354099714415
+    }
+  },
+  "seat_policy": "round_robin",
+  "seed": 20260621,
+  "time_sim_efficiency": {
+    "heuristic": {
+      "avg_budget_utilization": null,
+      "avg_simulations_per_move": null,
+      "avg_time_ms_per_move": 41.686647375027775,
+      "configured_thinking_time_ms": null,
+      "move_time_ms_max": 162.3561759988661,
+      "move_time_ms_p50": 29.628371500621142,
+      "move_time_ms_p95": 120.50179564939738,
+      "moves": 88.0,
+      "score_per_second": 1511.2752875814117,
+      "simulations_per_second": null,
+      "total_simulations": null,
+      "total_time_ms": 3668.4249690024444,
+      "win_rate_per_second": 0.0
+    },
+    "mcts_it150": {
+      "avg_budget_utilization": null,
+      "avg_simulations_per_move": 150.0,
+      "avg_time_ms_per_move": 4530.263227328919,
+      "configured_thinking_time_ms": null,
+      "move_time_ms_max": 9587.366104125977,
+      "move_time_ms_p50": 4128.502607345581,
+      "move_time_ms_p95": 8627.048516273499,
+      "moves": 114.0,
+      "score_per_second": 17.916545373572745,
+      "simulations_per_second": 33.11065880126379,
+      "total_simulations": 17100.0,
+      "total_time_ms": 516450.0079154968,
+      "win_rate_per_second": 0.036789620890293105
+    },
+    "mcts_it1500": {
+      "avg_budget_utilization": null,
+      "avg_simulations_per_move": 1500.0,
+      "avg_time_ms_per_move": 43071.10240952722,
+      "configured_thinking_time_ms": null,
+      "move_time_ms_max": 95417.05822944641,
+      "move_time_ms_p50": 40801.729679107666,
+      "move_time_ms_p95": 85230.19474744797,
+      "moves": 116.0,
+      "score_per_second": 2.050872357374215,
+      "simulations_per_second": 34.82613437050554,
+      "total_simulations": 174000.0,
+      "total_time_ms": 4996247.8795051575,
+      "win_rate_per_second": 0.00580435572841759
+    },
+    "mcts_it500": {
+      "avg_budget_utilization": null,
+      "avg_simulations_per_move": 500.0,
+      "avg_time_ms_per_move": 14329.933951882755,
+      "configured_thinking_time_ms": null,
+      "move_time_ms_max": 33139.028549194336,
+      "move_time_ms_p50": 12898.169994354248,
+      "move_time_ms_p95": 29052.38351821899,
+      "moves": 119.0,
+      "score_per_second": 6.478280614903763,
+      "simulations_per_second": 34.89199613054092,
+      "total_simulations": 59500.0,
+      "total_time_ms": 1705262.1402740479,
+      "win_rate_per_second": 0.040707328818964404
+    }
+  },
+  "trueskill_ratings": {
+    "converged": false,
+    "leaderboard": [
+      {
+        "agent_id": "mcts_it500",
+        "conservative": 7.351808695126113,
+        "games_played": 6,
+        "mu": 31.91670805248323,
+        "rank": 1,
+        "sigma": 8.188299785785706
+      },
+      {
+        "agent_id": "mcts_it1500",
+        "conservative": 4.319175759637417,
+        "games_played": 6,
+        "mu": 28.66876422916291,
+        "rank": 2,
+        "sigma": 8.116529489841831
+      },
+      {
+        "agent_id": "mcts_it150",
+        "conservative": 2.7702936751271956,
+        "games_played": 6,
+        "mu": 27.05349659280672,
+        "rank": 3,
+        "sigma": 8.094400972559841
+      },
+      {
+        "agent_id": "heuristic",
+        "conservative": -11.651317684850254,
+        "games_played": 6,
+        "mu": 12.485318911510193,
+        "rank": 4,
+        "sigma": 8.04554553212015
+      }
+    ]
+  },
+  "win_stats": {
+    "heuristic": {
+      "games_played": 6.0,
+      "outright_wins": 0.0,
+      "shared_wins": 0.0,
+      "win_points": 0.0,
+      "win_rate": 0.0
+    },
+    "mcts_it150": {
+      "games_played": 6.0,
+      "outright_wins": 1.0,
+      "shared_wins": 0.0,
+      "win_points": 1.0,
+      "win_rate": 0.16666666666666666
+    },
+    "mcts_it1500": {
+      "games_played": 6.0,
+      "outright_wins": 1.0,
+      "shared_wins": 1.0,
+      "win_points": 1.5,
+      "win_rate": 0.25
+    },
+    "mcts_it500": {
+      "games_played": 6.0,
+      "outright_wins": 3.0,
+      "shared_wins": 1.0,
+      "win_points": 3.5,
+      "win_rate": 0.5833333333333334
+    }
+  },
+  "wins_by_seat": {
+    "heuristic": {
+      "0": {
+        "games": 1,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "1": {
+        "games": 1,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "2": {
+        "games": 2,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "3": {
+        "games": 2,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      }
+    },
+    "mcts_it150": {
+      "0": {
+        "games": 2,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "1": {
+        "games": 1,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "2": {
+        "games": 1,
+        "win_points": 1.0,
+        "win_rate": 1.0
+      },
+      "3": {
+        "games": 2,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      }
+    },
+    "mcts_it1500": {
+      "0": {
+        "games": 1,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "1": {
+        "games": 2,
+        "win_points": 0.5,
+        "win_rate": 0.25
+      },
+      "2": {
+        "games": 2,
+        "win_points": 1.0,
+        "win_rate": 0.5
+      },
+      "3": {
+        "games": 1,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      }
+    },
+    "mcts_it500": {
+      "0": {
+        "games": 2,
+        "win_points": 1.5,
+        "win_rate": 0.75
+      },
+      "1": {
+        "games": 2,
+        "win_points": 1.0,
+        "win_rate": 0.5
+      },
+      "2": {
+        "games": 1,
+        "win_points": 1.0,
+        "win_rate": 1.0
+      },
+      "3": {
+        "games": 1,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      }
+    }
+  }
+}

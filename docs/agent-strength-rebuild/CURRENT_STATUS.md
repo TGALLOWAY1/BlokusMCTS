@@ -2,6 +2,23 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-14 (session 12 — EXP-006a/b) — **PHASE 4 GATE: PASS**
+
+- **Current phase:** **Phase 4 PASSED** for the PW + ridge-model-leaf configuration
+  (`phases/PHASE_4_SEARCH_SCALING.md` addendum 4). Phase 5 closes with it (model leaves
+  selected; rollouts deprecated as the strength path). **Phases 7–8 are UNBLOCKED.**
+- **EXP-006b (the clincher):** it500 − it150 = **+14.08 pts, p=0.013** — first
+  conventionally significant budget pair of the investigation; 1500 ≈ 500 → knee at ~500 →
+  **teacher budget = 500 (D-008)**.
+- **EXP-006a (honesty check):** model vs rollout at equal 500 budget = **parity**
+  (+2.4 pts, p=0.556) — the pass rests on scaling + trainability, not present superiority
+  (D-016; explicitly NOT a champion promotion).
+- **Next recommended task:** Phase 7 — teacher self-play data pipeline at budget 500 with
+  the full record schema (visit counts, root values, manifests, validator per
+  MASTER_PLAN/DATA_LINEAGE), then Phase 8 gate C: retrain the evaluator on teacher-search
+  data; the new evaluator must beat ridge on the fixed ladder (and should push the
+  saturation knee past 500). See `HANDOFF.md`.
+
 ## Session 2026-07-13/14 (session 11 — gate 3: FIRST POSITIVE SCALING) — Phase 4 now PARTIAL
 
 - **Current phase:** Phase 4 gate **PARTIAL — MORE EVIDENCE REQUIRED** (was FAIL-attributed).
