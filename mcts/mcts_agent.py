@@ -651,6 +651,10 @@ class MCTSAgent:
         # ``select_action`` records the root children's (move, visits) after search.
         self._capture_root_moves = False
         self._last_root_move_visits: Optional[List[Tuple[Move, int]]] = None
+        # Richer capture for teacher self-play (Phase 7): (move, visits,
+        # total_reward) — total_reward is the ROOT player's accumulated reward
+        # at that child (mover-credited maxⁿ), so Q = total_reward/visits.
+        self._last_root_move_stats: Optional[List[Tuple[Move, int, float]]] = None
 
         # Layer 4 params
         if rollout_policy not in {"heuristic", "random", "two_ply", "greedy_sample"}:
@@ -1008,6 +1012,10 @@ class MCTSAgent:
         if self._capture_root_moves:
             self._last_root_move_visits = [
                 (c.move, int(c.visits)) for c in root.children if c.move is not None
+            ]
+            self._last_root_move_stats = [
+                (c.move, int(c.visits), float(c.total_reward))
+                for c in root.children if c.move is not None
             ]
 
         # Layer 5: Update NST last-action key for cross-move continuity
