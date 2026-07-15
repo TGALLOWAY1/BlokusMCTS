@@ -2,7 +2,7 @@
   "dataset_schema_version": "teacher_dataset_v1",
   "record_schema_version": "teacher_record_v2",
   "purpose": "Phase 7 teacher self-play (gate C training corpus)",
-  "generating_commit": "e538d6aaf8cc7e336f7c7d08808eccd31a082c4c",
+  "generating_commit": "709cff1f73f606e3c458e47a9027b874e1a82b96",
   "scoring_mode": "standard",
   "teacher_search_config": {
     "iterations": 500,

@@ -198,11 +198,22 @@ def play_teacher_game(game_seed: int, game_id: str,
 def generate(args: argparse.Namespace) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    if any(out_dir.glob("game_*.jsonl")):
+    existing = sorted(out_dir.glob("game_*.jsonl"))
+    if existing and not args.resume:
         raise SystemExit(
             f"{out_dir} already holds game shards — datasets are immutable. "
-            "Use a new --out directory or delete the old one deliberately."
+            "Use a new --out directory, or --resume to continue an interrupted "
+            "generation (same seed scheme; completed shards untouched)."
         )
+    if args.resume and existing:
+        manifest_on_disk = json.loads((out_dir / "manifest.json").read_text())
+        if manifest_on_disk.get("status") == "finalized":
+            raise SystemExit(f"{out_dir} is finalized — refusing to resume.")
+        if manifest_on_disk.get("seed") != args.seed:
+            raise SystemExit(
+                f"--resume seed mismatch: manifest has {manifest_on_disk.get('seed')}, "
+                f"got {args.seed}."
+            )
     try:
         commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
                                 text=True, check=True).stdout.strip()
@@ -228,10 +239,16 @@ def generate(args: argparse.Namespace) -> int:
 
     deadline = time.monotonic() + args.deadline_minutes * 60.0
     t0 = time.monotonic()
-    total_records = 0
-    completed = 0
+    # Count already-complete shards (resume) into the totals.
+    total_records = sum(
+        len(p.read_text().splitlines()) for p in out_dir.glob("game_*.jsonl")
+    )
+    completed = len(list(out_dir.glob("game_*.jsonl")))
+    fresh_games = 0
     for g in range(args.games):
-        if g >= args.min_games and time.monotonic() >= deadline:
+        if (out_dir / f"game_{g:04d}.jsonl").exists():
+            continue  # completed before an interruption (resume)
+        if fresh_games >= args.min_games and time.monotonic() >= deadline:
             print(f"deadline reached after {completed}/{args.games} games", flush=True)
             break
         game_seed = args.seed + g
@@ -243,6 +260,7 @@ def generate(args: argparse.Namespace) -> int:
             for record in records:
                 handle.write(json.dumps(record, sort_keys=True) + "\n")
         completed += 1
+        fresh_games += 1
         total_records += len(records)
         print(f"game {g + 1}/{args.games}: {len(records)} decisions in "
               f"{(time.monotonic() - t_game) / 60:.1f} min "
@@ -345,6 +363,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--deadline-minutes", type=float, default=400.0)
     parser.add_argument("--min-games", type=int, default=4)
     parser.add_argument("--out", default="data/teacher_dataset_v1")
+    parser.add_argument("--resume", action="store_true",
+                        help="continue an interrupted (non-finalized) generation: "
+                             "skip existing shards, same seed scheme")
     parser.add_argument("--validate", default=None, metavar="DIR",
                         help="validate an existing dataset directory and exit")
     args = parser.parse_args(argv)
