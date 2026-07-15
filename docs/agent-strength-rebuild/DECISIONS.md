@@ -177,6 +177,38 @@ Format per governing master prompt §21. Statuses: Proposed / Accepted / Superse
 - **Revisit conditions:** any v1 gate result; torch/other framework only via a new decision.
 - **Related:** `phases/PHASE_4_SEARCH_SCALING.md` addendum 2, EXP-003, `HANDOFF.md`.
 
+## D-008 — Teacher search budget: 500 iterations (PW + model leaves)
+
+- **Date:** 2026-07-14
+- **Status:** Accepted
+- **Context:** Phase 4 required an experimentally located teacher budget.
+- **Evidence:** EXP-006b — 500 beats 150 by +14.08 pts (p=0.013); 1500 ≈ 500 (p=0.54):
+  the scaling knee is ~500 at current (ridge, pairwise 0.682) evaluator quality.
+- **Decision:** teacher self-play (Phase 7) runs at 500 iterations, PW pw_c=2.0 α=0.5,
+  ridge-model leaves. ~10–13 s/move on this container (~20 min/4-seat game).
+- **Revisit conditions:** any evaluator upgrade that moves the saturation knee (re-run the
+  ladder); production budgets are a separate Phase 10 decision.
+- **Related:** EXP-005/006b, `phases/PHASE_4_SEARCH_SCALING.md` addendum 4.
+
+## D-016 — Experimental baseline search config: PW + ridge-model leaves
+
+- **Date:** 2026-07-14
+- **Status:** Accepted (experimental baseline; NOT a champion promotion)
+- **Context:** Phase 4 passed for exactly this configuration; the pre-rescue rollout
+  configuration never scaled (EXP-001/002) and is not improvable by training.
+- **Evidence:** EXP-005 + EXP-006b scaling; EXP-006a parity vs rollouts at 500 (honest
+  caveat: the model is not stronger today — it is EQUAL and trainable).
+- **Decision:** the rescue's experimental baseline agent = minimal search + progressive
+  widening (2.0/0.5) + `value_model_path` ridge leaves; iteration budgets per role
+  (teacher 500). The production champion is UNCHANGED — promotion still goes through the
+  Phase 9 gate only.
+- **Consequences:** Phase 5 closes (model leaves selected; rollouts deprecated as the
+  strength path, retained as a parity/regression baseline); Phase 7/8 proceed on this
+  config; the saturation knee becomes the standing evaluator-quality metric.
+- **Revisit conditions:** a future evaluator failing gate C, or a rollout hybrid beating
+  model leaves in a controlled test.
+- **Related:** D-008, D-014, D-015; `phases/PHASE_4_SEARCH_SCALING.md`.
+
 ---
 
 ## Open decisions (required before their phases)

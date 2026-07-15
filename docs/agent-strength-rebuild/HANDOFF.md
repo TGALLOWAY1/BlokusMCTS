@@ -22,34 +22,35 @@ addenda): tree shape fixed by PW; **the Layer-6 static evaluator is the binding 
 heuristic anchor); rollouts carry all current signal but saturate. Search mechanics are
 exonerated. Phases 7–8 stay blocked.
 
-**Status after EXP-005 (gate 3 PARTIAL — first positive scaling):** ridge-model leaves
-(`training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib`, plumbed via
-`value_model_path` through MCTSAgent/build_agent) produced the investigation's first
-positive budget→strength curve (rank 2.12→1.83→1.75; it500−it50 +5.71 pts p=0.054) and
-beat rollout leaves' anchor margins at every rung. Saturation above ~150 iters at this
-evaluator quality. Phase 4 is PARTIAL — two confirmations from PASS.
+**Status: PHASE 4 PASSED** (addendum 4) for the PW + ridge-model-leaf configuration:
+scaling significant at 150→500 (+14.08 pts, p=0.013, EXP-006b), monotonic 50→500
+(EXP-005), knee at ~500 → **teacher budget 500 (D-008)**; model-vs-rollout at equal budget
+is PARITY (EXP-006a) — the config is adopted for scaling + trainability (D-016), the
+champion is untouched. Phase 5 is closed by the same evidence (model leaves selected;
+rollouts deprecated as the strength path). **Phases 7–8 are unblocked.**
 
-**Exact next actions:**
-1. **EXP-006a — direct equal-budget test (~2.5 h):** one mixed table
-   [model-500 (PW + value_model_path), rollout-500 (exact EXP-002 config: PW, greedy_sample,
-   cutoff 12), heuristic, random], round_robin, seeds 20260620/20260621, 12 games/seed.
-   Needs a small harness extension (mixed leaf-source tables — budgets currently share one
-   leaf source; e.g. `--mixed-pair model:rollout` or explicit agent-config JSONs via a new
-   flag). The paired model-vs-rollout permutation test is the clean (a) criterion.
-2. **EXP-006b — saturation/teacher-budget ladder (~4 h):** 150/500/1500 model-leaf rungs +
-   heuristic (`--pw --value-model ... --budgets 150,500,1500`). Cost warning: model leaves
-   run ~427 s/game at 50/150/500 — the 1500 rung roughly doubles that; size with the
-   deadline flag. Locates saturation → teacher budget (D-008).
-3. On both confirming: declare **Phase 4 PASS** (report update), formalize the PW +
-   model-leaf configuration as the new minimal-search candidate (decision; PW adoption was
-   deferred pending exactly this), then proceed to Phase 5 closure (rollouts formally
-   deprecated as leaf source) and Phase 7 (teacher self-play data pipeline) — with the
-   evaluator-improvement loop (better features/models → re-run ladder) as the ongoing
-   strength axis.
-4. Optimization axis (not blocking): leaf-eval cost — 45-feature 4-player extraction is the
-   new hot path; the rich-leaf machinery already supports cheaper feature subsets.
-5. Standing rules unchanged: no champion changes outside the gate; held-out splits
-   mandatory; no default escapes (§20).
+**Exact next action — Phase 7: teacher self-play data pipeline (then Phase 8 gate C):**
+1. Extend the self-play recorder to the full Phase 7 record schema (master plan §14 /
+   DATA_LINEAGE forward-looking section): per decision — full state (`board_state_v1`
+   via `Board.to_dict()`), legal actions, ROOT VISIT COUNTS + root values (the
+   `_capture_root_moves` hook already exists in MCTSAgent; policy_selfplay uses it),
+   selected action (`move_v1`), final score+placement vectors, search config, model
+   checkpoint hash, seed, seat map, schema versions. New manifested dataset dir
+   (value_dataset generator is the template; immutability guard included).
+2. Generate teacher data: 4× teacher agents (D-016 config @ 500 iters). Cost reality:
+   ~20 min/game single-process on this container → size runs with deadlines; consider
+   `num_workers` root-parallel for the TEACHER only after checking it composes with
+   value_model_path (config extraction already propagates it).
+3. Add the dataset validator (legality of selected actions, policy/legal alignment,
+   player-vector ordering, terminal-score agreement, manifest consistency) BEFORE any
+   training consumes it.
+4. **Phase 8 gate C** (the loop's first turn): retrain the value model on teacher-search
+   data (game-level held-out split), then the fixed ladder: new evaluator must beat ridge
+   at equal budget AND ideally push the saturation knee past 500. Record as EXP-007+.
+5. Optimization axis (not blocking): leaf-eval cost (45-feature 4-player extraction);
+   cheaper subsets exist in the rich-leaf machinery.
+6. Standing rules unchanged: champion changes only via the Phase 9 gate; held-out splits
+   mandatory; datasets immutable + manifested; no default escapes (§20).
 
 Notes: browser bundle (`frontend/public/blokus_core.zip`) is generated — next
 `scripts/build_browser_core.sh` run picks up engine changes; never edit `browser_python/`

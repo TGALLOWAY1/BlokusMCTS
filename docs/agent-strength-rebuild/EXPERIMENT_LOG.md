@@ -24,6 +24,75 @@ Artifacts:
 
 ---
 
+## EXP-006a — Phase 4 confirmation 1: direct same-table model-500 vs rollout-500
+
+- **Experiment ID:** EXP-006a
+- **Date:** 2026-07-14 (launched ~00:4x UTC)
+- **Commit:** the EXP-006 PR head (harness gains `--agents-json` mixed-table mode)
+- **Hypothesis:** at equal budget (500 iterations, identical PW/search config), the
+  ridge-model leaf agent beats the rollout leaf agent head-to-head in the SAME games —
+  the clean version of gate-3 criterion (a), no cross-condition caveats.
+- **Independent variable:** leaf source per seat (vm500 = `value_model_path` ridge artifact;
+  rollout500 = greedy_sample rollouts, cutoff 12 — exact EXP-002 config).
+- **Controlled variables:** one mixed table [vm500, rollout500, heuristic, random];
+  round_robin; seeds 20260620/20260621; 10 games/seed; standard scoring; stat seed 20260712.
+- **Game count:** 20 (deadline 260 min). **Hardware:** session container (concurrent with
+  EXP-006b — iteration budgets, so contention affects wall-clock only).
+- **Result:** 20/20 games in 180.7 min.
+  | agent | 1st% | avg rank | TS μ (σ) |
+  |---|---|---|---|
+  | vm500 | 47.5% | **1.45** | 42.50 (7.80) |
+  | rollout500 | 42.5% | 1.60 | 39.39 (7.82) |
+  | heuristic | 10.0% | 2.50 | 21.89 (7.56) |
+  | random | 0.0% | 3.70 | −2.92 (7.64) |
+  **vm500 − rollout500 = +2.40 pts, p=0.556** (primary test). Both crush the anchors
+  (vm +23.8 vs heuristic p<0.0001; rollout +21.4 p=0.0002).
+- **Uncertainty:** 20 paired games; the primary comparison is far from significant.
+- **Interpretation:** **parity at equal budget, slight positive trend for model leaves** —
+  NOT the "decisively better at 500" the EXP-005 cross-condition anchor margins suggested
+  (that comparison overstated; the anchor faces different opposition per condition). The
+  honest criterion-(a) verdict: model leaves EQUAL rollout leaves in strength at 500 iters
+  today, while being deterministic, TT-cacheable, and — unlike rollouts — improvable
+  through the training loop.
+- **Decision:** criterion (a) as originally worded ("beats rollouts at equal budget") is
+  NOT met at n=20; parity is. The architectural argument for model leaves survives on
+  improvability, not present superiority. Verdict rolls into the combined Phase 4 update
+  with EXP-006b.
+- **Artifacts:** `training/reports/experiments/search_scaling/exp006a_vm_vs_rollout/`.
+
+## EXP-006b — Phase 4 confirmation 2: model-leaf saturation ladder (150/500/1500)
+
+- **Experiment ID:** EXP-006b
+- **Date:** 2026-07-14 (launched ~00:4x UTC)
+- **Commit:** the EXP-006 PR head
+- **Hypothesis:** model-leaf scaling continues past 500 (1500 > 500), or saturates —
+  locating the knee sets the teacher budget (D-008).
+- **Independent variable:** iteration budget (150/500/1500), all with PW + ridge leaves.
+- **Controlled variables:** heuristic anchor; round_robin; seeds 20260620/20260621;
+  6 games/seed; standard scoring; stat seed 20260712. (Fewer games — the 1500 rung costs
+  ~2× an entire EXP-005 game; deadline 330 min, partials analyzable via --reanalyze.)
+- **Game count:** 12 requested (deadline-capped).
+- **Result:** 12/12 games in 247.8 min.
+  | agent | 1st% | avg rank | TS μ (σ) |
+  |---|---|---|---|
+  | mcts_it150 | 8.3% | 2.50 | 23.96 (7.83) |
+  | mcts_it500 | 50.0% | **1.50** | 35.77 (8.00) |
+  | mcts_it1500 | 41.7% | 1.67 | 35.55 (8.01) |
+  | heuristic | 0.0% | 3.75 | 5.18 (7.83) |
+  Paired: **it500 − it150 = +14.08 pts, p=0.013** (first conventionally significant budget
+  pair of the investigation); it1500 − it150 = +10.50 (p=0.063); it1500 ≈ it500 (+3.58 for
+  500, p=0.54). All rungs beat the anchor (p ≤ 0.0013).
+- **Uncertainty:** 12 games — yet the 150→500 step clears p<0.05; direction consistent
+  across both 006b pairs and with EXP-005's monotonic ranks.
+- **Interpretation:** **positive scaling confirmed with significance over 150→500; knee at
+  ~500** (1500 adds nothing at this evaluator quality — the saturation point is where
+  evaluator improvements, not budget, buy strength next).
+- **Decision:** combined with EXP-005 and EXP-006a → **Phase 4 gate PASS** for the
+  PW + model-leaf configuration (addendum 4); **teacher budget = 500 iterations (D-008)**;
+  PW + ridge-model leaves adopted as the experimental baseline config (D-016) on
+  scaling + improvability grounds (rollouts: parity today, flat scaling, not trainable).
+- **Artifacts:** `training/reports/experiments/search_scaling/pw_vm_b150_500_1500/`.
+
 ## EXP-005 — D-015 gate 3: acceptance ladder with the ridge value model as leaf evaluator
 
 - **Experiment ID:** EXP-005

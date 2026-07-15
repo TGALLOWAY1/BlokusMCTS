@@ -1,0 +1,2 @@
+run_id,timestamp,num_games,completed_games,agents,seed,seat_policy,notes,audit_version
+20260714_154603_205bce73,2026-07-14T15:46:03,10,10,vm500:mcts:None|rollout500:mcts:None|heuristic:heuristic:None|random:random:None,20260621,round_robin,phase4 search-scaling :: exp006a_vm_vs_rollout :: seed 20260621,v1_2026-03-28
