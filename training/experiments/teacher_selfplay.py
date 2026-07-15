@@ -101,15 +101,21 @@ def play_teacher_game(game_seed: int, game_id: str,
 
         state_payload = game.board.to_dict()
         agent = agents[player]
+        # select_action short-circuits on a single legal move WITHOUT running
+        # a search or refreshing the capture attrs — clear them first so a
+        # forced move can never inherit the previous decision's stale root
+        # stats (review finding, PR #203).
+        agent._last_root_move_stats = None
         move = agent.select_action(game.board, player, legal_moves)
         if move is None:
             game.board._update_current_player()
             continue
 
-        stats = agent._last_root_move_stats or []
-        # select_action short-circuits on a single legal move (no search).
-        if not stats and len(legal_moves) == 1:
+        if len(legal_moves) == 1:
+            # Forced move: no search ran; the policy target is trivially 1.0.
             stats = [(legal_moves[0], 1, 0.0)]
+        else:
+            stats = agent._last_root_move_stats or []
         total_visits = sum(v for _, v, _ in stats) or 1
         search_entries = [
             {"action": m.to_dict(), "visits": int(v),
@@ -274,12 +280,20 @@ def validate(dataset_dir: Path) -> int:
             if set(scores) != {"1", "2", "3", "4"} or set(ranks) != {"1", "2", "3", "4"}:
                 errors.append(f"{where}: player-vector keys wrong")
             else:
-                by_rank = sorted(scores, key=lambda k: (ranks[k], -scores[k]))
-                for a, b in zip(by_rank, by_rank[1:]):
-                    if ranks[a] > ranks[b] or (
-                            ranks[a] < ranks[b] and scores[a] < scores[b]):
-                        errors.append(f"{where}: rank/score inconsistency")
-                        break
+                # Recompute standard-competition ranks from the scores and
+                # require exact equality (equal scores <=> equal ranks;
+                # review finding, PR #203).
+                ordered = sorted(scores, key=lambda k: -scores[k])
+                expected: Dict[str, int] = {}
+                rank = 0
+                prev = None
+                for idx, key in enumerate(ordered, start=1):
+                    if scores[key] != prev:
+                        rank = idx
+                        prev = scores[key]
+                    expected[key] = rank
+                if expected != {k: int(v) for k, v in ranks.items()}:
+                    errors.append(f"{where}: ranks {ranks} != expected {expected}")
         if errors and len(errors) > 20:
             break
 
