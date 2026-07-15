@@ -45,9 +45,18 @@ from engine.game import SCORING_MODE_STANDARD, BlokusGame
 from engine.move_generator import ACTION_SCHEMA_VERSION, Move, get_shared_generator
 from mcts.mcts_agent import MCTSAgent
 
-RECORD_SCHEMA_VERSION = "teacher_record_v1"
+RECORD_SCHEMA_VERSION = "teacher_record_v2"  # v2: + move_selection field
 TEACHER_ITERATIONS = 500  # D-008
 VALUE_MODEL_PATH = "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+
+# Self-play diversity: model-leaf teacher agents are fully deterministic (no
+# rollouts -> the seeded RNG is never consulted), so four identical teachers
+# replay the SAME game regardless of seed (observed: 18/18 identical games).
+# Standard remedy: for the first TEMPERATURE_DECISIONS decisions of each game,
+# sample the played move from the root visit distribution (tau=1.0, seeded per
+# game) instead of taking the argmax; later decisions use the argmax. The
+# policy TARGET recorded for training is always the visit distribution.
+TEMPERATURE_DECISIONS = 24  # ~first 6 decisions per player
 
 TEACHER_SEARCH_CONFIG: Dict[str, Any] = {
     "iterations": TEACHER_ITERATIONS,
@@ -82,10 +91,13 @@ def _build_teacher(seed: int) -> MCTSAgent:
 def play_teacher_game(game_seed: int, game_id: str,
                       value_model_sha: str) -> List[Dict[str, Any]]:
     """Play one 4-teacher game; return the per-decision records (finals filled)."""
+    import random as _random
+
     generator = get_shared_generator()
     game = BlokusGame(scoring_mode=SCORING_MODE_STANDARD, enable_telemetry=False)
     agents = {p: _build_teacher(seed=game_seed * 31 + p.value) for p in Player}
     seat_map = {str(p.value): f"teacher_{p.value}" for p in Player}
+    sample_rng = _random.Random(game_seed)
 
     records: List[Dict[str, Any]] = []
     decision_index = 0
@@ -126,6 +138,14 @@ def play_teacher_game(game_seed: int, game_id: str,
             sum(e["q"] * e["visits"] for e in search_entries) / total_visits
             if search_entries else 0.0
         )
+
+        # Diversity: opening-phase visit sampling (see TEMPERATURE_DECISIONS).
+        move_selection = "argmax"
+        if decision_index < TEMPERATURE_DECISIONS and len(stats) > 1:
+            move = sample_rng.choices(
+                [m for m, _, _ in stats], weights=[v for _, v, _ in stats], k=1
+            )[0]
+            move_selection = "visit_sample_t1.0"
         records.append({
             "record_schema_version": RECORD_SCHEMA_VERSION,
             "state_schema_version": STATE_SCHEMA_VERSION,
@@ -140,6 +160,7 @@ def play_teacher_game(game_seed: int, game_id: str,
             "search": search_entries,
             "policy_target": [e["visits"] / total_visits for e in search_entries],
             "selected_action": move.to_dict(),
+            "move_selection": move_selection,
             "root_value": float(root_value),
             "search_config": TEACHER_SEARCH_CONFIG,
             "value_model": {"path": VALUE_MODEL_PATH, "sha256": value_model_sha},
