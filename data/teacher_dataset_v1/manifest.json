@@ -22,7 +22,8 @@
   },
   "seed": 20260715,
   "num_games_requested": 18,
-  "status": "generating",
-  "games_completed": 0,
-  "records_written": 0
+  "status": "finalized",
+  "games_completed": 18,
+  "records_written": 1309,
+  "elapsed_sec": 13492.9
 }

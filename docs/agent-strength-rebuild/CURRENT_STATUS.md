@@ -2,6 +2,23 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-15 (session 14 — Phase 7 COMPLETE: teacher_dataset_v1 finalized & validated)
+
+- **Current phase:** Phase 7 **complete** — `data/teacher_dataset_v1` finalized: 1 309
+  `teacher_record_v2` records / 18 games, engine-level validation PASSED, 18/18 unique
+  games, winners across all four seats. Hashes in `DATA_LINEAGE.md`.
+- **Two defects found & fixed on the way (both in this PR):** (1) stale root-stats capture
+  on forced moves (review catch — corrupted the first full run; wiped and regenerated);
+  (2) **deterministic self-play collapse** — model-leaf teachers replay the identical game
+  regardless of seed (18/18 identical); fixed with opening-phase visit sampling (τ=1.0,
+  first 24 decisions, seeded; schema → teacher_record_v2). Blast-radius check verified all
+  128 arena games in EXP-001..006 are unique — Phase 4 statistics unaffected.
+- **Also:** `--resume` support after a mid-run container restart (6 shards salvaged).
+- **Next recommended task — Phase 8 gate C (the first loop turn):** train value-model v2 on
+  teacher data (+ value_dataset_v1 as a controlled mixing variable; game-level held-out
+  split), then the fixed ladder vs ridge; success = beat ridge at equal budget / push the
+  saturation knee past 500. Note: GitHub MCP needs re-auth for PR-body updates (pushes work).
+
 ## Session 2026-07-14 (session 13 — Phase 7 pipeline built; teacher dataset generating)
 
 - **Current phase:** Phase 7 (teacher self-play data pipeline) — recorder + validator built

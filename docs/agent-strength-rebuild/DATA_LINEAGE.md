@@ -57,6 +57,7 @@ state).
 | Dataset | sha256 | Status |
 |---|---|---|
 | `data/value_dataset_v1/trajectories.csv` (17 408 rows, 60 games, PW+rollout-50 self-play, standard scoring, `rich_blokus_v1` features, per-ply capture, seed 20260713) | `2ae265b3c65c39ee825dea27759f8e90670dc5e28c76f19fbb24c616d42fbd81` | **Verified & finalized** — immutable (generator refuses appends); manifest `4c3b1578…` records commit/agents/seeds/schema ids |
+| `data/teacher_dataset_v1/` (1 309 `teacher_record_v2` records, 18 games, 4× D-016 teachers @ D-008 budget 500, standard scoring, opening-phase visit sampling τ=1.0/24 decisions, seed 20260715; per-decision full state + visit counts + per-child Q + policy targets) | shards-concat `5902b65db019edfd6edb306bb2ea8aa6a584d4190021e309ffb994120f73d0eb`; manifest `99f699ef…` | **Verified & finalized** — engine-level validator PASSED (state round-trip, legal-set regeneration, action legality, policy alignment, rank consistency); 18/18 unique games; winners across all four seats |
 
 ### Not versioned
 
