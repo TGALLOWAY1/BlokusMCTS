@@ -17,8 +17,11 @@ training example per decision (master plan §14):
     final_scores / final_ranks (per player.value, backfilled at game end)
     search_config, value_model {path, sha256}, game_seed, agent_seed
 
-Output is a manifested, immutable dataset directory (JSONL shards per game +
-manifest.json), mirroring data/value_dataset_v1 conventions. `--validate DIR`
+Output is a manifested, immutable dataset directory: per-game JSONL shards
+during generation (so --resume restarts at game granularity), packed into a
+single records.jsonl.gz at finalization (shards deleted; decompressed bytes ==
+the in-order shard concatenation, so content hashes are stable across the two
+layouts). `--validate DIR`
 re-checks every record against the engine (state round-trip, legal-move
 regeneration, selected-action legality, policy-target alignment,
 rank/score consistency, manifest counts) and must pass before any training
@@ -32,6 +35,7 @@ consumes the dataset.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import subprocess
@@ -78,6 +82,66 @@ def _sha256(path: str) -> str:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Packed-dataset format
+#
+# During generation each game is written as its own shard (game_NNNN.jsonl) so
+# --resume can restart at game granularity. Finalization packs the shards, in
+# order, into a single records.jsonl.gz and deletes them: one small file in
+# git instead of one per game, with the CONTENT (decompressed bytes) hash
+# identical to the shards-concat hash recorded in DATA_LINEAGE.md.
+# ---------------------------------------------------------------------------
+
+PACKED_NAME = "records.jsonl.gz"
+
+
+def iter_dataset_records(dataset_dir: Path):
+    """Yield (where, record) for every record, packed or shard layout."""
+    packed = dataset_dir / PACKED_NAME
+    if packed.exists():
+        with gzip.open(packed, "rt", encoding="utf-8") as fh:
+            for line_no, line in enumerate(fh):
+                if line.strip():
+                    yield f"{PACKED_NAME}:{line_no}", json.loads(line)
+        return
+    for shard in sorted(dataset_dir.glob("game_*.jsonl")):
+        for line_no, line in enumerate(shard.read_text().splitlines()):
+            yield f"{shard.name}:{line_no}", json.loads(line)
+
+
+def pack_dataset(out_dir: Path) -> Dict[str, str]:
+    """Pack game shards into records.jsonl.gz; verify; delete the shards.
+
+    Returns {"file", "sha256", "content_sha256"} for the manifest. The gzip
+    header is written with mtime=0 so packing is byte-reproducible.
+    """
+    shards = sorted(out_dir.glob("game_*.jsonl"))
+    if not shards:
+        raise SystemExit(f"{out_dir}: no shards to pack")
+    packed = out_dir / PACKED_NAME
+    if packed.exists():
+        raise SystemExit(f"{packed} already exists — refusing to repack")
+    content_hash = hashlib.sha256()
+    with open(packed, "wb") as raw:
+        with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
+            for shard in shards:
+                data = shard.read_bytes()
+                gz.write(data)
+                content_hash.update(data)
+    # Round-trip check before deleting anything.
+    verify = hashlib.sha256()
+    with gzip.open(packed, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            verify.update(chunk)
+    if verify.hexdigest() != content_hash.hexdigest():
+        packed.unlink()
+        raise SystemExit("pack verification failed — shards left untouched")
+    for shard in shards:
+        shard.unlink()
+    return {"file": PACKED_NAME, "sha256": _sha256(str(packed)),
+            "content_sha256": content_hash.hexdigest()}
 
 
 def _build_teacher(seed: int, search_config: Optional[Dict[str, Any]] = None,
@@ -207,6 +271,11 @@ def play_teacher_game(game_seed: int, game_id: str,
 def generate(args: argparse.Namespace) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
+    if (out_dir / PACKED_NAME).exists():
+        raise SystemExit(
+            f"{out_dir} holds a finalized packed dataset — datasets are "
+            "immutable. Use a new --out directory."
+        )
     existing = sorted(out_dir.glob("game_*.jsonl"))
     if existing and not args.resume:
         raise SystemExit(
@@ -299,12 +368,14 @@ def generate(args: argparse.Namespace) -> int:
                         records_written=total_records)
         (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
+    packed_info = pack_dataset(out_dir)
     manifest.update(status="finalized", games_completed=completed,
                     records_written=total_records,
+                    packed=packed_info,
                     elapsed_sec=round(time.monotonic() - t0, 1))
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     print(f"\n{total_records} records / {completed} games "
-          f"in {(time.monotonic() - t0) / 60:.1f} min -> {out_dir}")
+          f"in {(time.monotonic() - t0) / 60:.1f} min -> {out_dir / PACKED_NAME}")
     return 0
 
 
@@ -315,20 +386,16 @@ def generate(args: argparse.Namespace) -> int:
 def validate(dataset_dir: Path) -> int:
     generator = get_shared_generator()
     manifest = json.loads((dataset_dir / "manifest.json").read_text())
-    shards = sorted(dataset_dir.glob("game_*.jsonl"))
     errors: List[str] = []
     records_seen = 0
-    games_seen = 0
+    game_ids = set()
 
     def move_key(d: Dict[str, Any]):
         return (d["piece_id"], d["orientation"], d["anchor_row"], d["anchor_col"])
 
-    for shard in shards:
-        games_seen += 1
-        for line_no, line in enumerate(shard.read_text().splitlines()):
-            record = json.loads(line)
+    for where, record in iter_dataset_records(dataset_dir):
             records_seen += 1
-            where = f"{shard.name}:{line_no}"
+            game_ids.add(record["game_id"])
             board = Board.from_dict(record["state"])
             regenerated = {move_key(m.to_dict())
                            for m in generator.get_legal_moves(
@@ -363,12 +430,13 @@ def validate(dataset_dir: Path) -> int:
                     expected[key] = rank
                 if expected != {k: int(v) for k, v in ranks.items()}:
                     errors.append(f"{where}: ranks {ranks} != expected {expected}")
-        if errors and len(errors) > 20:
-            break
+            if len(errors) > 20:
+                break
 
+    games_seen = len(game_ids)
     if manifest.get("games_completed") != games_seen:
         errors.append(f"manifest games_completed={manifest.get('games_completed')} "
-                      f"!= shards found {games_seen}")
+                      f"!= games found {games_seen}")
     if manifest.get("records_written") != records_seen:
         errors.append(f"manifest records_written={manifest.get('records_written')} "
                       f"!= records found {records_seen}")

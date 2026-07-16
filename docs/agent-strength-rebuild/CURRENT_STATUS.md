@@ -35,6 +35,14 @@ _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 
   bundle included all of `data/` (194 MB) with no ignore file; added `.vercelignore`
   (dataset bulk out, `champion_registry.json` + `layer6_calibrated_weights.json` kept);
   preview deploys green again.
+- **Dataset storage reworked (user request):** teacher-record datasets now pack into a
+  single `records.jsonl.gz` at finalization (shards remain only during generation, for
+  `--resume`); `teacher_dataset_v1` (27 MB/19 files → 2.0 MB/1 file) and
+  `value_dataset_v2` (131 MB/101 files → 8.4 MB/1 file) migrated with content-hash
+  equality proof (decompressed bytes == registered shards-concat hash); validator +
+  readers handle both layouts via `iter_dataset_records`; `CLAUDE.md` now instructs
+  agents never to read dataset payloads into context (manifest + DATA_LINEAGE are the
+  reference).
 - **Next task (per the pre-registered EXP-009 decision rule):** the **move-level
   candidate-scoring evaluator** (master plan §13, full Phase 6 build) — score
   (state, candidate move) pairs instead of states, so the evaluator can see what the

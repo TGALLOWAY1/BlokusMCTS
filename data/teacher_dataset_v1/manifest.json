@@ -25,5 +25,10 @@
   "status": "finalized",
   "games_completed": 18,
   "records_written": 1309,
-  "elapsed_sec": 13492.9
+  "elapsed_sec": 13492.9,
+  "packed": {
+    "file": "records.jsonl.gz",
+    "sha256": "e241f78700ed38709a9b914bafb2dc142c98aefaa425c866390f3c9f742b834a",
+    "content_sha256": "5902b65db019edfd6edb306bb2ea8aa6a584d4190021e309ffb994120f73d0eb"
+  }
 }

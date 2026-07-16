@@ -55,6 +55,7 @@ def extract_teacher_frame(dataset_dir: Path,
     an optional cache_dir stores the frame as CSV keyed on dataset name +
     FEATURE_SET_VERSION (bulk dirs take minutes to extract).
     """
+    from training.experiments.teacher_selfplay import iter_dataset_records
     from training.rich_features import (
         FEATURE_SET_VERSION, RICH_FEATURE_NAMES, FeatureCache, extract_rich_features)
 
@@ -66,9 +67,7 @@ def extract_teacher_frame(dataset_dir: Path,
             return pd.read_csv(cache_path)
 
     rows: List[Dict] = []
-    for shard in sorted(dataset_dir.glob("game_*.jsonl")):
-        for line in shard.read_text().splitlines():
-            record = json.loads(line)
+    for _, record in iter_dataset_records(dataset_dir):
             board = Board.from_dict(record["state"])
             cache = FeatureCache()
             for p in Player:
