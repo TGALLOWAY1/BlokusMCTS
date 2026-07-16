@@ -24,6 +24,34 @@ Artifacts:
 
 ---
 
+## EXP-008 — Phase 6 probe: contested-territory feature block (rich_blokus_v2) — NEGATIVE
+
+- **Experiment ID:** EXP-008
+- **Date:** 2026-07-16
+- **Commit:** the Phase 6 PR head (feature block implemented in `training/rich_features.py`)
+- **Hypothesis:** six contested/exclusive-territory features (who can realize their
+  remaining piece area) lift held-out pairwise ordering decisively above the 0.68 ceiling.
+- **Independent variable:** feature set (45 vs 51), model family (ridge, HistGB), on
+  identical teacher-game splits (split seed 20260716, 25% held out).
+- **Result (held-out teacher games):**
+  | condition | R² | pairwise |
+  |---|---|---|
+  | teacher_only ridge 51 | 0.150 | 0.619 |
+  | teacher_only ridge 45 | 0.169 | 0.615 |
+  | mixed_45 ridge (17k v1 rows + teacher) | 0.234 | **0.678** |
+  | teacher_only HistGB 51 / 45 | 0.008 / −0.015 | 0.612 / 0.603 |
+- **Interpretation:** **the feature block adds ~nothing at current data volume**
+  (+0.004 pairwise, linear; HistGB is data-starved on 5.2k rows). The mixed condition
+  still leads purely on volume — but v1 rows carry no states, so they CANNOT receive the
+  new features. Representation and state-carrying data volume are intertwined constraints.
+- **Decision:** the pre-arena acceptance bar did its job — **zero arena compute spent** on
+  an unproven evaluator. Features stay in (versioned rich_blokus_v2, append-only, needed
+  for the follow-up). Ranked next options: (1) **generate a state-carrying bulk corpus**
+  (teacher-recorder format at the cheap PW-50 budget, ~2 min/game — 100+ games ≈ 3.5 h)
+  so mixed-volume training can use v2 features, then re-test the bar; (2) if that fails,
+  the move-level candidate-scoring evaluator (full Phase 6 build).
+- **Artifacts:** `training/artifacts/value_models/v3/report.json` (45-vs-51 conditions).
+
 ## EXP-007 — Phase 8 GATE C: vm2 (teacher-trained) vs vm1 (ridge) at equal budget
 
 - **Experiment ID:** EXP-007

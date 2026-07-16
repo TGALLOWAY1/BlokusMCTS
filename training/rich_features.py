@@ -49,7 +49,7 @@ from mcts.state_evaluator import (
 # Versioning
 # ---------------------------------------------------------------------------
 
-FEATURE_SET_VERSION = "rich_blokus_v1"
+FEATURE_SET_VERSION = "rich_blokus_v2"  # v2: + contested-territory block (6 features)
 
 _PLAYERS: List[Player] = list(Player)
 
@@ -164,6 +164,14 @@ _RICH_EXTRA_NAMES: List[str] = [
     # Center / board-position
     "edge_pressure",
     "quadrant_balance",
+    # Contested territory (v2 block, append-only): who can actually realize
+    # their remaining piece area. Exclusive = reachable by me and no opponent.
+    "exclusive_reachable_area",
+    "contested_reachable_area",
+    "reachable_piece_bound",
+    "opponent_exclusive_max",
+    "exclusive_area_margin",
+    "reachable_bound_margin",
 ]
 
 # Full ordered list: the eight SE features first (so the projection slice is the
@@ -191,6 +199,7 @@ class FeatureCache:
 
     move_generator: LegalMoveGenerator = field(default_factory=LegalMoveGenerator)
     _legal_moves: Dict[int, List] = field(default_factory=dict)
+    _reachable: Dict[int, frozenset] = field(default_factory=dict)
 
     def legal_moves(self, board: Board, player: Player) -> List:
         key = int(player.value)
@@ -198,6 +207,15 @@ class FeatureCache:
         if cached is None:
             cached = self.move_generator.get_legal_moves(board, player)
             self._legal_moves[key] = cached
+        return cached
+
+    def reachable_cells(self, board: Board, player: Player) -> frozenset:
+        """Memoised frontier-flood reachable set (incl. frontier cells)."""
+        key = int(player.value)
+        cached = self._reachable.get(key)
+        if cached is None:
+            cached = frozenset(_reachable_cells(board, board.get_frontier(player)))
+            self._reachable[key] = cached
         return cached
 
 
@@ -235,6 +253,25 @@ def _mobility_count(cache: FeatureCache, board: Board, player: Player) -> int:
     return len(cache.legal_moves(board, player))
 
 
+def _reachable_cells(board: Board, frontier) -> set:
+    """Empty cells orthogonally connected to the player's frontier (incl. the
+    frontier cells themselves) — the space this player could still expand into."""
+    grid = board.grid
+    size = board.SIZE
+    frontier_set = set(frontier)
+    reachable = set()
+    queue = deque(frontier_set)
+    while queue:
+        r, c = queue.popleft()
+        for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < size and 0 <= nc < size:
+                if grid[nr, nc] == 0 and (nr, nc) not in reachable and (nr, nc) not in frontier_set:
+                    reachable.add((nr, nc))
+                    queue.append((nr, nc))
+    return reachable | frontier_set
+
+
 def _largest_reachable_region_and_trapped(
     board: Board, frontier
 ) -> Tuple[int, int, int]:
@@ -249,19 +286,7 @@ def _largest_reachable_region_and_trapped(
     grid = board.grid
     size = board.SIZE
     frontier_set = set(frontier)
-
-    # Flood from frontier cells to find reachable empties.
-    reachable = set()
-    queue = deque(frontier_set)
-    while queue:
-        r, c = queue.popleft()
-        for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < size and 0 <= nc < size:
-                if grid[nr, nc] == 0 and (nr, nc) not in reachable and (nr, nc) not in frontier_set:
-                    reachable.add((nr, nc))
-                    queue.append((nr, nc))
-    largest_reachable = len(reachable) + len(frontier_set)
+    largest_reachable = len(_reachable_cells(board, frontier))
 
     # Connected components of all empties; those disjoint from the frontier are
     # "trapped" for this player.
@@ -359,6 +384,18 @@ TERRITORY_FEATURES: frozenset = frozenset({
     "frontier_density",
 })
 
+# v2 contested-territory block: needs the reachable flood for ALL FOUR players
+# (memoised per board on the FeatureCache, so a 4-perspective snapshot pays for
+# each player's flood exactly once).
+CONTESTED_TERRITORY_FEATURES: frozenset = frozenset({
+    "exclusive_reachable_area",
+    "contested_reachable_area",
+    "reachable_piece_bound",
+    "opponent_exclusive_max",
+    "exclusive_area_margin",
+    "reachable_bound_margin",
+})
+
 # The cheap remainder (SE-8, score/rank/margin, piece inventory, frontier
 # counts, board-position): no legal-move enumeration and no territory BFS,
 # ~0.3 ms on top of the SE-8 features.
@@ -368,6 +405,7 @@ SCORE_LEAF_FEATURES: frozenset = (
     - OPPONENT_MOBILITY_FEATURES
     - FOCAL_MOBILITY_FEATURES
     - TERRITORY_FEATURES
+    - CONTESTED_TERRITORY_FEATURES
 )
 
 # Named cost tiers exposed to the agent via ``rich_leaf_feature_subset``.
@@ -455,6 +493,7 @@ def _extract_features_impl(
     need_focal = bool(include & FOCAL_MOBILITY_FEATURES)
     need_territory = bool(include & TERRITORY_FEATURES)
     need_opp_mobility = bool(include & OPPONENT_MOBILITY_FEATURES)
+    need_contested = bool(include & CONTESTED_TERRITORY_FEATURES)
 
     # --- Eight SE features (identical semantics to the live agent) -----------
     feats: Dict[str, float] = dict(evaluator.extract_features(board, player))
@@ -523,6 +562,56 @@ def _extract_features_impl(
     feats["frontier_to_opponent_distance"] = _frontier_to_opponent_distance(
         board, player, frontier
     )
+
+    # --- Contested territory (v2 block; gated: 4-player reachable floods) ----
+    if need_contested:
+        mine = cache.reachable_cells(board, player)
+        opp_sets = {
+            opp: cache.reachable_cells(board, opp)
+            for opp in _PLAYERS if opp != player
+        }
+        union_opp: frozenset = frozenset().union(*opp_sets.values()) if opp_sets else frozenset()
+        exclusive = mine - union_opp
+        contested = mine & union_opp
+
+        def _remaining_area(p: Player) -> float:
+            return float(sum(
+                sizes.get(pid, 0)
+                for pid in _remaining_piece_ids(board.player_pieces_used[p])
+            ))
+
+        all_sets = {player: mine, **opp_sets}
+
+        def _bound(p: Player) -> float:
+            reach = all_sets[p]
+            others = frozenset().union(
+                *(s for q, s in all_sets.items() if q != p)
+            )
+            excl = reach - others
+            cont = reach & others
+            return min(_remaining_area(p), len(excl) + 0.5 * len(cont))
+
+        my_bound = min(_remaining_area(player), len(exclusive) + 0.5 * len(contested))
+        opp_excls = {
+            opp: len(reach - frozenset().union(
+                *(s for q, s in all_sets.items() if q != opp)
+            ))
+            for opp, reach in opp_sets.items()
+        }
+        opp_bounds = [_bound(opp) for opp in opp_sets]
+        max_opp_excl = max(opp_excls.values()) if opp_excls else 0
+        max_opp_bound = max(opp_bounds) if opp_bounds else 0.0
+
+        feats["exclusive_reachable_area"] = min(len(exclusive) / _MAX_REGION, 1.0)
+        feats["contested_reachable_area"] = min(len(contested) / _MAX_REGION, 1.0)
+        feats["reachable_piece_bound"] = min(my_bound / max(total_area, 1), 1.0)
+        feats["opponent_exclusive_max"] = min(max_opp_excl / _MAX_REGION, 1.0)
+        feats["exclusive_area_margin"] = max(
+            -1.0, min((len(exclusive) - max_opp_excl) / _MAX_REGION, 1.0)
+        )
+        feats["reachable_bound_margin"] = max(
+            -1.0, min((my_bound - max_opp_bound) / max(total_area, 1), 1.0)
+        )
 
     # --- Piece inventory (cheap) --------------------------------------------
     rem_by_size = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}

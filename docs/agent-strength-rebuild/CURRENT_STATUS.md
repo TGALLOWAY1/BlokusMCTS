@@ -2,6 +2,25 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-16 (session 16 — Phase 6 probe: v2 features NEGATIVE at current data volume)
+
+- **Current phase:** Phase 6 (representation), first probe complete. `rich_blokus_v2`
+  implemented (six contested/exclusive-territory features, append-only, gated, cached
+  4-player floods; all consumers verified name-safe). **EXP-008: the block adds ~nothing
+  at current state-carrying data volume** (pairwise 0.619 vs 0.615 linear; HistGB
+  data-starved on 5.2k teacher rows) — bar (>0.68 decisively) NOT met; zero arena compute
+  spent, exactly as the pre-arena acceptance bar intends.
+- **Constraint isolated:** representation and state-carrying data volume are intertwined —
+  the 17k-row v1 corpus stores features only, so new features can't reach the data that
+  drives `mixed_45`'s lead (0.678).
+- **Next recommended task (ranked):** (1) generate `value_dataset_v2` in the
+  teacher-recorder format (full states) at the cheap PW-50 budget (~2 min/game; 100+ games
+  ≈ 3.5 h) and re-test the bar with v2 features at volume; (2) only if that fails, the
+  move-level candidate-scoring evaluator (full Phase 6 build). Gate C re-run stays gated
+  on the 0.68 bar.
+- **Tests:** feature-affected suites 60/60 green after the version bump (one test corrected
+  to assert artifact-version propagation rather than the library constant).
+
 ## Session 2026-07-15/16 (session 15 — Phase 8 gate C: loop turns; PARTIAL at n=20)
 
 - **Current phase:** Phase 8. Gate A PASS (standing); gate B/C training half PASS
