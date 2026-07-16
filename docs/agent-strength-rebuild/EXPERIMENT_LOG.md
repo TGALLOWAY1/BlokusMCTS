@@ -24,6 +24,52 @@ Artifacts:
 
 ---
 
+## EXP-007 — Phase 8 GATE C: vm2 (teacher-trained) vs vm1 (ridge) at equal budget
+
+- **Experiment ID:** EXP-007
+- **Date:** 2026-07-15 (launched ~13:3x UTC)
+- **Commit:** the gate-C PR head (adds `training/experiments/value_model_v2.py`)
+- **Hypothesis (the loop's first turn):** the value model retrained on teacher-search
+  self-play (v2_mixed: teacher_dataset_v1 + value_dataset_v1) beats the v1 ridge as a leaf
+  evaluator at equal budget — demonstrating better data → better evaluator → stronger search.
+- **Pre-check (training half, held-out TEACHER games, split seed 20260716, 14/4 games):**
+  | model | R² | MAE (pts) | pairwise |
+  |---|---|---|---|
+  | v2_mixed | **0.234** | **7.27** | **0.678** |
+  | v2_teacher_only | 0.169 | 7.59 | 0.615 |
+  | v1_ridge | **−0.384** | 11.82 | 0.658 |
+  **PASS** — and a finding in itself: v1 generalizes badly to the stronger teacher-play
+  distribution (negative R²); retraining on teacher data fixes the calibration.
+- **Independent variable:** leaf artifact per seat (vm2_500 = v2_mixed retrained on all
+  games; vm1_500 = the frozen v1 ridge). Identical D-016 search config, 500 iterations.
+- **Controlled variables:** one mixed table [vm2_500, vm1_500, heuristic, random];
+  round_robin; seeds 20260620/20260621; 10 games/seed; standard scoring; stat seed 20260712.
+- **Game count:** 20 (deadline 280 min). **Hardware:** session container.
+- **Result:** 20/20 games in 162 min.
+  | agent | 1st% | avg rank | TS μ (σ) |
+  |---|---|---|---|
+  | vm2_500 | **57.5%** | **1.35** | 42.32 (7.82) |
+  | vm1_500 | 42.5% | 1.50 | 42.88 (7.85) |
+  | heuristic | 0.0% | 2.70 | 20.58 (7.52) |
+  | random | 0.0% | 3.70 | −4.56 (7.62) |
+  Primary test: vm2 − vm1 = **+2.25 pts, p=0.596**. Both crush the anchors (p < 0.0001).
+- **Uncertainty:** 20 paired games; the first-place/rank direction favors vm2 consistently,
+  but the score-diff test is far from significance.
+- **Interpretation:** **the loop turns, but the per-generation gain is small.** Training half
+  demonstrated the mechanism decisively (v1 miscalibrated on teacher play, v2 fixes it);
+  arena half shows no regression and a positive trend — yet ordering quality (what argmax
+  move choice actually uses) barely moved (pairwise 0.658 → 0.678), consistent with the
+  EXP-004 finding that the 45-feature representation caps at ~0.68. One generation of
+  18 teacher games cannot push past a feature ceiling.
+- **Decision:** **Gate C: PARTIAL — MORE EVIDENCE REQUIRED.** Per §20 (no default escapes:
+  not "more games", not "more data" first), the isolated bottleneck is the REPRESENTATION —
+  the next distinguishing work is the Phase 6 upgrade (richer feature set or move-level
+  candidate scoring), after which gate C re-runs with a real ordering-quality delta to
+  detect. v2_mixed is retained as the current best evaluator artifact (no regression,
+  better calibrated); NOT promoted anywhere.
+- **Artifacts:** `training/reports/experiments/search_scaling/exp007_vm2_vs_vm1/`,
+  `training/artifacts/value_models/v2/`.
+
 ## EXP-006a — Phase 4 confirmation 1: direct same-table model-500 vs rollout-500
 
 - **Experiment ID:** EXP-006a

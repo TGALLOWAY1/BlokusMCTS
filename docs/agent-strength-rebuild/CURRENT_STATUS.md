@@ -2,6 +2,24 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-15/16 (session 15 — Phase 8 gate C: loop turns; PARTIAL at n=20)
+
+- **Current phase:** Phase 8. Gate A PASS (standing); gate B/C training half PASS
+  (v2_mixed beats v1 on held-out teacher games — and exposed that v1 was badly
+  miscalibrated on stronger play, R² −0.384); **gate C arena PARTIAL** — EXP-007: vm2
+  57.5% vs vm1 42.5% first-place (rank 1.35 vs 1.50) but paired diff +2.25, p=0.60.
+  See `phases/PHASE_8_IMPROVEMENT_LOOP.md`.
+- **Bottleneck isolated (again, now with loop evidence):** ordering quality is pinned at
+  the `rich_blokus_v1` ~0.68 pairwise ceiling (0.658 → 0.678 after a full teacher
+  generation). Calibration transfers; ordering doesn't move. Representation is the axis.
+- **Next recommended task:** Phase 6 representation upgrade — extend the versioned rich
+  feature set and/or build the move-level candidate-scoring evaluator; acceptance BEFORE
+  arena spend: held-out pairwise ordering must clear 0.68 decisively; then re-run gate C
+  on the fixed protocol. v2_mixed stands as the best current evaluator artifact (not
+  promoted anywhere).
+- **Loop assets standing:** teacher pipeline (validated, resumable), v2 artifact, fixed
+  cheap gates (ladder + direct table), saturation-knee quality metric.
+
 ## Session 2026-07-15 (session 14 — Phase 7 COMPLETE: teacher_dataset_v1 finalized & validated)
 
 - **Current phase:** Phase 7 **complete** — `data/teacher_dataset_v1` finalized: 1 309
