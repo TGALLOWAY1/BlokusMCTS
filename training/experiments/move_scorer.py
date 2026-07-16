@@ -206,7 +206,11 @@ def evaluate_ordering(name: str, decisions: Sequence[Decision],
     pair_total = 0
     for d in decisions:
         z = logit_fn(d)
-        if int(np.argmax(z)) == int(np.argmax(d.target)):
+        # Tied visit maxima are equally teacher-optimal: count the prediction
+        # correct if its target matches the max (review finding, PR #207 —
+        # plain argmax comparison made ~13% of decisions depend on
+        # serialization order rather than move quality).
+        if d.target[int(np.argmax(z))] == d.target.max():
             top1 += 1
         n = len(z)
         for i in range(n):
