@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Optional
 
 from training.experiments.search_scaling import MINIMAL_SEARCH_PARAMS, PW_PARAMS
+from training.rich_features import FEATURE_SET_VERSION
 from training.td_selfplay import collect_trajectories
 
 DATASET_SCHEMA_VERSION = "value_dataset_v1"
@@ -83,7 +84,7 @@ def main(argv: Optional[list] = None) -> int:
         "run_id": run_id,
         "scoring_mode": "standard",
         "engine_state_schema": "board_state_v1",
-        "feature_set_version": "rich_blokus_v1",
+        "feature_set_version": FEATURE_SET_VERSION,
         "agent_version": AGENT_VERSION_TAG,
         "teacher_agents": agents,
         "seed": args.seed,

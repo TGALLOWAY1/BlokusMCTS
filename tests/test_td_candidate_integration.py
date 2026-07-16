@@ -73,6 +73,8 @@ def test_candidate_metadata_records_td_method(tmp_path):
     path = _write_artifact(tmp_path)
     cand, _ = sc.build_td_candidate(_state(), str(path))
     assert cand["learning_method"] == "temporal_difference"
+    # The candidate must report the version its ARTIFACT was trained with
+    # (the fixture stamps rich_blokus_v1), not the library's current constant.
     assert cand["feature_set_version"] == "rich_blokus_v1"
     assert cand["training_rows"] == 5432
     assert cand["td_loss"] == 0.037

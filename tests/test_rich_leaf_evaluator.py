@@ -127,8 +127,11 @@ def test_evaluate_equals_manual_dot_product():
         feats = rf.extract_leaf_features(board, player, subset="full")
         weights_map = rich[phase]["weights"]
         bias = rich[phase]["bias"]
+        # Mirror the loader's compatibility behavior: legacy artifacts may lack
+        # weights for features appended after they were trained (zero-filled).
         expected = bias + sum(
-            float(weights_map[name]) * feats[name] for name in rf.RICH_FEATURE_NAMES
+            float(weights_map.get(name, 0.0)) * feats[name]
+            for name in rf.RICH_FEATURE_NAMES
         )
         got = ev.evaluate(board, player)
         assert abs(got - expected) < 1e-9, (player, phase, got, expected)
