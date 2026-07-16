@@ -2,6 +2,27 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-16 (session 19 — EXP-011: FIRST PHASE 6 CANDIDATE CLEARS THE TRAINING BARS)
+
+- **Current phase:** Phase 6. EXP-011 (shape-aware MLP move scorer, `move_encoding_v1`:
+  9×9 six-channel patch + piece one-hot + scalars, 518→64→1 listwise numpy MLP).
+- **Three results, in order:**
+  1. Capacity confirmed — the tiny-set check reaches 0.930–0.945 top-1 at adequate
+     optimization budget (EXP-010's linear model: 0.165). Gate 1 passes in substance.
+  2. **Bulk mixing refuted for policy distillation** — controlled pair: teacher-only
+     (1,003 decisions) 0.228/0.744 vs mixed (6,337) 0.151/0.637 on held-out teacher
+     decisions. PW-50 visit distributions are a different, noisier policy; they
+     poison the scorer (the policy-side twin of EXP-009's label-noise finding).
+  3. **Teacher-only clears the pre-registered gate-2 bars decisively and seed-robustly:**
+     top-1 0.196–0.228 vs baselines 0.140/0.133; pairwise 0.742–0.744 vs 0.591/0.596.
+     First Phase 6 candidate past the pre-arena training bars.
+- **Next recommended task:** production wiring — `move_policy_v2` (encoding + numpy
+  MLP inference in `mcts/`, versioned artifact, masking/ordering/round-trip tests per
+  the master plan), then the search-integration experiment (PUCT prior + ordering at
+  fixed budgets vs the D-016 baseline) before any gate-C arena claim. Also queued:
+  more 500-iter teacher games (1,003 training decisions produced this; data is now
+  the confirmed lever) — bulk PW-50 data stays EXCLUDED from policy training.
+
 ## Session 2026-07-16 (session 18 — Phase 6 build: D-017 + EXP-010 NEGATIVE, capacity-bound)
 
 - **Current phase:** Phase 6 (move-level candidate scorer). D-017 recorded (listwise

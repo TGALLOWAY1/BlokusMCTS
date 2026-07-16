@@ -42,6 +42,21 @@ held-out pairwise ordering decisively above 0.68 (train/eval via
 (`exp007_agents.json` pattern) on the fixed protocol. Everything below is the historical
 Phase 7 handoff (done).
 
+**UPDATE (2026-07-16, session 19): FIRST PHASE 6 CANDIDATE PAST THE TRAINING BARS.**
+EXP-011: shape-aware MLP (`move_encoding_v1`, 518→64→1 listwise, numpy-only) trained on
+TEACHER-ONLY decisions clears the pre-registered held-out bars decisively and
+seed-robustly (top-1 0.196–0.228 vs 0.140/0.133; pairwise 0.742–0.744 vs 0.591/0.596).
+Two supporting findings: capacity confirmed (0.93+ memorization at adequate epochs) and
+**bulk PW-50 data poisons policy distillation** (controlled pair: 0.228/0.744
+teacher-only vs 0.151/0.637 mixed) — keep `value_dataset_v2` OUT of policy training.
+**Exact next action:** production wiring `move_policy_v2` — port `move_encoding_v1` +
+numpy MLP inference into `mcts/` (versioned artifact incl. encoding version + weights;
+masking/ordering/round-trip tests; untrained fallback stays behaviour-safe), retrain
+the production artifact teacher-only with the corrected optimization budget, then the
+search-integration experiment: D-016 agent ± `policy_prior` MLP at fixed budgets
+(pinned seeds, exp007 pattern) — that result, not the training metric, decides any
+gate-C claim. Queued after: more 500-iter teacher games (data is the confirmed lever).
+
 **UPDATE (2026-07-16, session 18):** Phase 6 build started — D-017 (listwise scorer,
 teacher-visit distillation, policy_prior slot) + `training/experiments/move_scorer.py`.
 **EXP-010 NEGATIVE (gate 2)**: pairwise ordering improves (+0.04) but top-1 doesn't move

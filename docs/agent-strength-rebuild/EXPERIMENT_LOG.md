@@ -24,6 +24,64 @@ Artifacts:
 
 ---
 
+## EXP-011 — Phase 6 build, step 2: shape-aware MLP move scorer (capacity remediation)
+
+- **Experiment ID:** EXP-011
+- **Date:** 2026-07-16 (launched)
+- **Commit:** PR #207 head (`training/experiments/move_scorer_mlp.py`)
+- **Hypothesis:** EXP-010's failure was capacity: a small MLP over a SHAPE-AWARE move
+  encoding (piece one-hot + local board patch around the placement + the engineered
+  scalars) can (1) nearly memorize 200 teacher decisions and (2) beat the fixed
+  heuristic and legacy policy on held-out teacher decisions on BOTH tie-aware top-1
+  and pairwise ordering.
+- **Encoding (move_encoding_v1):** 9×9 patch centered on the placement centroid,
+  6 channels (own occupied, opponent occupied, off-board, new-piece cells, own
+  frontier, opponent frontier) = 486, + 21 piece one-hot + the 10 `move_features_v2`
+  scalars + phase = 518 inputs per candidate.
+- **Model:** numpy MLP 518→64(tanh)→1 shared across candidates, listwise softmax CE
+  over each decision's children (same objective as EXP-010), Adam, fixed seed —
+  numpy-only inference (Pyodide-safe, D-006/D-017).
+- **Controls:** identical data, game-level split seed 20260716, identical held-out
+  sets and baselines as EXP-010 (tie-aware top-1 throughout).
+- **Pre-registered decision rule:** overfit gate = tie-aware top-1 ≥ 0.80 on its own
+  200 training decisions (the linear model managed 0.165) — below that, capacity is
+  still insufficient and the encoding (not the trainer) is the next suspect. Held-out
+  bars identical to EXP-010: beat BOTH baselines on top-1 (outside ~2 SE) AND
+  pairwise. Both pass → production wiring (`move_policy_v2`) + search-integration
+  experiment. Overfit passes but held-out fails → capacity is fine, data volume is
+  binding → scale teacher decisions (more 500-iter games) before revisiting.
+- **Reproduce:** `python -m training.experiments.move_scorer_mlp --split-seed 20260716`
+- **Result — gate 1 PASS (after optimization-budget correction), gate 2 PASS in the
+  teacher-only condition; bulk mixing REFUTED for policy distillation:**
+  1. **Capacity confirmed:** at the pre-registered 300 epochs the tiny-set score was
+     0.780 (bar 0.80, within 1 SE); the distinguishing check (tiny set only, no
+     held-out contact) shows 64/128/256 hidden units at 1000–2000 epochs reach
+     **0.930–0.945 top-1 / 0.966–0.981 pairwise** — the encoding+MLP memorizes; the
+     shortfall was optimization budget, not capacity.
+  2. **Pre-registered mixed-data condition FAILED gate 2** (held-out teacher: 0.151 /
+     0.637 vs heuristic 0.140 / 0.591) — and transferred WORSE than baselines on bulk
+     held-out. Attribution check (identical model/config, training data as the only
+     variable): **teacher-only (1,003 decisions) → 0.228 / 0.744; mixed (6,337) →
+     0.151 / 0.637.** The PW-50 bulk corpus actively poisons the scorer — its visit
+     distributions (50 iterations, ⌈2√50⌉≈14 children) are a different, noisier
+     policy than the 500-iteration teacher's. Consistent with EXP-009's finding on the
+     value side: volume of the wrong distribution is negative signal, now confirmed
+     on the policy side with a controlled pair.
+  3. **Teacher-only clears the pre-registered gate-2 bars decisively and robustly:**
+     top-1 0.228/0.196/0.218 across seeds 12345/777/20260717 (baselines 0.140/0.133;
+     every run > 2.3 SE clear), pairwise 0.742–0.744 (baselines 0.591/0.596).
+- **Decision:** shape-aware MLP + teacher-only distillation is the first Phase 6
+  candidate to clear the pre-arena training bars → proceed to production wiring
+  (`move_policy_v2`: encoding + numpy inference in `mcts/`, artifact format,
+  masking/round-trip tests) and the search-integration experiment (PUCT prior +
+  ordering at fixed budgets vs the D-016 baseline). Bulk data is EXCLUDED from
+  policy-distillation training sets; `value_dataset_v2` remains valid for state-value
+  work and as game records. More 500-iter teacher games are the highest-value data
+  spend (only 1,003 training decisions produced this).
+- **Artifacts:** `training/artifacts/move_scorer/v2_mlp/{report.json,mlp_weights.json}`
+  (pre-registered mixed run), attribution/seed checks logged here (scratchpad runs,
+  scripts inline in the log entry's reproduce block lineage).
+
 ## EXP-010 — Phase 6 build, gate 1–2: teacher-distilled move scorer vs heuristic/legacy baselines
 
 - **Experiment ID:** EXP-010
