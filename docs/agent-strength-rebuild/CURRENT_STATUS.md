@@ -16,12 +16,21 @@ _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 
   3. **Teacher-only clears the pre-registered gate-2 bars decisively and seed-robustly:**
      top-1 0.196–0.228 vs baselines 0.140/0.133; pairwise 0.742–0.744 vs 0.591/0.596.
      First Phase 6 candidate past the pre-arena training bars.
-- **Next recommended task:** production wiring — `move_policy_v2` (encoding + numpy
-  MLP inference in `mcts/`, versioned artifact, masking/ordering/round-trip tests per
-  the master plan), then the search-integration experiment (PUCT prior + ordering at
-  fixed budgets vs the D-016 baseline) before any gate-C arena claim. Also queued:
-  more 500-iter teacher games (1,003 training decisions produced this; data is now
-  the confirmed lever) — bulk PW-50 data stays EXCLUDED from policy training.
+- **Production wiring DONE (same session):** `mcts/move_encoding.py` (canonical
+  encoder, byte-identical to the EXP-011 implementation) + `mcts/move_policy_mlp.py`
+  (MovePolicy-compatible MLP policy, versioned artifact) + agent artifact dispatch +
+  arena `policy_weights_path`; 10 new wiring tests green, legacy suites 26/26,
+  checks 7/7. Production artifact trained teacher-only on all 1,288 decisions
+  (`training/artifacts/move_scorer/v2_mlp/move_policy_v2.json`); the refactored
+  pipeline reproduces EXP-011 exactly (0.228/0.744, gate 2 PASS).
+- **EXP-012 IN FLIGHT:** search integration — D-016 agent ± MLP PUCT prior (c=1.5)
+  at 500 iterations, 2×2 same-table, seeds 20260718/20260719, 20 games (~5–7 h).
+  Pre-registered rule in `EXPERIMENT_LOG.md`: positive → scorer validated in search,
+  queue adoption + more teacher data; null → tune prior strength c (single variable),
+  not retraining; negative → investigate. No champion change either way.
+- **Also queued:** more 500-iter teacher games (1,003 training decisions produced the
+  EXP-011 win; data is the confirmed lever) — bulk PW-50 data stays EXCLUDED from
+  policy training.
 
 ## Session 2026-07-16 (session 18 — Phase 6 build: D-017 + EXP-010 NEGATIVE, capacity-bound)
 

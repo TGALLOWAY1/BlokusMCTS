@@ -42,6 +42,17 @@ held-out pairwise ordering decisively above 0.68 (train/eval via
 (`exp007_agents.json` pattern) on the fixed protocol. Everything below is the historical
 Phase 7 handoff (done).
 
+**UPDATE (2026-07-16, session 19b): WIRING DONE, EXP-012 (search integration) IN
+FLIGHT.** `move_policy_v2` is production-wired (`mcts/move_encoding.py`,
+`mcts/move_policy_mlp.py`, agent artifact dispatch, arena `policy_weights_path`; 10
+wiring tests + legacy suites green) and the teacher-only production artifact is at
+`training/artifacts/move_scorer/v2_mlp/move_policy_v2.json`. EXP-012 (D-016 ± MLP PUCT
+prior, 500 iters, 20 games, seeds 20260718/20260719) is running — decision rule
+pre-registered in `EXPERIMENT_LOG.md`. **If interrupted:** re-launch via the EXP-012
+reproduce command (no resume; seeds pinned). On completion: record result, then either
+adoption experiments + more teacher data (positive) or a prior-strength (c) single-
+variable follow-up (null).
+
 **UPDATE (2026-07-16, session 19): FIRST PHASE 6 CANDIDATE PAST THE TRAINING BARS.**
 EXP-011: shape-aware MLP (`move_encoding_v1`, 518→64→1 listwise, numpy-only) trained on
 TEACHER-ONLY decisions clears the pre-registered held-out bars decisively and
