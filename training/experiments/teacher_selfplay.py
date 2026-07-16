@@ -214,6 +214,11 @@ def generate(args: argparse.Namespace) -> int:
             "Use a new --out directory, or --resume to continue an interrupted "
             "generation (same seed scheme; completed shards untouched)."
         )
+    search_config = dict(TEACHER_SEARCH_CONFIG, iterations=args.iterations)
+    value_model_path = args.value_model if args.value_model else None
+    value_model_sha = _sha256(value_model_path) if value_model_path else None
+    value_model_entry = ({"path": value_model_path, "sha256": value_model_sha}
+                         if value_model_path else None)
     if args.resume and existing:
         manifest_on_disk = json.loads((out_dir / "manifest.json").read_text())
         if manifest_on_disk.get("status") == "finalized":
@@ -223,14 +228,26 @@ def generate(args: argparse.Namespace) -> int:
                 f"--resume seed mismatch: manifest has {manifest_on_disk.get('seed')}, "
                 f"got {args.seed}."
             )
+        # Existing shards were generated under the saved config; resuming with a
+        # different one would silently mix configurations behind a manifest that
+        # asserts a single provenance. Refuse mismatches.
+        if manifest_on_disk.get("teacher_search_config") != search_config:
+            raise SystemExit(
+                "--resume search-config mismatch: manifest has "
+                f"{manifest_on_disk.get('teacher_search_config')}, current args give "
+                f"{search_config}. Re-run with the original --iterations."
+            )
+        if manifest_on_disk.get("value_model") != value_model_entry:
+            raise SystemExit(
+                "--resume value-model mismatch: manifest has "
+                f"{manifest_on_disk.get('value_model')}, current args give "
+                f"{value_model_entry}. Re-run with the original --value-model."
+            )
     try:
         commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
                                 text=True, check=True).stdout.strip()
     except Exception:
         commit = "unknown"
-    search_config = dict(TEACHER_SEARCH_CONFIG, iterations=args.iterations)
-    value_model_path = args.value_model if args.value_model else None
-    value_model_sha = _sha256(value_model_path) if value_model_path else None
 
     manifest = {
         "dataset_schema_version": "teacher_dataset_v1",
@@ -239,8 +256,7 @@ def generate(args: argparse.Namespace) -> int:
         "generating_commit": commit,
         "scoring_mode": "standard",
         "teacher_search_config": search_config,
-        "value_model": ({"path": value_model_path, "sha256": value_model_sha}
-                        if value_model_path else None),
+        "value_model": value_model_entry,
         "seed": args.seed,
         "num_games_requested": args.games,
         "status": "generating",
