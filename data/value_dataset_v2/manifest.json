@@ -1,0 +1,25 @@
+{
+  "dataset_schema_version": "teacher_dataset_v1",
+  "record_schema_version": "teacher_record_v2",
+  "purpose": "Phase 7 teacher self-play (gate C training corpus)",
+  "generating_commit": "81a569f2d1374a100120ea75365433b298049b90",
+  "scoring_mode": "standard",
+  "teacher_search_config": {
+    "iterations": 50,
+    "rollout_policy": "greedy_sample",
+    "greedy_sample_size": 12,
+    "rollout_cutoff_depth": 12,
+    "heuristic_move_ordering": true,
+    "exploration_constant": 1.414,
+    "use_transposition_table": true,
+    "progressive_widening_enabled": true,
+    "pw_c": 2.0,
+    "pw_alpha": 0.5
+  },
+  "value_model": null,
+  "seed": 20260716,
+  "num_games_requested": 100,
+  "status": "generating",
+  "games_completed": 6,
+  "records_written": 430
+}
