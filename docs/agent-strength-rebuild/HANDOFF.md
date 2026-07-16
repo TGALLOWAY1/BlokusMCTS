@@ -42,6 +42,16 @@ held-out pairwise ordering decisively above 0.68 (train/eval via
 (`exp007_agents.json` pattern) on the fixed protocol. Everything below is the historical
 Phase 7 handoff (done).
 
+**UPDATE (2026-07-16, session 18):** Phase 6 build started — D-017 (listwise scorer,
+teacher-visit distillation, policy_prior slot) + `training/experiments/move_scorer.py`.
+**EXP-010 NEGATIVE (gate 2)**: pairwise ordering improves (+0.04) but top-1 doesn't move
+and the feature extensions add nothing; attribution is CAPACITY (0.150 top-1 on its own
+training data). **Exact next action:** higher-capacity shape-aware scorer — sklearn MLP
+(numpy-exportable, D-006) over a shape-aware move encoding (piece×orientation one-hot,
+local board patch at the placement); gate order per D-017 with a strict overfit gate
+(must nearly memorize 200 decisions) before held-out; same baselines and bars as
+EXP-010. Nothing is wired into production.
+
 **UPDATE (2026-07-16, session 17):** Phase 6 path 1 COMPLETE and **NEGATIVE** —
 `data/value_dataset_v2` (7 208 records / 100 games, validated, hashed) was generated and
 EXP-009 run: at 6.5× state-carrying volume the `rich_blokus_v2` block adds +0.004

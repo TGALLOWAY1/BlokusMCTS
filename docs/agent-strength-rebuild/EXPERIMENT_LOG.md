@@ -53,7 +53,29 @@ Artifacts:
   shape-aware encodings / NN. mf_v2 > baselines but ≈ mf4 → wire mf4 (simpler),
   extensions rejected.
 - **Reproduce:** `python -m training.experiments.move_scorer --split-seed 20260716`
-- **Result:** _pending_
+- **Result (gate 1 PASS; gate 2 FAIL):** held-out teacher decisions (n=285):
+  | scorer | top-1 | pairwise |
+  |---|---|---|
+  | fixed_heuristic | 0.140 | 0.591 |
+  | legacy_policy | 0.123 | 0.596 |
+  | mf4_trained | 0.140 | 0.629 |
+  | mf_v2_trained | 0.133 | **0.632** |
+  Distillation lifts pairwise ordering (+0.04 over both baselines) but top-1 does not
+  move, and mf_v2 ≈ mf4 (extensions add ~nothing, third strike for hand-crafted
+  feature extensions after EXP-008/009). Bars required BOTH metrics → **FAIL**.
+- **Attribution — capacity, not data:** the tiny-overfit sanity run scores only 0.150
+  top-1 ON ITS OWN 200 TRAINING DECISIONS, and full-train held-out performance equals
+  train performance. A listwise linear model over cheap geometric move features cannot
+  even fit the teacher's choices, let alone generalize better. The 500-iteration
+  teacher argmax depends on shape/interaction structure these features cannot express.
+- **Decision (per the pre-registered rule):** listwise-linear-on-engineered-features is
+  refuted → proceed to the shape-aware / higher-capacity scorer (D-017 revisit
+  condition; D-006 permits sklearn MLP with numpy-exportable inference). The +0.04
+  pairwise gain is NOT wired into production — top-1 (what PUCT priors and ordering
+  actually consume at the argmax) did not improve, and §20 forbids shipping a lateral
+  move as progress.
+- **Artifacts:** `training/artifacts/move_scorer/v1/report.json` (all conditions,
+  trained weights, per-set feature names).
 
 ## EXP-009 — Phase 6 path 1: rich_blokus_v2 at state-carrying volume vs the 0.68 bar
 

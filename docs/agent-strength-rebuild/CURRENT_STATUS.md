@@ -2,6 +2,27 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-16 (session 18 — Phase 6 build: D-017 + EXP-010 NEGATIVE, capacity-bound)
+
+- **Current phase:** Phase 6 (move-level candidate scorer). D-017 recorded (listwise
+  scorer distilling teacher visits, versioned move features, policy_prior consumption
+  slot, gate order). Harness built (`training/experiments/move_scorer.py`).
+- **EXP-010 result — gate 1 PASS, gate 2 FAIL:** distillation lifts held-out pairwise
+  move ordering (0.632 vs 0.591 heuristic / 0.596 legacy) but top-1 agreement does not
+  move (0.133 vs 0.140), and the six D-017 feature extensions add ~nothing over the
+  four base features (third strike for hand-crafted extensions after EXP-008/009).
+- **Key attribution — capacity, not data:** the model scores 0.150 top-1 on its own
+  200 training decisions; train ≈ held-out everywhere. Linear-over-geometric-features
+  cannot express what the 500-iter teacher argmax depends on. Nothing wired into
+  production (§20: pairwise-only lateral gain is not progress).
+- **Next recommended task (per the pre-registered EXP-010 rule + D-017 revisit):**
+  higher-capacity shape-aware candidate scorer — sklearn MLP (numpy-exportable
+  inference, D-006) over a shape-aware encoding (piece one-hot × orientation, local
+  board patch around the placement, or interaction features), same gate order:
+  tiny-data OVERFIT first (the linear model failed even that in spirit — a capacity-
+  adequate model must fit 200 decisions nearly perfectly), then held-out vs the same
+  baselines, then production wiring.
+
 ## Session 2026-07-16 (session 17 — Phase 6 path 1: value_dataset_v2 generation launched)
 
 - **Current phase:** Phase 6 (representation), executing ranked option 1 from session 16:
