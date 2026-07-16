@@ -2,6 +2,42 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-15 (session 14 — Phase 7 COMPLETE: teacher_dataset_v1 finalized & validated)
+
+- **Current phase:** Phase 7 **complete** — `data/teacher_dataset_v1` finalized: 1 309
+  `teacher_record_v2` records / 18 games, engine-level validation PASSED, 18/18 unique
+  games, winners across all four seats. Hashes in `DATA_LINEAGE.md`.
+- **Two defects found & fixed on the way (both in this PR):** (1) stale root-stats capture
+  on forced moves (review catch — corrupted the first full run; wiped and regenerated);
+  (2) **deterministic self-play collapse** — model-leaf teachers replay the identical game
+  regardless of seed (18/18 identical); fixed with opening-phase visit sampling (τ=1.0,
+  first 24 decisions, seeded; schema → teacher_record_v2). Blast-radius check verified all
+  128 arena games in EXP-001..006 are unique — Phase 4 statistics unaffected.
+- **Also:** `--resume` support after a mid-run container restart (6 shards salvaged).
+- **Next recommended task — Phase 8 gate C (the first loop turn):** train value-model v2 on
+  teacher data (+ value_dataset_v1 as a controlled mixing variable; game-level held-out
+  split), then the fixed ladder vs ridge; success = beat ridge at equal budget / push the
+  saturation knee past 500. Note: GitHub MCP needs re-auth for PR-body updates (pushes work).
+
+## Session 2026-07-14 (session 13 — Phase 7 pipeline built; teacher dataset generating)
+
+- **Current phase:** Phase 7 (teacher self-play data pipeline) — recorder + validator built
+  and smoke-verified; `data/teacher_dataset_v1` generation launched (18 games @ D-008
+  budget 500, seed 20260715, 400-min deadline; ~76 decisions/game).
+- **Work completed:** `training/experiments/teacher_selfplay.py` — full master-plan §14
+  records per decision (`teacher_record_v1`: board_state_v1 state, legal actions, root
+  visit counts + Q per child, normalized policy target, selected action, root value,
+  final score/rank vectors, search config, value-model sha, seeds, seat map), JSONL shards
+  + live manifest, immutability guard, and an engine-level `--validate` mode (state
+  round-trip, legal-set regeneration, action legality, policy alignment, rank/score
+  consistency, manifest counts) — validation is REQUIRED before training consumes the
+  dataset. MCTSAgent capture hook extended with `_last_root_move_stats` (visits + Q).
+- **Tests:** capture-affected suites 26/26 green; smoke game validated end-to-end.
+- **Next recommended task:** on generation completion — run the validator, commit the
+  dataset + hashes to DATA_LINEAGE, then Phase 8 gate C: retrain the value model on
+  teacher data (game-level held-out split; consider mixing with value_dataset_v1 as a
+  controlled variable) and run the fixed ladder vs ridge. See `HANDOFF.md`.
+
 ## Session 2026-07-14 (session 12 — EXP-006a/b) — **PHASE 4 GATE: PASS**
 
 - **Current phase:** **Phase 4 PASSED** for the PW + ridge-model-leaf configuration
