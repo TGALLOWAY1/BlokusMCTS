@@ -24,6 +24,37 @@ Artifacts:
 
 ---
 
+## EXP-010 — Phase 6 build, gate 1–2: teacher-distilled move scorer vs heuristic/legacy baselines
+
+- **Experiment ID:** EXP-010
+- **Date:** 2026-07-16 (launched)
+- **Commit:** post-#206 main (branch restarted at `6a8b9f4`); harness
+  `training/experiments/move_scorer.py` (this PR)
+- **Hypothesis:** a listwise log-linear move scorer distilled from TEACHER root visit
+  distributions, over an extended move-varying feature set (`move_features_v2`),
+  orders candidate moves on held-out strong-teacher decisions decisively better than
+  (a) the fixed 4-feature heuristic and (b) the legacy self-distilled policy artifact.
+- **Independent variables:** feature set (mf4 = the four `MOVE_FEATURE_NAMES` vs
+  mf_v2 = those + 6 move-varying extensions) trained identically; baselines evaluated
+  untrained on the same decisions.
+- **Data:** decisions from `teacher_dataset_v1` (500-iter teachers) +
+  `value_dataset_v2` (PW-50 rollout teachers), children = recorded `search` entries,
+  target = `policy_target`. Game-level split, seed 20260716: 25% of teacher_dataset_v1
+  games held out (primary eval, strong distribution); 25% of value_dataset_v2 games
+  held out (secondary).
+- **Gate order (master plan Phase 6):** (1) tiny-data overfit sanity — trained on 200
+  decisions, must clearly beat the fixed heuristic ON those decisions (pipeline/optim
+  sanity); (2) held-out generalization vs the bars below. No production wiring, no
+  arena spend before both pass.
+- **Pre-registered decision rule (primary = held-out teacher decisions):**
+  mf_v2 must beat BOTH baselines on top-1 agreement AND within-decision pairwise
+  ordering (outside binomial noise), and beat trained mf4 (feature-set control).
+  mf_v2 ≤ baselines → listwise-linear-on-these-features is refuted; move to
+  shape-aware encodings / NN. mf_v2 > baselines but ≈ mf4 → wire mf4 (simpler),
+  extensions rejected.
+- **Reproduce:** `python -m training.experiments.move_scorer --split-seed 20260716`
+- **Result:** _pending_
+
 ## EXP-009 — Phase 6 path 1: rich_blokus_v2 at state-carrying volume vs the 0.68 bar
 
 - **Experiment ID:** EXP-009
