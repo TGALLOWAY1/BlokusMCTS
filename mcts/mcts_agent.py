@@ -631,16 +631,24 @@ class MCTSAgent:
         self.progressive_history_weight = float(progressive_history_weight)
         self.heuristic_move_ordering = bool(heuristic_move_ordering)
 
-        # Learned move policy (PUCT prior + rollout/ordering). Loads a MovePolicy
-        # from the serialised ``policy_weights`` dict; when enabled but no weights
-        # are supplied it falls back to the default policy, whose ranking is
-        # identical to the fixed move heuristic (so enabling it is behaviour-safe).
+        # Learned move policy (PUCT prior + rollout/ordering). The serialised
+        # ``policy_weights`` dict selects the implementation: an
+        # ``mlp_move_policy_v2`` artifact loads the shape-aware MLP policy
+        # (mcts/move_policy_mlp.py, EXP-011); anything else loads the legacy
+        # log-linear MovePolicy. When enabled but no weights are supplied it
+        # falls back to the default policy, whose ranking is identical to the
+        # fixed move heuristic (so enabling it is behaviour-safe).
         self.policy_prior_enabled = bool(policy_prior_enabled)
         self.policy_prior_c = float(policy_prior_c)
         self.move_policy = None
         if policy_weights is not None:
             try:
-                self.move_policy = MovePolicy.from_dict(policy_weights)
+                from .move_policy_mlp import MLPMovePolicy, is_mlp_policy_dict
+
+                if is_mlp_policy_dict(policy_weights):
+                    self.move_policy = MLPMovePolicy.from_dict(policy_weights)
+                else:
+                    self.move_policy = MovePolicy.from_dict(policy_weights)
             except (ValueError, TypeError, KeyError):
                 self.move_policy = None
         if self.policy_prior_enabled and self.move_policy is None:

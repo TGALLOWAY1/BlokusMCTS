@@ -412,6 +412,21 @@ class _ChooseMoveAdapter(_ArenaAgentAdapter):
         return bool(getattr(underlying, "opponent_modeling_enabled", False))
 
 
+def _load_policy_weights_file(path: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Load a policy-weights artifact JSON (or None). Raises on a bad path —
+    a config naming a missing artifact must fail loudly, not silently fall
+    back to the default heuristic policy."""
+    if not path:
+        return None
+    with open(path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    # policy_learning artifacts wrap the weights in a "policy" block; MLP
+    # artifacts are flat.
+    if isinstance(data, dict) and "policy" in data and "model_type" not in data:
+        return data["policy"]
+    return data
+
+
 def build_agent(config: AgentConfig, seed: int) -> _ArenaAgentAdapter:
     """Instantiate an agent adapter from configuration."""
     agent_type = config.type.lower()
@@ -481,10 +496,17 @@ def build_agent(config: AgentConfig, seed: int) -> _ArenaAgentAdapter:
             progressive_history_enabled=bool(params.get("progressive_history_enabled", False)),
             progressive_history_weight=float(params.get("progressive_history_weight", 1.0)),
             heuristic_move_ordering=bool(params.get("heuristic_move_ordering", False)),
-            # Learned move policy (PUCT prior + rollout/ordering)
+            # Learned move policy (PUCT prior + rollout/ordering). Inline
+            # ``policy_weights`` wins; otherwise ``policy_weights_path`` loads
+            # an artifact JSON from disk (mirrors value_model_path — MLP
+            # artifacts are ~1 MB and don't belong inline in agent configs).
             policy_prior_enabled=bool(params.get("policy_prior_enabled", False)),
             policy_prior_c=float(params.get("policy_prior_c", 1.5)),
-            policy_weights=params.get("policy_weights"),
+            policy_weights=(
+                params.get("policy_weights")
+                if params.get("policy_weights") is not None
+                else _load_policy_weights_file(params.get("policy_weights_path"))
+            ),
             # Layer 4: Simulation Strategy
             rollout_policy=str(params.get("rollout_policy", "heuristic")),
             two_ply_top_k=int(params["two_ply_top_k"]) if params.get("two_ply_top_k") is not None else None,

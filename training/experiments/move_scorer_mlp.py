@@ -37,22 +37,19 @@ import numpy as np
 
 from engine.board import Board, Player
 from engine.move_generator import Move, get_shared_generator
-from mcts.move_heuristic import _get_piece_positions
+from mcts.move_encoding import (
+    INPUT_DIM,
+    MOVE_ENCODING_VERSION,
+    N_SCALARS,
+    EncodingContext,
+    encode_move,
+)
 from mcts.move_policy import DEFAULT_FEATURE_WEIGHTS
 from training.experiments.move_scorer import (
-    MOVE_FEATURES_V2,
-    compute_move_features_v2,
     evaluate_ordering,
     legacy_policy_logit_fn,
 )
 from training.experiments.teacher_selfplay import iter_dataset_records
-
-MOVE_ENCODING_VERSION = "move_encoding_v1"
-PATCH = 9  # odd; centered on the placement centroid
-N_CHANNELS = 6
-N_PIECES = 21
-N_SCALARS = len(MOVE_FEATURES_V2) + 1  # + phase
-INPUT_DIM = N_CHANNELS * PATCH * PATCH + N_PIECES + N_SCALARS
 
 
 @dataclass
@@ -72,52 +69,6 @@ class EncodedDecision:
         return self.features_v2
 
 
-def encode_move(board: Board, player: Player, move: Move, generator,
-                grid_own: np.ndarray, grid_opp: np.ndarray,
-                own_frontier: np.ndarray, opp_frontier: np.ndarray,
-                ) -> np.ndarray:
-    """move_encoding_v1 input vector for one candidate move."""
-    positions = _get_piece_positions(move, generator)
-    size = board.SIZE
-    rows = [p.row for p in positions]
-    cols = [p.col for p in positions]
-    cr = int(round(sum(rows) / len(rows)))
-    cc = int(round(sum(cols) / len(cols)))
-    half = PATCH // 2
-
-    patch = np.zeros((N_CHANNELS, PATCH, PATCH), dtype=np.float32)
-    r0, c0 = cr - half, cc - half
-    for pr in range(PATCH):
-        br = r0 + pr
-        if br < 0 or br >= size:
-            patch[2, pr, :] = 1.0  # off-board row
-            continue
-        for pc in range(PATCH):
-            bc = c0 + pc
-            if bc < 0 or bc >= size:
-                patch[2, pr, pc] = 1.0
-                continue
-            patch[0, pr, pc] = grid_own[br, bc]
-            patch[1, pr, pc] = grid_opp[br, bc]
-            patch[4, pr, pc] = own_frontier[br, bc]
-            patch[5, pr, pc] = opp_frontier[br, bc]
-    for p in positions:
-        pr, pc = p.row - r0, p.col - c0
-        if 0 <= pr < PATCH and 0 <= pc < PATCH:
-            patch[3, pr, pc] = 1.0
-
-    piece_onehot = np.zeros(N_PIECES, dtype=np.float32)
-    if 1 <= move.piece_id <= N_PIECES:
-        piece_onehot[move.piece_id - 1] = 1.0
-
-    scalars = compute_move_features_v2(board, player, move, generator)
-    phase = min(board.move_count / 60.0, 1.0)
-    return np.concatenate([
-        patch.ravel(), piece_onehot,
-        np.asarray(list(scalars) + [phase], dtype=np.float32),
-    ]).astype(np.float32)
-
-
 def extract_encoded(dataset_dir: Path) -> List[EncodedDecision]:
     generator = get_shared_generator()
     out: List[EncodedDecision] = []
@@ -127,25 +78,9 @@ def extract_encoded(dataset_dir: Path) -> List[EncodedDecision]:
             continue
         board = Board.from_dict(record["state"])
         player = Player(record["player_id"])
-        size = board.SIZE
-        grid_own = (board.grid == player.value).astype(np.float32)
-        grid_opp = ((board.grid != 0) & (board.grid != player.value)).astype(np.float32)
-        own_frontier = np.zeros((size, size), dtype=np.float32)
-        for r, c in board.player_frontiers[player]:
-            own_frontier[r, c] = 1.0
-        opp_frontier = np.zeros((size, size), dtype=np.float32)
-        for opp in Player:
-            if opp is player:
-                continue
-            for r, c in board.player_frontiers[opp]:
-                opp_frontier[r, c] = 1.0
-
+        context = EncodingContext(board, player)
         moves = [Move.from_dict(e["action"]) for e in search]
-        inputs = np.stack([
-            encode_move(board, player, m, generator, grid_own, grid_opp,
-                        own_frontier, opp_frontier)
-            for m in moves
-        ])
+        inputs = np.stack([encode_move(context, m, generator) for m in moves])
         feats_v2 = inputs[:, -N_SCALARS:-1]  # the move_features_v2 scalar block
         out.append(EncodedDecision(
             game_id=record["game_id"],
@@ -227,12 +162,15 @@ class MLPScorer:
                       flush=True)
 
     def export(self) -> Dict:
+        """Serialize as an mlp_move_policy_v2 artifact (mcts/move_policy_mlp.py)."""
         return {
+            "model_type": "mlp_move_policy_v2",
             "encoding_version": MOVE_ENCODING_VERSION,
-            "input_dim": self.W1.shape[0],
-            "hidden": self.W1.shape[1],
+            "input_dim": int(self.W1.shape[0]),
+            "hidden": int(self.W1.shape[1]),
             "W1": self.W1.tolist(), "b1": self.b1.tolist(),
             "W2": self.W2.ravel().tolist(), "b2": float(self.b2[0]),
+            "temperature": 1.0,
         }
 
 
@@ -255,6 +193,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--batch", type=int, default=32)
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--overfit-n", type=int, default=200)
+    parser.add_argument("--train-on", choices=("mixed", "teacher_only"),
+                        default="mixed",
+                        help="training mix for the full model (EXP-011: "
+                             "teacher_only decisively beats mixed)")
+    parser.add_argument("--final-artifact", default=None, metavar="PATH",
+                        help="also train on ALL --train-on decisions (incl. the "
+                             "held-out games; held-out numbers above remain the "
+                             "honest estimate) and write an mlp_move_policy_v2 "
+                             "artifact JSON to PATH")
     args = parser.parse_args(argv)
 
     out_dir = Path(args.out)
@@ -277,8 +224,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     teacher_train, teacher_test = split(teacher)
     bulk_train, bulk_test = split(bulk)
-    train = teacher_train + bulk_train
-    print(f"train: {len(train)}; held-out teacher: {len(teacher_test)}; "
+    train = (teacher_train if args.train_on == "teacher_only"
+             else teacher_train + bulk_train)
+    print(f"train ({args.train_on}): {len(train)}; "
+          f"held-out teacher: {len(teacher_test)}; "
           f"held-out bulk: {len(bulk_test)}\n")
 
     # Gate 1 — STRICT overfit: must nearly memorize 200 training decisions
@@ -335,6 +284,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "encoding_version": MOVE_ENCODING_VERSION,
         "input_dim": INPUT_DIM,
         "hidden": args.hidden,
+        "train_on": args.train_on,
         "hyperparams": {"epochs": args.epochs, "overfit_epochs": args.overfit_epochs,
                         "lr": args.lr, "l2": args.l2, "batch": args.batch,
                         "seed": args.seed},
@@ -346,6 +296,29 @@ def main(argv: Optional[List[str]] = None) -> int:
     (out_dir / "report.json").write_text(json.dumps(report, indent=2))
     (out_dir / "mlp_weights.json").write_text(json.dumps(model.export()))
     print(f"report -> {out_dir / 'report.json'}")
+
+    if args.final_artifact:
+        # Production artifact: same config, trained on ALL --train-on decisions
+        # (including the held-out games; the split numbers above remain the
+        # honest generalization estimate).
+        final_data = teacher if args.train_on == "teacher_only" else teacher + bulk
+        print(f"training final artifact on {len(final_data)} decisions...",
+              flush=True)
+        final = MLPScorer(INPUT_DIM, args.hidden, args.seed)
+        final.train(final_data, epochs=args.epochs, lr=args.lr, l2=args.l2,
+                    batch=args.batch, seed=args.seed)
+        artifact = final.export()
+        artifact["training"] = {
+            "train_on": args.train_on, "n_decisions": len(final_data),
+            "datasets": {"teacher": str(args.teacher),
+                         "bulk": (str(args.bulk)
+                                  if args.train_on == "mixed" else None)},
+            "hyperparams": report["hyperparams"],
+            "heldout_reference": results["teacher_heldout"].get("mlp"),
+        }
+        Path(args.final_artifact).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.final_artifact).write_text(json.dumps(artifact))
+        print(f"final artifact -> {args.final_artifact}")
     return 0
 
 

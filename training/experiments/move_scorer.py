@@ -41,67 +41,19 @@ from mcts.move_heuristic import (
 from mcts.move_policy import DEFAULT_FEATURE_WEIGHTS
 from training.experiments.teacher_selfplay import iter_dataset_records
 
-MOVE_FEATURES_V2_EXTENSIONS = (
-    "own_frontier_consumed",   # my corner-anchor cells this move occupies
-    "opp_frontier_occupied",   # opponents' corner-anchor cells this move occupies
-    "opp_contact",             # orthogonal adjacency to opponent cells (walling)
-    "own_diag_links",          # diagonal links to my own pieces beyond the required 1
-    "phase_x_size",            # game-phase x piece-size interaction
-    "edge_fraction",           # fraction of cells on the outer border
+# Canonical definitions live in mcts/move_encoding.py (production home since
+# the move_policy_v2 wiring); re-exported here for the experiment interface.
+from mcts.move_encoding import (  # noqa: E402  (import after module docstring)
+    MOVE_FEATURES_V2_EXTENSIONS,
+    compute_move_features_v2,
 )
+
 MOVE_FEATURES_V2 = tuple(MOVE_FEATURE_NAMES) + MOVE_FEATURES_V2_EXTENSIONS
 
 FEATURE_SETS: Dict[str, Tuple[str, ...]] = {
     "mf4": tuple(MOVE_FEATURE_NAMES),
     "mf_v2": MOVE_FEATURES_V2,
 }
-
-
-def compute_move_features_v2(board: Board, player: Player, move: Move,
-                             generator) -> np.ndarray:
-    """mf4 features followed by the six D-017 move-varying extensions."""
-    base = compute_move_features(board, player, move, generator)
-    positions = _get_piece_positions(move, generator)
-    cells = {(p.row, p.col) for p in positions}
-    size = board.SIZE
-
-    own_frontier = board.player_frontiers[player]
-    own_frontier_consumed = sum(1 for c in cells if c in own_frontier)
-    opp_frontier_occupied = 0
-    for opp in Player:
-        if opp is player:
-            continue
-        frontier = board.player_frontiers[opp]
-        opp_frontier_occupied += sum(1 for c in cells if c in frontier)
-
-    opp_contact = 0
-    own_diag = 0
-    for r, c in cells:
-        for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < size and 0 <= nc < size:
-                v = board.grid[nr, nc]
-                if v != 0 and v != player.value:
-                    opp_contact += 1
-        for dr, dc in ((-1, -1), (-1, 1), (1, -1), (1, 1)):
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < size and 0 <= nc < size and (nr, nc) not in cells:
-                if board.grid[nr, nc] == player.value:
-                    own_diag += 1
-
-    phase = min(board.move_count / 60.0, 1.0)
-    edge_cells = sum(1 for r, c in cells
-                     if r == 0 or c == 0 or r == size - 1 or c == size - 1)
-
-    ext = (
-        min(own_frontier_consumed / 4.0, 1.0),
-        min(opp_frontier_occupied / 4.0, 1.0),
-        min(opp_contact / 8.0, 1.0),
-        min(max(own_diag - 1, 0) / 4.0, 1.0),
-        phase * base[0],
-        edge_cells / len(cells),
-    )
-    return np.array(tuple(base) + ext, dtype=float)
 
 
 # ---------------------------------------------------------------------------

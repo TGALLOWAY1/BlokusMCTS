@@ -24,6 +24,32 @@ Artifacts:
 
 ---
 
+## EXP-012 — Phase 6 search integration: MLP policy prior in the D-016 agent
+
+- **Experiment ID:** EXP-012
+- **Date:** 2026-07-16 (launched)
+- **Commit:** PR #207 head (production wiring: `mcts/move_encoding.py`,
+  `mcts/move_policy_mlp.py`, agent artifact dispatch, arena `policy_weights_path`)
+- **Hypothesis:** the EXP-011 teacher-distilled MLP move policy, used as PUCT prior +
+  move ordering (`policy_prior_enabled`, c=1.5) in the D-016 agent at the D-008 budget
+  (500 iterations), beats the identical agent without the prior at the same table.
+- **Setup:** 2×2 same-table (prior_500_a/b vs base_500_a/b), single variable = the
+  prior; both sides D-016 exactly (minimal search + PW 2.0/0.5 + v1 ridge leaves,
+  500 iterations pinned, num_workers 1). round_robin seats, seeds 20260718+20260719,
+  10 games/seed = 20 games, protocol rescue_v2 via `search_scaling --agents-json`.
+  Artifact: `training/artifacts/move_scorer/v2_mlp/move_policy_v2.json` (teacher-only,
+  1,288 decisions, held-out reference 0.228/0.744 — gate-2 PASS config).
+- **Pre-registered decision rule:** paired sign-flip permutation on per-game rank
+  (prior-pair vs base-pair) + first-place split. Decisively positive → the scorer is
+  validated in search; queue gate-C style adoption experiments + more teacher data.
+  Null → the prior's ordering quality is insufficient at c=1.5; the next single
+  variable is prior strength (c), NOT retraining. Negative → prior misleads search;
+  investigate before any further policy work. No champion change either way.
+- **Reproduce:** `python -m training.experiments.search_scaling
+  --agents-json training/experiments/exp012_agents.json --games-per-seed 10
+  --seeds 20260718,20260719 --deadline-minutes 420 --label exp012_mlp_prior`
+- **Result:** _pending_
+
 ## EXP-011 — Phase 6 build, step 2: shape-aware MLP move scorer (capacity remediation)
 
 - **Experiment ID:** EXP-011
