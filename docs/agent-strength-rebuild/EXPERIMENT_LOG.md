@@ -45,8 +45,28 @@ Artifacts:
 - **Controlled variables:** one mixed table [vm2_500, vm1_500, heuristic, random];
   round_robin; seeds 20260620/20260621; 10 games/seed; standard scoring; stat seed 20260712.
 - **Game count:** 20 (deadline 280 min). **Hardware:** session container.
-- **Result:** _recorded on completion below._
-- **Uncertainty:** paired sign-flip permutation on vm2−vm1 per-game score diffs (primary).
+- **Result:** 20/20 games in 162 min.
+  | agent | 1st% | avg rank | TS μ (σ) |
+  |---|---|---|---|
+  | vm2_500 | **57.5%** | **1.35** | 42.32 (7.82) |
+  | vm1_500 | 42.5% | 1.50 | 42.88 (7.85) |
+  | heuristic | 0.0% | 2.70 | 20.58 (7.52) |
+  | random | 0.0% | 3.70 | −4.56 (7.62) |
+  Primary test: vm2 − vm1 = **+2.25 pts, p=0.596**. Both crush the anchors (p < 0.0001).
+- **Uncertainty:** 20 paired games; the first-place/rank direction favors vm2 consistently,
+  but the score-diff test is far from significance.
+- **Interpretation:** **the loop turns, but the per-generation gain is small.** Training half
+  demonstrated the mechanism decisively (v1 miscalibrated on teacher play, v2 fixes it);
+  arena half shows no regression and a positive trend — yet ordering quality (what argmax
+  move choice actually uses) barely moved (pairwise 0.658 → 0.678), consistent with the
+  EXP-004 finding that the 45-feature representation caps at ~0.68. One generation of
+  18 teacher games cannot push past a feature ceiling.
+- **Decision:** **Gate C: PARTIAL — MORE EVIDENCE REQUIRED.** Per §20 (no default escapes:
+  not "more games", not "more data" first), the isolated bottleneck is the REPRESENTATION —
+  the next distinguishing work is the Phase 6 upgrade (richer feature set or move-level
+  candidate scoring), after which gate C re-runs with a real ordering-quality delta to
+  detect. v2_mixed is retained as the current best evaluator artifact (no regression,
+  better calibrated); NOT promoted anywhere.
 - **Artifacts:** `training/reports/experiments/search_scaling/exp007_vm2_vs_vm1/`,
   `training/artifacts/value_models/v2/`.
 

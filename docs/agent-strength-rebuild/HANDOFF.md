@@ -29,6 +29,19 @@ is PARITY (EXP-006a) — the config is adopted for scaling + trainability (D-016
 champion is untouched. Phase 5 is closed by the same evidence (model leaves selected;
 rollouts deprecated as the strength path). **Phases 7–8 are unblocked.**
 
+**UPDATE (2026-07-16, session 15):** Phase 7 is COMPLETE (teacher_dataset_v1 validated) and
+gate C has run its first turn: training half PASS (v2_mixed fixes v1's severe
+miscalibration on teacher play), arena half **PARTIAL** (vm2 57.5% vs vm1 42.5%
+first-place, paired +2.25 p=0.60, n=20 — EXP-007). Bottleneck isolated: the
+`rich_blokus_v1` ~0.68 pairwise ordering ceiling. **Exact next action: Phase 6
+representation upgrade** — (a) extend the append-only versioned rich feature set
+(opponent-interaction / territory-potential / endgame-parity candidates) and/or (b) the
+move-level candidate-scoring evaluator (master plan §13). Acceptance BEFORE arena spend:
+held-out pairwise ordering decisively above 0.68 (train/eval via
+`training/experiments/value_model_v2.py` machinery); then re-run gate C
+(`exp007_agents.json` pattern) on the fixed protocol. Everything below is the historical
+Phase 7 handoff (done).
+
 **Exact next action — Phase 7: teacher self-play data pipeline (then Phase 8 gate C):**
 1. Extend the self-play recorder to the full Phase 7 record schema (master plan §14 /
    DATA_LINEAGE forward-looking section): per decision — full state (`board_state_v1`
