@@ -42,6 +42,20 @@ held-out pairwise ordering decisively above 0.68 (train/eval via
 (`exp007_agents.json` pattern) on the fixed protocol. Everything below is the historical
 Phase 7 handoff (done).
 
+**UPDATE (2026-07-16, session 17):** Phase 6 path 1 COMPLETE and **NEGATIVE** —
+`data/value_dataset_v2` (7 208 records / 100 games, validated, hashed) was generated and
+EXP-009 run: at 6.5× state-carrying volume the `rich_blokus_v2` block adds +0.004
+pairwise (0.655 vs 0.651); best remains mixed_45 at 0.678 → the 0.68 bar is NOT met and
+the state-feature representation ceiling is confirmed. The bulk corpus also
+*underperforms* value_dataset_v1 as training data (τ-sampled openings → noisier labels).
+**Exact next action (pre-registered in EXP-009): the move-level candidate-scoring
+evaluator** (master plan §13) — learn f(state, candidate move) → value on teacher data
+(records already carry per-child visit counts + Q for every legal action), evaluate as a
+held-out ordering problem against the 0.68 bar, and only then spend arena compute on
+gate C. Tooling notes: recorder takes `--iterations`/`--value-model` (`""` → rollout
+leaves; `--resume` rejects config mismatches); `value_model_v2.py` takes `--bulk` dirs +
+`--frame-cache`.
+
 **Exact next action — Phase 7: teacher self-play data pipeline (then Phase 8 gate C):**
 1. Extend the self-play recorder to the full Phase 7 record schema (master plan §14 /
    DATA_LINEAGE forward-looking section): per decision — full state (`board_state_v1`

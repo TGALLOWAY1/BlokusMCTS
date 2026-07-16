@@ -17,8 +17,11 @@ training example per decision (master plan §14):
     final_scores / final_ranks (per player.value, backfilled at game end)
     search_config, value_model {path, sha256}, game_seed, agent_seed
 
-Output is a manifested, immutable dataset directory (JSONL shards per game +
-manifest.json), mirroring data/value_dataset_v1 conventions. `--validate DIR`
+Output is a manifested, immutable dataset directory: per-game JSONL shards
+during generation (so --resume restarts at game granularity), packed into a
+single records.jsonl.gz at finalization (shards deleted; decompressed bytes ==
+the in-order shard concatenation, so content hashes are stable across the two
+layouts). `--validate DIR`
 re-checks every record against the engine (state round-trip, legal-move
 regeneration, selected-action legality, policy-target alignment,
 rank/score consistency, manifest counts) and must pass before any training
@@ -32,6 +35,7 @@ consumes the dataset.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import subprocess
@@ -80,22 +84,90 @@ def _sha256(path: str) -> str:
     return h.hexdigest()
 
 
-def _build_teacher(seed: int) -> MCTSAgent:
-    agent = MCTSAgent(seed=seed, value_model_path=VALUE_MODEL_PATH,
-                      **TEACHER_SEARCH_CONFIG)
+# ---------------------------------------------------------------------------
+# Packed-dataset format
+#
+# During generation each game is written as its own shard (game_NNNN.jsonl) so
+# --resume can restart at game granularity. Finalization packs the shards, in
+# order, into a single records.jsonl.gz and deletes them: one small file in
+# git instead of one per game, with the CONTENT (decompressed bytes) hash
+# identical to the shards-concat hash recorded in DATA_LINEAGE.md.
+# ---------------------------------------------------------------------------
+
+PACKED_NAME = "records.jsonl.gz"
+
+
+def iter_dataset_records(dataset_dir: Path):
+    """Yield (where, record) for every record, packed or shard layout."""
+    packed = dataset_dir / PACKED_NAME
+    if packed.exists():
+        with gzip.open(packed, "rt", encoding="utf-8") as fh:
+            for line_no, line in enumerate(fh):
+                if line.strip():
+                    yield f"{PACKED_NAME}:{line_no}", json.loads(line)
+        return
+    for shard in sorted(dataset_dir.glob("game_*.jsonl")):
+        for line_no, line in enumerate(shard.read_text().splitlines()):
+            yield f"{shard.name}:{line_no}", json.loads(line)
+
+
+def pack_dataset(out_dir: Path) -> Dict[str, str]:
+    """Pack game shards into records.jsonl.gz; verify; delete the shards.
+
+    Returns {"file", "sha256", "content_sha256"} for the manifest. The gzip
+    header is written with mtime=0 so packing is byte-reproducible.
+    """
+    shards = sorted(out_dir.glob("game_*.jsonl"))
+    if not shards:
+        raise SystemExit(f"{out_dir}: no shards to pack")
+    packed = out_dir / PACKED_NAME
+    if packed.exists():
+        raise SystemExit(f"{packed} already exists — refusing to repack")
+    content_hash = hashlib.sha256()
+    with open(packed, "wb") as raw:
+        with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
+            for shard in shards:
+                data = shard.read_bytes()
+                gz.write(data)
+                content_hash.update(data)
+    # Round-trip check before deleting anything.
+    verify = hashlib.sha256()
+    with gzip.open(packed, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            verify.update(chunk)
+    if verify.hexdigest() != content_hash.hexdigest():
+        packed.unlink()
+        raise SystemExit("pack verification failed — shards left untouched")
+    for shard in shards:
+        shard.unlink()
+    return {"file": PACKED_NAME, "sha256": _sha256(str(packed)),
+            "content_sha256": content_hash.hexdigest()}
+
+
+def _build_teacher(seed: int, search_config: Optional[Dict[str, Any]] = None,
+                   value_model_path: Optional[str] = VALUE_MODEL_PATH) -> MCTSAgent:
+    agent = MCTSAgent(seed=seed, value_model_path=value_model_path,
+                      **(search_config or TEACHER_SEARCH_CONFIG))
     agent._capture_root_moves = True
     agent.num_workers = 1
     return agent
 
 
 def play_teacher_game(game_seed: int, game_id: str,
-                      value_model_sha: str) -> List[Dict[str, Any]]:
+                      value_model_sha: str,
+                      search_config: Optional[Dict[str, Any]] = None,
+                      value_model_path: Optional[str] = VALUE_MODEL_PATH,
+                      ) -> List[Dict[str, Any]]:
     """Play one 4-teacher game; return the per-decision records (finals filled)."""
     import random as _random
 
     generator = get_shared_generator()
     game = BlokusGame(scoring_mode=SCORING_MODE_STANDARD, enable_telemetry=False)
-    agents = {p: _build_teacher(seed=game_seed * 31 + p.value) for p in Player}
+    cfg = search_config or TEACHER_SEARCH_CONFIG
+    agents = {p: _build_teacher(seed=game_seed * 31 + p.value,
+                                search_config=cfg,
+                                value_model_path=value_model_path)
+              for p in Player}
     seat_map = {str(p.value): f"teacher_{p.value}" for p in Player}
     sample_rng = _random.Random(game_seed)
 
@@ -162,8 +234,9 @@ def play_teacher_game(game_seed: int, game_id: str,
             "selected_action": move.to_dict(),
             "move_selection": move_selection,
             "root_value": float(root_value),
-            "search_config": TEACHER_SEARCH_CONFIG,
-            "value_model": {"path": VALUE_MODEL_PATH, "sha256": value_model_sha},
+            "search_config": cfg,
+            "value_model": ({"path": value_model_path, "sha256": value_model_sha}
+                            if value_model_path else None),
             "game_seed": int(game_seed),
             "agent_seed": int(game_seed * 31 + player.value),
             "final_scores": None,   # backfilled below
@@ -198,6 +271,11 @@ def play_teacher_game(game_seed: int, game_id: str,
 def generate(args: argparse.Namespace) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
+    if (out_dir / PACKED_NAME).exists():
+        raise SystemExit(
+            f"{out_dir} holds a finalized packed dataset — datasets are "
+            "immutable. Use a new --out directory."
+        )
     existing = sorted(out_dir.glob("game_*.jsonl"))
     if existing and not args.resume:
         raise SystemExit(
@@ -205,6 +283,11 @@ def generate(args: argparse.Namespace) -> int:
             "Use a new --out directory, or --resume to continue an interrupted "
             "generation (same seed scheme; completed shards untouched)."
         )
+    search_config = dict(TEACHER_SEARCH_CONFIG, iterations=args.iterations)
+    value_model_path = args.value_model if args.value_model else None
+    value_model_sha = _sha256(value_model_path) if value_model_path else None
+    value_model_entry = ({"path": value_model_path, "sha256": value_model_sha}
+                         if value_model_path else None)
     if args.resume and existing:
         manifest_on_disk = json.loads((out_dir / "manifest.json").read_text())
         if manifest_on_disk.get("status") == "finalized":
@@ -214,12 +297,26 @@ def generate(args: argparse.Namespace) -> int:
                 f"--resume seed mismatch: manifest has {manifest_on_disk.get('seed')}, "
                 f"got {args.seed}."
             )
+        # Existing shards were generated under the saved config; resuming with a
+        # different one would silently mix configurations behind a manifest that
+        # asserts a single provenance. Refuse mismatches.
+        if manifest_on_disk.get("teacher_search_config") != search_config:
+            raise SystemExit(
+                "--resume search-config mismatch: manifest has "
+                f"{manifest_on_disk.get('teacher_search_config')}, current args give "
+                f"{search_config}. Re-run with the original --iterations."
+            )
+        if manifest_on_disk.get("value_model") != value_model_entry:
+            raise SystemExit(
+                "--resume value-model mismatch: manifest has "
+                f"{manifest_on_disk.get('value_model')}, current args give "
+                f"{value_model_entry}. Re-run with the original --value-model."
+            )
     try:
         commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
                                 text=True, check=True).stdout.strip()
     except Exception:
         commit = "unknown"
-    value_model_sha = _sha256(VALUE_MODEL_PATH)
 
     manifest = {
         "dataset_schema_version": "teacher_dataset_v1",
@@ -227,8 +324,8 @@ def generate(args: argparse.Namespace) -> int:
         "purpose": "Phase 7 teacher self-play (gate C training corpus)",
         "generating_commit": commit,
         "scoring_mode": "standard",
-        "teacher_search_config": TEACHER_SEARCH_CONFIG,
-        "value_model": {"path": VALUE_MODEL_PATH, "sha256": value_model_sha},
+        "teacher_search_config": search_config,
+        "value_model": value_model_entry,
         "seed": args.seed,
         "num_games_requested": args.games,
         "status": "generating",
@@ -254,7 +351,9 @@ def generate(args: argparse.Namespace) -> int:
         game_seed = args.seed + g
         game_id = f"tds1_s{args.seed}_g{g:04d}"
         t_game = time.monotonic()
-        records = play_teacher_game(game_seed, game_id, value_model_sha)
+        records = play_teacher_game(
+            game_seed, game_id, value_model_sha,
+            search_config=search_config, value_model_path=value_model_path)
         shard = out_dir / f"game_{g:04d}.jsonl"
         with shard.open("w", encoding="utf-8") as handle:
             for record in records:
@@ -269,12 +368,14 @@ def generate(args: argparse.Namespace) -> int:
                         records_written=total_records)
         (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
+    packed_info = pack_dataset(out_dir)
     manifest.update(status="finalized", games_completed=completed,
                     records_written=total_records,
+                    packed=packed_info,
                     elapsed_sec=round(time.monotonic() - t0, 1))
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     print(f"\n{total_records} records / {completed} games "
-          f"in {(time.monotonic() - t0) / 60:.1f} min -> {out_dir}")
+          f"in {(time.monotonic() - t0) / 60:.1f} min -> {out_dir / PACKED_NAME}")
     return 0
 
 
@@ -285,20 +386,16 @@ def generate(args: argparse.Namespace) -> int:
 def validate(dataset_dir: Path) -> int:
     generator = get_shared_generator()
     manifest = json.loads((dataset_dir / "manifest.json").read_text())
-    shards = sorted(dataset_dir.glob("game_*.jsonl"))
     errors: List[str] = []
     records_seen = 0
-    games_seen = 0
+    game_ids = set()
 
     def move_key(d: Dict[str, Any]):
         return (d["piece_id"], d["orientation"], d["anchor_row"], d["anchor_col"])
 
-    for shard in shards:
-        games_seen += 1
-        for line_no, line in enumerate(shard.read_text().splitlines()):
-            record = json.loads(line)
+    for where, record in iter_dataset_records(dataset_dir):
             records_seen += 1
-            where = f"{shard.name}:{line_no}"
+            game_ids.add(record["game_id"])
             board = Board.from_dict(record["state"])
             regenerated = {move_key(m.to_dict())
                            for m in generator.get_legal_moves(
@@ -333,12 +430,13 @@ def validate(dataset_dir: Path) -> int:
                     expected[key] = rank
                 if expected != {k: int(v) for k, v in ranks.items()}:
                     errors.append(f"{where}: ranks {ranks} != expected {expected}")
-        if errors and len(errors) > 20:
-            break
+            if len(errors) > 20:
+                break
 
+    games_seen = len(game_ids)
     if manifest.get("games_completed") != games_seen:
         errors.append(f"manifest games_completed={manifest.get('games_completed')} "
-                      f"!= shards found {games_seen}")
+                      f"!= games found {games_seen}")
     if manifest.get("records_written") != records_seen:
         errors.append(f"manifest records_written={manifest.get('records_written')} "
                       f"!= records found {records_seen}")
@@ -363,6 +461,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--deadline-minutes", type=float, default=400.0)
     parser.add_argument("--min-games", type=int, default=4)
     parser.add_argument("--out", default="data/teacher_dataset_v1")
+    parser.add_argument("--iterations", type=int, default=TEACHER_ITERATIONS,
+                        help="search budget per move (default: D-008 teacher 500; "
+                             "bulk corpora use 50)")
+    parser.add_argument("--value-model", default=VALUE_MODEL_PATH,
+                        help="leaf value-model artifact; pass '' for rollout leaves")
     parser.add_argument("--resume", action="store_true",
                         help="continue an interrupted (non-finalized) generation: "
                              "skip existing shards, same seed scheme")

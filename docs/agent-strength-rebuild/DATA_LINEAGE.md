@@ -57,7 +57,16 @@ state).
 | Dataset | sha256 | Status |
 |---|---|---|
 | `data/value_dataset_v1/trajectories.csv` (17 408 rows, 60 games, PW+rollout-50 self-play, standard scoring, `rich_blokus_v1` features, per-ply capture, seed 20260713) | `2ae265b3c65c39ee825dea27759f8e90670dc5e28c76f19fbb24c616d42fbd81` | **Verified & finalized** — immutable (generator refuses appends); manifest `4c3b1578…` records commit/agents/seeds/schema ids |
-| `data/teacher_dataset_v1/` (1 309 `teacher_record_v2` records, 18 games, 4× D-016 teachers @ D-008 budget 500, standard scoring, opening-phase visit sampling τ=1.0/24 decisions, seed 20260715; per-decision full state + visit counts + per-child Q + policy targets) | shards-concat `5902b65db019edfd6edb306bb2ea8aa6a584d4190021e309ffb994120f73d0eb`; manifest `99f699ef…` | **Verified & finalized** — engine-level validator PASSED (state round-trip, legal-set regeneration, action legality, policy alignment, rank consistency); 18/18 unique games; winners across all four seats |
+| `data/teacher_dataset_v1/records.jsonl.gz` (1 309 `teacher_record_v2` records, 18 games, 4× D-016 teachers @ D-008 budget 500, standard scoring, opening-phase visit sampling τ=1.0/24 decisions, seed 20260715; per-decision full state + visit counts + per-child Q + policy targets) | file `e241f78700ed38709a9b914bafb2dc142c98aefaa425c866390f3c9f742b834a`; content (decompressed) `5902b65d…` — identical to the shards-concat hash originally registered | **Verified & finalized** — engine-level validator PASSED (pre- and post-pack); 18/18 unique games; winners across all four seats. Packed 2026-07-16 (shards → one gzip; migration verified lossless by content-hash equality) |
+| `data/value_dataset_v2/records.jsonl.gz` (7 208 `teacher_record_v2` records, 100 games, 4× PW-50 **rollout-leaf** teachers (`value_model: null` — EXP-002 cheap config family, same as value_dataset_v1 but state-carrying), standard scoring, visit sampling τ=1.0/24 decisions, seed 20260716; per-decision full state + visit counts + per-child Q + policy targets) | file `1df289ba55fd739f4512ea683d16a35963a6940ed4315b1db5eae9cb280767f1`; content (decompressed) `e8ee17f6…` — identical to the shards-concat hash originally registered | **Verified & finalized** — engine-level validator PASSED (pre- and post-pack); 100/100 unique games; winners across all four seats (38/24/31/19). EXP-009 verdict: as training data it *underperforms* value_dataset_v1 (τ-sampled openings → noisier labels). Packed 2026-07-16 |
+
+**Packed-dataset format (2026-07-16 on):** teacher-record datasets are generated as
+per-game shards (for `--resume`) and packed at finalization into a single
+`records.jsonl.gz` (gzip mtime=0, byte-reproducible; shards deleted). The decompressed
+bytes equal the in-order shard concatenation, so content hashes are stable across
+layouts. Verify with `zcat records.jsonl.gz | sha256sum` against the content hash above.
+Programmatic access: `training.experiments.teacher_selfplay.iter_dataset_records`
+(handles both layouts) or `--validate DIR`.
 
 ### Not versioned
 

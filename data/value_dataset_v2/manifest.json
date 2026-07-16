@@ -2,10 +2,10 @@
   "dataset_schema_version": "teacher_dataset_v1",
   "record_schema_version": "teacher_record_v2",
   "purpose": "Phase 7 teacher self-play (gate C training corpus)",
-  "generating_commit": "709cff1f73f606e3c458e47a9027b874e1a82b96",
+  "generating_commit": "81a569f2d1374a100120ea75365433b298049b90",
   "scoring_mode": "standard",
   "teacher_search_config": {
-    "iterations": 500,
+    "iterations": 50,
     "rollout_policy": "greedy_sample",
     "greedy_sample_size": 12,
     "rollout_cutoff_depth": 12,
@@ -16,19 +16,16 @@
     "pw_c": 2.0,
     "pw_alpha": 0.5
   },
-  "value_model": {
-    "path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib",
-    "sha256": "cbbf19ce18f4ece5017ff6474afb2080e789ef7fae4da94919a465f465508d4f"
-  },
-  "seed": 20260715,
-  "num_games_requested": 18,
+  "value_model": null,
+  "seed": 20260716,
+  "num_games_requested": 100,
   "status": "finalized",
-  "games_completed": 18,
-  "records_written": 1309,
-  "elapsed_sec": 13492.9,
+  "games_completed": 100,
+  "records_written": 7208,
+  "elapsed_sec": 7622.5,
   "packed": {
     "file": "records.jsonl.gz",
-    "sha256": "e241f78700ed38709a9b914bafb2dc142c98aefaa425c866390f3c9f742b834a",
-    "content_sha256": "5902b65db019edfd6edb306bb2ea8aa6a584d4190021e309ffb994120f73d0eb"
+    "sha256": "1df289ba55fd739f4512ea683d16a35963a6940ed4315b1db5eae9cb280767f1",
+    "content_sha256": "e8ee17f675996ae837fb5114ef3ae239d8dc4bf954dc12198e6b1d46465ce349"
   }
 }

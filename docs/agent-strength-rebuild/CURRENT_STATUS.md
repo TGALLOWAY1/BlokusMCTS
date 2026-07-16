@@ -2,6 +2,53 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-16 (session 17 — Phase 6 path 1: value_dataset_v2 generation launched)
+
+- **Current phase:** Phase 6 (representation), executing ranked option 1 from session 16:
+  a state-carrying bulk corpus so the v2 feature block can be tested at the data volume
+  that drives `mixed_45`'s lead.
+- **Work completed:** `training/experiments/teacher_selfplay.py` parameterized —
+  `--iterations` (default: D-008 teacher 500) and `--value-model` (default: ridge
+  artifact; `""` → rollout leaves). Records and manifest now carry the *actual* search
+  config and `"value_model": null` for rollout-leaf runs, so provenance stays exact.
+  Smoke (2 games @ 15 iters, rollout leaves): 143 records, validator PASSED, 2/2 unique
+  games, config correctly stamped.
+- **Generation launched:** `data/value_dataset_v2` — 100 games, seed 20260716,
+  PW-50 rollout-leaf teachers (the EXP-002-validated cheap family, same as
+  value_dataset_v1 but in `teacher_record_v2` full-state format), 260-min deadline.
+  First game: 70 decisions in 1.3 min → ~2.2 h expected. Manifest verified in-flight
+  (`iterations: 50`, `value_model: null`, `status: generating`).
+- **Generation COMPLETE & VALIDATED (same session, after a container-restart resume):**
+  7 208 records / 100 games in 127 min; engine-level validator PASSED; 100/100 unique
+  games; winners across all four seats (38/24/31/19). Hashes in `DATA_LINEAGE.md`.
+  A container restart at 5 games exercised `--resume` for real; the resume path now also
+  rejects search-config/value-model mismatches against the saved manifest (Codex P1 on
+  PR #206 — valid; guards verified live on all three mismatch axes).
+- **EXP-009 run and NEGATIVE (same session):** at 6.5× state-carrying volume the v2
+  feature block still adds only +0.004 pairwise (volume_full 0.655 vs volume_45 0.651);
+  best overall remains mixed_45 at **0.678** — bar (decisively > 0.68) NOT met. Bonus
+  finding: the bulk corpus *underperforms* value_dataset_v1 as training data (τ-sampled
+  openings → noisier final-score labels); volume of the wrong distribution is not signal.
+  The feature-extension path is exhausted with zero arena spend (details in
+  `EXPERIMENT_LOG.md` EXP-009).
+- **Also fixed:** Vercel preview failures on the dataset commits — the @vercel/python
+  bundle included all of `data/` (194 MB) with no ignore file; added `.vercelignore`
+  (dataset bulk out, `champion_registry.json` + `layer6_calibrated_weights.json` kept);
+  preview deploys green again.
+- **Dataset storage reworked (user request):** teacher-record datasets now pack into a
+  single `records.jsonl.gz` at finalization (shards remain only during generation, for
+  `--resume`); `teacher_dataset_v1` (27 MB/19 files → 2.0 MB/1 file) and
+  `value_dataset_v2` (131 MB/101 files → 8.4 MB/1 file) migrated with content-hash
+  equality proof (decompressed bytes == registered shards-concat hash); validator +
+  readers handle both layouts via `iter_dataset_records`; `CLAUDE.md` now instructs
+  agents never to read dataset payloads into context (manifest + DATA_LINEAGE are the
+  reference).
+- **Next task (per the pre-registered EXP-009 decision rule):** the **move-level
+  candidate-scoring evaluator** (master plan §13, full Phase 6 build) — score
+  (state, candidate move) pairs instead of states, so the evaluator can see what the
+  ~0.68-ceiling state features cannot: the differential effect of the move itself.
+  Re-run gate C only after a candidate clears the 0.68 bar on held-out ordering.
+
 ## Session 2026-07-16 (session 16 — Phase 6 probe: v2 features NEGATIVE at current data volume)
 
 - **Current phase:** Phase 6 (representation), first probe complete. `rich_blokus_v2`

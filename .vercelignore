@@ -1,0 +1,11 @@
+# Training datasets and research bulk — never read by the deploy runtime
+# (api-runtime/app.py serves gameplay routes only; the sole data/ file it
+# needs is data/champion_registry.json, re-included below).
+# Without this the @vercel/python function bundle exceeds Vercel's size
+# limit once the manifested rescue datasets (100+ games of JSONL) are in.
+data/*
+!data/champion_registry.json
+!data/layer6_calibrated_weights.json
+docs/
+tests/
+training/artifacts/

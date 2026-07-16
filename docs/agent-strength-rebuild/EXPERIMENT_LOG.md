@@ -24,6 +24,56 @@ Artifacts:
 
 ---
 
+## EXP-009 — Phase 6 path 1: rich_blokus_v2 at state-carrying volume vs the 0.68 bar
+
+- **Experiment ID:** EXP-009
+- **Date:** 2026-07-16 (launched)
+- **Commit:** PR #206 head (`value_model_v2.py` --bulk volume conditions;
+  `data/value_dataset_v2` finalized at `a17e76b`)
+- **Hypothesis:** with ~12.4k state-carrying training rows (teacher_dataset_v1 +
+  value_dataset_v2, all 51 features extractable) the v2 contested-territory block lifts
+  held-out pairwise ordering decisively above 0.68 — the EXP-008 negative was a data-volume
+  artifact, not a representation failure.
+- **Independent variables:** feature set (51 vs 45) at equal rows (`volume_full` vs
+  `volume_45`), and data mix (`volume_plus_v1_45` adds the 17.4k feature-only v1 rows).
+- **Controls:** identical held-out teacher games as EXP-008 (split seed 20260716, 25% of
+  teacher_dataset_v1 games); same ridge family; v1 ridge baseline re-evaluated on the same
+  split. Bulk rows are TRAINING-only (PW-50 play is a weaker distribution than the
+  500-iteration evaluation games).
+- **Pre-registered decision rule:** pre-arena bar = best condition's held-out pairwise
+  decisively > 0.68 (vs mixed_45's 0.678). Bar cleared → gate C arena re-run
+  (exp007_agents.json pattern). Bar failed → move-level candidate-scoring evaluator (full
+  Phase 6 build); no arena spend either way until the bar clears (§20: more data alone is
+  not an escape — this run isolates feature-set contribution at equal volume, which is the
+  distinguishing experiment EXP-008 called for).
+- **Reproduce:** `python -m training.experiments.value_model_v2 --bulk data/value_dataset_v2
+  --out training/artifacts/value_models/v4 --split-seed 20260716`
+- **Result (held-out teacher games; teacher 5,236 rows / bulk 28,832 rows / v1 17,408 rows):**
+  | condition | R² | pairwise |
+  |---|---|---|
+  | volume_full (teacher+bulk, 51 feats, ~33k rows) | 0.212 | 0.655 |
+  | volume_45 (same rows, 45 feats) | 0.211 | 0.651 |
+  | volume_plus_v1_45 (+17.4k v1 rows, ~50k) | 0.220 | 0.655 |
+  | mixed_45 (teacher+v1 only — EXP-008 best) | 0.234 | **0.678** |
+  | v1_ridge_baseline | −0.384 | 0.658 |
+- **Verdict: NEGATIVE — bar not met.** Two findings:
+  1. **The representation hypothesis is refuted, not data-starved:** at 6.5× the
+     state-carrying volume, the v2 feature block still adds only +0.004 pairwise
+     (0.655 vs 0.651) — the same margin as EXP-008. The contested-territory features
+     do not carry ordering signal a linear model can use.
+  2. **The bulk corpus does not substitute for value_dataset_v1:** every volume
+     condition UNDERPERFORMS mixed_45 (0.655 vs 0.678), and adding bulk rows to the
+     mixed data hurts. Plausible cause: value_dataset_v2 games open with τ=1.0 visit
+     sampling (first 24 decisions), so early-state final scores are noisier labels than
+     v1's greedy-argmax games. Volume of the wrong distribution is not more signal.
+- **Decision (per the pre-registered rule):** the feature-extension path is exhausted —
+  proceed to the **move-level candidate-scoring evaluator** (master plan §13, full
+  Phase 6 build). The 0.68 pre-arena bar stands; zero arena compute was spent.
+  mixed_45 (v3 artifact) remains the best evaluator; the pairwise ceiling of the
+  current state-feature representation is confirmed at ~0.68.
+- **Artifacts:** `training/artifacts/value_models/v4/report.json` (all conditions),
+  `v4/value_mixed_45.joblib` (winning condition retrained; equivalent to v3's).
+
 ## EXP-008 — Phase 6 probe: contested-territory feature block (rich_blokus_v2) — NEGATIVE
 
 - **Experiment ID:** EXP-008

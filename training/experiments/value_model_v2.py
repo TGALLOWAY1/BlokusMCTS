@@ -16,6 +16,17 @@ teacher games (R² / pairwise rank accuracy) to justify the arena half
     python -m training.experiments.value_model_v2 \
         --teacher data/teacher_dataset_v1 --v1 data/value_dataset_v1 \
         --out training/artifacts/value_models/v2
+
+Volume mode (Phase 6 path 1, EXP-009): pass --bulk with additional
+teacher-record-format dirs (state-carrying, so the CURRENT feature set is
+extractable) to train at volume. Adds feature-set-controlled conditions —
+volume_full (all features) vs volume_45 (rich_blokus_v1 columns) on the same
+rows isolates the v2 feature block's contribution at equal data. Held-out
+evaluation stays on the SAME held-out teacher games (same split seed) so
+results are comparable across runs.
+
+    python -m training.experiments.value_model_v2 \
+        --bulk data/value_dataset_v2 --out training/artifacts/value_models/v4
 """
 
 from __future__ import annotations
@@ -36,14 +47,27 @@ from engine.board import Board, Player
 TARGET_SCALE = 100.0
 
 
-def extract_teacher_frame(dataset_dir: Path) -> pd.DataFrame:
-    """One row per (recorded state, player perspective) with rich features."""
-    from training.rich_features import RICH_FEATURE_NAMES, FeatureCache, extract_rich_features
+def extract_teacher_frame(dataset_dir: Path,
+                          cache_dir: Optional[Path] = None) -> pd.DataFrame:
+    """One row per (recorded state, player perspective) with rich features.
+
+    Extraction is deterministic given the dataset and feature-set version, so
+    an optional cache_dir stores the frame as CSV keyed on dataset name +
+    FEATURE_SET_VERSION (bulk dirs take minutes to extract).
+    """
+    from training.experiments.teacher_selfplay import iter_dataset_records
+    from training.rich_features import (
+        FEATURE_SET_VERSION, RICH_FEATURE_NAMES, FeatureCache, extract_rich_features)
+
+    cache_path = None
+    if cache_dir is not None:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_path = cache_dir / f"{dataset_dir.name}.{FEATURE_SET_VERSION}.features.csv"
+        if cache_path.exists():
+            return pd.read_csv(cache_path)
 
     rows: List[Dict] = []
-    for shard in sorted(dataset_dir.glob("game_*.jsonl")):
-        for line in shard.read_text().splitlines():
-            record = json.loads(line)
+    for _, record in iter_dataset_records(dataset_dir):
             board = Board.from_dict(record["state"])
             cache = FeatureCache()
             for p in Player:
@@ -53,7 +77,10 @@ def extract_teacher_frame(dataset_dir: Path) -> pd.DataFrame:
                 row["ply"] = record["decision_index"]
                 row["final_score"] = int(record["final_scores"][str(p.value)])
                 rows.append(row)
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    if cache_path is not None:
+        frame.to_csv(cache_path, index=False)
+    return frame
 
 
 def load_v1_frame(dataset_dir: Path) -> pd.DataFrame:
@@ -104,6 +131,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--v1", default="data/value_dataset_v1")
     parser.add_argument("--v1-artifact",
                         default="training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib")
+    parser.add_argument("--bulk", nargs="*", default=[],
+                        help="additional teacher-record-format dirs used as TRAINING "
+                             "data only (volume conditions); evaluation stays on the "
+                             "held-out --teacher games")
+    parser.add_argument("--frame-cache", default=None,
+                        help="dir for cached extracted feature frames (CSV, keyed on "
+                             "dataset name + feature-set version)")
     parser.add_argument("--out", default="training/artifacts/value_models/v2")
     parser.add_argument("--test-frac", type=float, default=0.25)
     parser.add_argument("--split-seed", type=int, default=20260716)
@@ -111,14 +145,22 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir = Path(args.frame_cache) if args.frame_cache else None
 
     print("extracting teacher features...", flush=True)
-    teacher_df = extract_teacher_frame(Path(args.teacher))
+    teacher_df = extract_teacher_frame(Path(args.teacher), cache_dir=cache_dir)
+    bulk_frames = []
+    for bulk_dir in args.bulk:
+        print(f"extracting bulk features: {bulk_dir} ...", flush=True)
+        bulk_frames.append(extract_teacher_frame(Path(bulk_dir), cache_dir=cache_dir))
+    bulk_df = (pd.concat(bulk_frames, ignore_index=True)
+               if bulk_frames else pd.DataFrame(columns=teacher_df.columns))
     v1_df = load_v1_frame(Path(args.v1))
     feature_cols = [c for c in teacher_df.columns if c.startswith("f_")]
     # v1 CSV rows may predate feature-set extensions; mixed conditions use the
     # column intersection (v1_cols below), teacher-only conditions the full set.
     print(f"teacher rows: {len(teacher_df)} ({teacher_df['game_id'].nunique()} games); "
+          f"bulk rows: {len(bulk_df)} ({bulk_df['game_id'].nunique() if len(bulk_df) else 0} games); "
           f"v1 rows: {len(v1_df)} ({v1_df['game_id'].nunique()} games)")
 
     # Held-out split at the TEACHER-game level; the same held-out teacher games
@@ -148,16 +190,40 @@ def main(argv: Optional[List[str]] = None) -> int:
                   (frame["final_score"] / TARGET_SCALE).to_numpy(dtype=float))
         return model
 
-    conditions: Dict[str, Tuple[object, List[str]]] = {
-        "teacher_only_full": (fit_ridge_cols(teacher_train, feature_cols), feature_cols),
-        "teacher_only_45": (fit_ridge_cols(teacher_train, v1_cols), v1_cols),
-        "mixed_45": (
-            fit_ridge_cols(
-                pd.concat([teacher_train[v1_cols + ["game_id", "ply", "final_score"]],
-                           v1_df], ignore_index=True), v1_cols),
-            v1_cols,
-        ),
-    }
+    # Each condition: (training frame from the TRAIN teacher split, columns).
+    # The final artifact retrains the winning condition with the full teacher
+    # frame substituted for the train split (see frame_for below).
+    meta_cols = ["game_id", "ply", "final_score"]
+
+    def frame_for(name: str, teacher_part: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
+        if name == "teacher_only_full":
+            return teacher_part, feature_cols
+        if name == "teacher_only_45":
+            return teacher_part, v1_cols
+        if name == "mixed_45":
+            return (pd.concat([teacher_part[v1_cols + meta_cols], v1_df],
+                              ignore_index=True), v1_cols)
+        if name == "volume_full":
+            return (pd.concat([teacher_part, bulk_df], ignore_index=True),
+                    feature_cols)
+        if name == "volume_45":
+            return (pd.concat([teacher_part, bulk_df], ignore_index=True), v1_cols)
+        if name == "volume_plus_v1_45":
+            return (pd.concat([teacher_part[v1_cols + meta_cols],
+                               bulk_df[v1_cols + meta_cols], v1_df],
+                              ignore_index=True), v1_cols)
+        raise ValueError(name)
+
+    condition_names = ["teacher_only_full", "teacher_only_45", "mixed_45"]
+    if len(bulk_df):
+        # volume_full vs volume_45 on identical rows isolates the current
+        # feature block's contribution at equal (state-carrying) data volume.
+        condition_names += ["volume_full", "volume_45", "volume_plus_v1_45"]
+
+    conditions: Dict[str, Tuple[object, List[str]]] = {}
+    for name in condition_names:
+        frame, cols = frame_for(name, teacher_train)
+        conditions[name] = (fit_ridge_cols(frame, cols), cols)
     v1_artifact = joblib.load(args.v1_artifact)
     v1_feat_cols = [f"f_{n}" for n in v1_artifact["feature_names"]]
     conditions["v1_ridge_baseline"] = (v1_artifact["model"], v1_feat_cols)
@@ -178,21 +244,17 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Save the best condition retrained on ALL its training data (held-out
     # numbers above are the honest generalization estimate).
-    best_cols = conditions[best_name][1]
-    if best_name == "mixed_45":
-        final_frame = pd.concat(
-            [teacher_df[best_cols + ["game_id", "ply", "final_score"]], v1_df],
-            ignore_index=True)
-    else:
-        final_frame = teacher_df
+    final_frame, best_cols = frame_for(best_name, teacher_df)
     final_model = fit_ridge_cols(final_frame, best_cols)
+    uses_v1 = best_name in ("mixed_45", "volume_plus_v1_45")
     artifact = {
         "model_name": f"{best_name}_ridge",
         "model": final_model,
         "feature_names": [c[len("f_"):] for c in best_cols],
         "target": f"final_score / {TARGET_SCALE} (standard scoring)",
         "datasets": {"teacher": str(args.teacher),
-                     "v1": str(args.v1) if best_name == "mixed_45" else None},
+                     "bulk": list(args.bulk) if best_name.startswith("volume") else None,
+                     "v1": str(args.v1) if uses_v1 else None},
         "split": {"held_out_teacher_games": sorted(test_games),
                   "split_seed": args.split_seed},
         "metrics": results,

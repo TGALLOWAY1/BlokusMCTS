@@ -42,6 +42,16 @@ Tests: `python -m pytest tests/ -q` (slow — MCTS tests play real games; use
 - **`browser_python/` is generated** by `scripts/build_browser_core.sh`
   (except `worker_bridge.py`, which is source). Never edit the generated
   copies; edit `engine/ mcts/ agents/` and rebuild the bundle.
+- **Never read dataset payloads into context.** `data/*/records.jsonl.gz`
+  (packed game corpora, MBs compressed / 100+ MB decompressed) and the large
+  CSVs (`data/td_trajectories.csv`, `data/policy_targets.csv`,
+  `data/*/trajectories.csv`) are training data, not documentation. Everything
+  you need to know about a dataset is in its small `manifest.json` (provenance,
+  config, counts, hashes) and `docs/agent-strength-rebuild/DATA_LINEAGE.md`;
+  the record schema is documented in `training/experiments/teacher_selfplay.py`'s
+  docstring. Access records programmatically via
+  `training.experiments.teacher_selfplay.iter_dataset_records(dir)` or check
+  integrity with `python -m training.experiments.teacher_selfplay --validate DIR`.
 
 ## Key MCTS parameters (mcts/mcts_agent.py)
 
