@@ -19,7 +19,8 @@
   "value_model": null,
   "seed": 20260716,
   "num_games_requested": 100,
-  "status": "generating",
-  "games_completed": 7,
-  "records_written": 501
+  "status": "finalized",
+  "games_completed": 100,
+  "records_written": 7208,
+  "elapsed_sec": 7622.5
 }

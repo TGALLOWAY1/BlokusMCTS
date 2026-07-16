@@ -42,12 +42,13 @@ held-out pairwise ordering decisively above 0.68 (train/eval via
 (`exp007_agents.json` pattern) on the fixed protocol. Everything below is the historical
 Phase 7 handoff (done).
 
-**UPDATE (2026-07-16, session 17):** Phase 6 path 1 in flight — the teacher recorder now
-takes `--iterations` / `--value-model` (empty string → rollout leaves) and
-`data/value_dataset_v2` (100 games, seed 20260716, PW-50 rollout leaves,
-`teacher_record_v2` full-state format) is generating (~2.2 h). On completion: validate,
-hash into `DATA_LINEAGE.md`, extend `value_model_v2.py` to consume two teacher-format
-dirs, retrain with `rich_blokus_v2` features at volume, and test the pre-arena bar
+**UPDATE (2026-07-16, session 17):** Phase 6 path 1 data DONE — the teacher recorder now
+takes `--iterations` / `--value-model` (empty string → rollout leaves; `--resume` rejects
+config mismatches) and `data/value_dataset_v2` is **finalized & validated**: 7 208
+`teacher_record_v2` records / 100 games, PW-50 rollout leaves, seed 20260716, 100/100
+unique, hashes in `DATA_LINEAGE.md`. **Exact next action:** extend `value_model_v2.py`
+to consume both teacher-format dirs (`teacher_dataset_v1` + `value_dataset_v2`), retrain
+with `rich_blokus_v2` features at ~12.4k state-carrying rows, and test the pre-arena bar
 (held-out pairwise decisively > 0.68) before any gate-C arena spend.
 
 **Exact next action — Phase 7: teacher self-play data pipeline (then Phase 8 gate C):**

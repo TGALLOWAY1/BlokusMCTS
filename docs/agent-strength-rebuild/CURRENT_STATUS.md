@@ -18,11 +18,17 @@ _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 
   value_dataset_v1 but in `teacher_record_v2` full-state format), 260-min deadline.
   First game: 70 decisions in 1.3 min → ~2.2 h expected. Manifest verified in-flight
   (`iterations: 50`, `value_model: null`, `status: generating`).
-- **Next task (on completion):** run `--validate`, register hashes in `DATA_LINEAGE.md`,
-  extend `value_model_v2.py` to consume both teacher-format dirs, retrain with
-  `rich_blokus_v2` features at volume, and test the pre-arena bar (held-out pairwise
-  decisively > 0.68). Bar cleared → re-run gate C (exp007 pattern); bar failed → the
-  move-level candidate-scoring evaluator (full Phase 6 build).
+- **Generation COMPLETE & VALIDATED (same session, after a container-restart resume):**
+  7 208 records / 100 games in 127 min; engine-level validator PASSED; 100/100 unique
+  games; winners across all four seats (38/24/31/19). Hashes in `DATA_LINEAGE.md`.
+  A container restart at 5 games exercised `--resume` for real; the resume path now also
+  rejects search-config/value-model mismatches against the saved manifest (Codex P1 on
+  PR #206 — valid; guards verified live on all three mismatch axes).
+- **Next task:** extend `value_model_v2.py` to consume both teacher-format dirs
+  (`teacher_dataset_v1` + `value_dataset_v2`), retrain with `rich_blokus_v2` features at
+  volume (~12.4k state-carrying rows vs 5.2k in EXP-008), and test the pre-arena bar
+  (held-out pairwise decisively > 0.68). Bar cleared → re-run gate C (exp007 pattern);
+  bar failed → the move-level candidate-scoring evaluator (full Phase 6 build).
 
 ## Session 2026-07-16 (session 16 — Phase 6 probe: v2 features NEGATIVE at current data volume)
 
