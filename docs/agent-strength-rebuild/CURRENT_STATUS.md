@@ -7,11 +7,13 @@ _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 
 - **Current phase:** Phase 6 (move-level candidate scorer). D-017 recorded (listwise
   scorer distilling teacher visits, versioned move features, policy_prior consumption
   slot, gate order). Harness built (`training/experiments/move_scorer.py`).
-- **EXP-010 result — gate 1 PASS, gate 2 FAIL:** distillation lifts held-out pairwise
-  move ordering (0.632 vs 0.591 heuristic / 0.596 legacy) but top-1 agreement does not
-  move (0.133 vs 0.140), and the six D-017 feature extensions add ~nothing over the
-  four base features (third strike for hand-crafted extensions after EXP-008/009).
-- **Key attribution — capacity, not data:** the model scores 0.150 top-1 on its own
+- **EXP-010 result — gate 1 PASS, gate 2 FAIL** (numbers under the tie-aware top-1
+  metric from PR #207 review; correction changed no conclusion): distillation lifts
+  held-out pairwise move ordering (0.632 vs 0.591 heuristic / 0.596 legacy) but top-1
+  agreement does not move (0.140 vs 0.140), and the six D-017 feature extensions add
+  ~nothing over the four base features (third strike for hand-crafted extensions after
+  EXP-008/009).
+- **Key attribution — capacity, not data:** the model scores 0.165 top-1 on its own
   200 training decisions; train ≈ held-out everywhere. Linear-over-geometric-features
   cannot express what the 500-iter teacher argmax depends on. Nothing wired into
   production (§20: pairwise-only lateral gain is not progress).

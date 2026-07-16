@@ -53,17 +53,20 @@ Artifacts:
   shape-aware encodings / NN. mf_v2 > baselines but ≈ mf4 → wire mf4 (simpler),
   extensions rejected.
 - **Reproduce:** `python -m training.experiments.move_scorer --split-seed 20260716`
-- **Result (gate 1 PASS; gate 2 FAIL):** held-out teacher decisions (n=285):
+- **Result (gate 1 PASS; gate 2 FAIL):** held-out teacher decisions (n=285), under the
+  tie-aware top-1 metric (review fix, PR #207: predictions of any tied-max child count
+  as correct — 174/1,288 teacher decisions have tied visit maxima; the correction
+  shifted all top-1 values ≈+0.01 and changed no conclusion):
   | scorer | top-1 | pairwise |
   |---|---|---|
   | fixed_heuristic | 0.140 | 0.591 |
-  | legacy_policy | 0.123 | 0.596 |
-  | mf4_trained | 0.140 | 0.629 |
-  | mf_v2_trained | 0.133 | **0.632** |
+  | legacy_policy | 0.133 | 0.596 |
+  | mf4_trained | 0.147 | 0.629 |
+  | mf_v2_trained | 0.140 | **0.632** |
   Distillation lifts pairwise ordering (+0.04 over both baselines) but top-1 does not
   move, and mf_v2 ≈ mf4 (extensions add ~nothing, third strike for hand-crafted
   feature extensions after EXP-008/009). Bars required BOTH metrics → **FAIL**.
-- **Attribution — capacity, not data:** the tiny-overfit sanity run scores only 0.150
+- **Attribution — capacity, not data:** the tiny-overfit sanity run scores only 0.165
   top-1 ON ITS OWN 200 TRAINING DECISIONS, and full-train held-out performance equals
   train performance. A listwise linear model over cheap geometric move features cannot
   even fit the teacher's choices, let alone generalize better. The 500-iteration
