@@ -24,6 +24,32 @@ Artifacts:
 
 ---
 
+## EXP-009 — Phase 6 path 1: rich_blokus_v2 at state-carrying volume vs the 0.68 bar
+
+- **Experiment ID:** EXP-009
+- **Date:** 2026-07-16 (launched)
+- **Commit:** PR #206 head (`value_model_v2.py` --bulk volume conditions;
+  `data/value_dataset_v2` finalized at `a17e76b`)
+- **Hypothesis:** with ~12.4k state-carrying training rows (teacher_dataset_v1 +
+  value_dataset_v2, all 51 features extractable) the v2 contested-territory block lifts
+  held-out pairwise ordering decisively above 0.68 — the EXP-008 negative was a data-volume
+  artifact, not a representation failure.
+- **Independent variables:** feature set (51 vs 45) at equal rows (`volume_full` vs
+  `volume_45`), and data mix (`volume_plus_v1_45` adds the 17.4k feature-only v1 rows).
+- **Controls:** identical held-out teacher games as EXP-008 (split seed 20260716, 25% of
+  teacher_dataset_v1 games); same ridge family; v1 ridge baseline re-evaluated on the same
+  split. Bulk rows are TRAINING-only (PW-50 play is a weaker distribution than the
+  500-iteration evaluation games).
+- **Pre-registered decision rule:** pre-arena bar = best condition's held-out pairwise
+  decisively > 0.68 (vs mixed_45's 0.678). Bar cleared → gate C arena re-run
+  (exp007_agents.json pattern). Bar failed → move-level candidate-scoring evaluator (full
+  Phase 6 build); no arena spend either way until the bar clears (§20: more data alone is
+  not an escape — this run isolates feature-set contribution at equal volume, which is the
+  distinguishing experiment EXP-008 called for).
+- **Reproduce:** `python -m training.experiments.value_model_v2 --bulk data/value_dataset_v2
+  --out training/artifacts/value_models/v4 --split-seed 20260716`
+- **Result:** _pending_
+
 ## EXP-008 — Phase 6 probe: contested-territory feature block (rich_blokus_v2) — NEGATIVE
 
 - **Experiment ID:** EXP-008
