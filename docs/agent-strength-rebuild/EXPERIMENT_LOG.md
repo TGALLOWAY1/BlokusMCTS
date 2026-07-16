@@ -48,7 +48,31 @@ Artifacts:
   distinguishing experiment EXP-008 called for).
 - **Reproduce:** `python -m training.experiments.value_model_v2 --bulk data/value_dataset_v2
   --out training/artifacts/value_models/v4 --split-seed 20260716`
-- **Result:** _pending_
+- **Result (held-out teacher games; teacher 5,236 rows / bulk 28,832 rows / v1 17,408 rows):**
+  | condition | R² | pairwise |
+  |---|---|---|
+  | volume_full (teacher+bulk, 51 feats, ~33k rows) | 0.212 | 0.655 |
+  | volume_45 (same rows, 45 feats) | 0.211 | 0.651 |
+  | volume_plus_v1_45 (+17.4k v1 rows, ~50k) | 0.220 | 0.655 |
+  | mixed_45 (teacher+v1 only — EXP-008 best) | 0.234 | **0.678** |
+  | v1_ridge_baseline | −0.384 | 0.658 |
+- **Verdict: NEGATIVE — bar not met.** Two findings:
+  1. **The representation hypothesis is refuted, not data-starved:** at 6.5× the
+     state-carrying volume, the v2 feature block still adds only +0.004 pairwise
+     (0.655 vs 0.651) — the same margin as EXP-008. The contested-territory features
+     do not carry ordering signal a linear model can use.
+  2. **The bulk corpus does not substitute for value_dataset_v1:** every volume
+     condition UNDERPERFORMS mixed_45 (0.655 vs 0.678), and adding bulk rows to the
+     mixed data hurts. Plausible cause: value_dataset_v2 games open with τ=1.0 visit
+     sampling (first 24 decisions), so early-state final scores are noisier labels than
+     v1's greedy-argmax games. Volume of the wrong distribution is not more signal.
+- **Decision (per the pre-registered rule):** the feature-extension path is exhausted —
+  proceed to the **move-level candidate-scoring evaluator** (master plan §13, full
+  Phase 6 build). The 0.68 pre-arena bar stands; zero arena compute was spent.
+  mixed_45 (v3 artifact) remains the best evaluator; the pairwise ceiling of the
+  current state-feature representation is confirmed at ~0.68.
+- **Artifacts:** `training/artifacts/value_models/v4/report.json` (all conditions),
+  `v4/value_mixed_45.joblib` (winning condition retrained; equivalent to v3's).
 
 ## EXP-008 — Phase 6 probe: contested-territory feature block (rich_blokus_v2) — NEGATIVE
 

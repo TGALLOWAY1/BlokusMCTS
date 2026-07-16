@@ -24,11 +24,22 @@ _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 
   A container restart at 5 games exercised `--resume` for real; the resume path now also
   rejects search-config/value-model mismatches against the saved manifest (Codex P1 on
   PR #206 — valid; guards verified live on all three mismatch axes).
-- **Next task:** extend `value_model_v2.py` to consume both teacher-format dirs
-  (`teacher_dataset_v1` + `value_dataset_v2`), retrain with `rich_blokus_v2` features at
-  volume (~12.4k state-carrying rows vs 5.2k in EXP-008), and test the pre-arena bar
-  (held-out pairwise decisively > 0.68). Bar cleared → re-run gate C (exp007 pattern);
-  bar failed → the move-level candidate-scoring evaluator (full Phase 6 build).
+- **EXP-009 run and NEGATIVE (same session):** at 6.5× state-carrying volume the v2
+  feature block still adds only +0.004 pairwise (volume_full 0.655 vs volume_45 0.651);
+  best overall remains mixed_45 at **0.678** — bar (decisively > 0.68) NOT met. Bonus
+  finding: the bulk corpus *underperforms* value_dataset_v1 as training data (τ-sampled
+  openings → noisier final-score labels); volume of the wrong distribution is not signal.
+  The feature-extension path is exhausted with zero arena spend (details in
+  `EXPERIMENT_LOG.md` EXP-009).
+- **Also fixed:** Vercel preview failures on the dataset commits — the @vercel/python
+  bundle included all of `data/` (194 MB) with no ignore file; added `.vercelignore`
+  (dataset bulk out, `champion_registry.json` + `layer6_calibrated_weights.json` kept);
+  preview deploys green again.
+- **Next task (per the pre-registered EXP-009 decision rule):** the **move-level
+  candidate-scoring evaluator** (master plan §13, full Phase 6 build) — score
+  (state, candidate move) pairs instead of states, so the evaluator can see what the
+  ~0.68-ceiling state features cannot: the differential effect of the move itself.
+  Re-run gate C only after a candidate clears the 0.68 bar on held-out ordering.
 
 ## Session 2026-07-16 (session 16 — Phase 6 probe: v2 features NEGATIVE at current data volume)
 

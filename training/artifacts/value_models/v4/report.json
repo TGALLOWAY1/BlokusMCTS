@@ -1,0 +1,103 @@
+{
+  "model_name": "mixed_45_ridge",
+  "feature_names": [
+    "squares_placed",
+    "remaining_piece_area",
+    "accessible_corners",
+    "reachable_empty_squares",
+    "largest_remaining_piece_size",
+    "opponent_avg_mobility",
+    "center_proximity",
+    "territory_enclosure_area",
+    "legal_move_count",
+    "legal_move_count_small_pieces",
+    "legal_move_count_medium_pieces",
+    "legal_move_count_large_pieces",
+    "playable_piece_count",
+    "total_playable_piece_area",
+    "avg_legal_move_area",
+    "max_legal_move_area",
+    "corner_count",
+    "corner_quality_score",
+    "frontier_size",
+    "frontier_density",
+    "frontier_to_opponent_distance",
+    "new_corner_generation_potential",
+    "remaining_piece_count",
+    "remaining_singletons",
+    "remaining_dominoes",
+    "remaining_trominoes",
+    "remaining_tetrominoes",
+    "remaining_pentominoes",
+    "awkward_piece_penalty",
+    "piece_diversity_score",
+    "largest_reachable_region",
+    "trapped_region_count",
+    "trapped_region_area",
+    "opponent_mobility_avg",
+    "opponent_mobility_max",
+    "opponent_mobility_min",
+    "opponent_corner_pressure",
+    "leader_mobility_pressure",
+    "score_margin_vs_leader",
+    "score_margin_vs_next_player",
+    "rank_so_far",
+    "completion_ratio",
+    "remaining_area",
+    "edge_pressure",
+    "quadrant_balance"
+  ],
+  "target": "final_score / 100.0 (standard scoring)",
+  "datasets": {
+    "teacher": "data/teacher_dataset_v1",
+    "bulk": null,
+    "v1": "data/value_dataset_v1"
+  },
+  "split": {
+    "held_out_teacher_games": [
+      "tds1_s20260715_g0000",
+      "tds1_s20260715_g0001",
+      "tds1_s20260715_g0010",
+      "tds1_s20260715_g0011"
+    ],
+    "split_seed": 20260716
+  },
+  "metrics": {
+    "teacher_only_full": {
+      "held_out_r2": 0.15019292554238994,
+      "held_out_mae_points": 7.613999720773844,
+      "pairwise_rank_accuracy": 0.6185567010309279
+    },
+    "teacher_only_45": {
+      "held_out_r2": 0.16897083139517122,
+      "held_out_mae_points": 7.590614576971036,
+      "pairwise_rank_accuracy": 0.6151202749140894
+    },
+    "mixed_45": {
+      "held_out_r2": 0.23356484477588324,
+      "held_out_mae_points": 7.266121652913503,
+      "pairwise_rank_accuracy": 0.6781214203894617
+    },
+    "volume_full": {
+      "held_out_r2": 0.21169841458001049,
+      "held_out_mae_points": 7.338358562934373,
+      "pairwise_rank_accuracy": 0.654639175257732
+    },
+    "volume_45": {
+      "held_out_r2": 0.21105014543246003,
+      "held_out_mae_points": 7.338369893844961,
+      "pairwise_rank_accuracy": 0.6506300114547537
+    },
+    "volume_plus_v1_45": {
+      "held_out_r2": 0.2203384423793463,
+      "held_out_mae_points": 7.341066447577226,
+      "pairwise_rank_accuracy": 0.654639175257732
+    },
+    "v1_ridge_baseline": {
+      "held_out_r2": -0.3844799707858475,
+      "held_out_mae_points": 11.81503470326871,
+      "pairwise_rank_accuracy": 0.6580756013745704
+    }
+  },
+  "gate_c_precheck": true
+}
