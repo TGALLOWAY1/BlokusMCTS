@@ -2,6 +2,28 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-16 (session 17 — Phase 6 path 1: value_dataset_v2 generation launched)
+
+- **Current phase:** Phase 6 (representation), executing ranked option 1 from session 16:
+  a state-carrying bulk corpus so the v2 feature block can be tested at the data volume
+  that drives `mixed_45`'s lead.
+- **Work completed:** `training/experiments/teacher_selfplay.py` parameterized —
+  `--iterations` (default: D-008 teacher 500) and `--value-model` (default: ridge
+  artifact; `""` → rollout leaves). Records and manifest now carry the *actual* search
+  config and `"value_model": null` for rollout-leaf runs, so provenance stays exact.
+  Smoke (2 games @ 15 iters, rollout leaves): 143 records, validator PASSED, 2/2 unique
+  games, config correctly stamped.
+- **Generation launched:** `data/value_dataset_v2` — 100 games, seed 20260716,
+  PW-50 rollout-leaf teachers (the EXP-002-validated cheap family, same as
+  value_dataset_v1 but in `teacher_record_v2` full-state format), 260-min deadline.
+  First game: 70 decisions in 1.3 min → ~2.2 h expected. Manifest verified in-flight
+  (`iterations: 50`, `value_model: null`, `status: generating`).
+- **Next task (on completion):** run `--validate`, register hashes in `DATA_LINEAGE.md`,
+  extend `value_model_v2.py` to consume both teacher-format dirs, retrain with
+  `rich_blokus_v2` features at volume, and test the pre-arena bar (held-out pairwise
+  decisively > 0.68). Bar cleared → re-run gate C (exp007 pattern); bar failed → the
+  move-level candidate-scoring evaluator (full Phase 6 build).
+
 ## Session 2026-07-16 (session 16 — Phase 6 probe: v2 features NEGATIVE at current data volume)
 
 - **Current phase:** Phase 6 (representation), first probe complete. `rich_blokus_v2`

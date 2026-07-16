@@ -80,22 +80,30 @@ def _sha256(path: str) -> str:
     return h.hexdigest()
 
 
-def _build_teacher(seed: int) -> MCTSAgent:
-    agent = MCTSAgent(seed=seed, value_model_path=VALUE_MODEL_PATH,
-                      **TEACHER_SEARCH_CONFIG)
+def _build_teacher(seed: int, search_config: Optional[Dict[str, Any]] = None,
+                   value_model_path: Optional[str] = VALUE_MODEL_PATH) -> MCTSAgent:
+    agent = MCTSAgent(seed=seed, value_model_path=value_model_path,
+                      **(search_config or TEACHER_SEARCH_CONFIG))
     agent._capture_root_moves = True
     agent.num_workers = 1
     return agent
 
 
 def play_teacher_game(game_seed: int, game_id: str,
-                      value_model_sha: str) -> List[Dict[str, Any]]:
+                      value_model_sha: str,
+                      search_config: Optional[Dict[str, Any]] = None,
+                      value_model_path: Optional[str] = VALUE_MODEL_PATH,
+                      ) -> List[Dict[str, Any]]:
     """Play one 4-teacher game; return the per-decision records (finals filled)."""
     import random as _random
 
     generator = get_shared_generator()
     game = BlokusGame(scoring_mode=SCORING_MODE_STANDARD, enable_telemetry=False)
-    agents = {p: _build_teacher(seed=game_seed * 31 + p.value) for p in Player}
+    cfg = search_config or TEACHER_SEARCH_CONFIG
+    agents = {p: _build_teacher(seed=game_seed * 31 + p.value,
+                                search_config=cfg,
+                                value_model_path=value_model_path)
+              for p in Player}
     seat_map = {str(p.value): f"teacher_{p.value}" for p in Player}
     sample_rng = _random.Random(game_seed)
 
@@ -162,8 +170,9 @@ def play_teacher_game(game_seed: int, game_id: str,
             "selected_action": move.to_dict(),
             "move_selection": move_selection,
             "root_value": float(root_value),
-            "search_config": TEACHER_SEARCH_CONFIG,
-            "value_model": {"path": VALUE_MODEL_PATH, "sha256": value_model_sha},
+            "search_config": cfg,
+            "value_model": ({"path": value_model_path, "sha256": value_model_sha}
+                            if value_model_path else None),
             "game_seed": int(game_seed),
             "agent_seed": int(game_seed * 31 + player.value),
             "final_scores": None,   # backfilled below
@@ -219,7 +228,9 @@ def generate(args: argparse.Namespace) -> int:
                                 text=True, check=True).stdout.strip()
     except Exception:
         commit = "unknown"
-    value_model_sha = _sha256(VALUE_MODEL_PATH)
+    search_config = dict(TEACHER_SEARCH_CONFIG, iterations=args.iterations)
+    value_model_path = args.value_model if args.value_model else None
+    value_model_sha = _sha256(value_model_path) if value_model_path else None
 
     manifest = {
         "dataset_schema_version": "teacher_dataset_v1",
@@ -227,8 +238,9 @@ def generate(args: argparse.Namespace) -> int:
         "purpose": "Phase 7 teacher self-play (gate C training corpus)",
         "generating_commit": commit,
         "scoring_mode": "standard",
-        "teacher_search_config": TEACHER_SEARCH_CONFIG,
-        "value_model": {"path": VALUE_MODEL_PATH, "sha256": value_model_sha},
+        "teacher_search_config": search_config,
+        "value_model": ({"path": value_model_path, "sha256": value_model_sha}
+                        if value_model_path else None),
         "seed": args.seed,
         "num_games_requested": args.games,
         "status": "generating",
@@ -254,7 +266,9 @@ def generate(args: argparse.Namespace) -> int:
         game_seed = args.seed + g
         game_id = f"tds1_s{args.seed}_g{g:04d}"
         t_game = time.monotonic()
-        records = play_teacher_game(game_seed, game_id, value_model_sha)
+        records = play_teacher_game(
+            game_seed, game_id, value_model_sha,
+            search_config=search_config, value_model_path=value_model_path)
         shard = out_dir / f"game_{g:04d}.jsonl"
         with shard.open("w", encoding="utf-8") as handle:
             for record in records:
@@ -363,6 +377,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--deadline-minutes", type=float, default=400.0)
     parser.add_argument("--min-games", type=int, default=4)
     parser.add_argument("--out", default="data/teacher_dataset_v1")
+    parser.add_argument("--iterations", type=int, default=TEACHER_ITERATIONS,
+                        help="search budget per move (default: D-008 teacher 500; "
+                             "bulk corpora use 50)")
+    parser.add_argument("--value-model", default=VALUE_MODEL_PATH,
+                        help="leaf value-model artifact; pass '' for rollout leaves")
     parser.add_argument("--resume", action="store_true",
                         help="continue an interrupted (non-finalized) generation: "
                              "skip existing shards, same seed scheme")
