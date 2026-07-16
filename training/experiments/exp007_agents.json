@@ -1,0 +1,54 @@
+[
+  {
+    "name": "vm2_500",
+    "type": "mcts",
+    "thinking_time_ms": null,
+    "params": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500,
+      "value_model_path": "training/artifacts/value_models/v2/value_v2_v2_mixed.joblib"
+    }
+  },
+  {
+    "name": "vm1_500",
+    "type": "mcts",
+    "thinking_time_ms": null,
+    "params": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500,
+      "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+    }
+  },
+  {
+    "name": "heuristic",
+    "type": "heuristic",
+    "thinking_time_ms": null,
+    "params": {}
+  },
+  {
+    "name": "random",
+    "type": "random",
+    "thinking_time_ms": null,
+    "params": {}
+  }
+]
