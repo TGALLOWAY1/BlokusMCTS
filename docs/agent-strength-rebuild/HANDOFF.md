@@ -42,6 +42,54 @@ held-out pairwise ordering decisively above 0.68 (train/eval via
 (`exp007_agents.json` pattern) on the fixed protocol. Everything below is the historical
 Phase 7 handoff (done).
 
+**UPDATE (2026-07-16, session 19c): EXP-012 NEGATIVE, EXP-013 (calibration fix) IN
+FLIGHT.** The MLP prior at c=1.5 lost decisively in-search (4 vs 16 first-places,
+paired −20.6 pts, p=0.048) despite the EXP-011 ordering win. Diagnostic: the prior is
+3× sharper than the heuristic (distilled from completed 500-iter visit counts →
+over-commits, starves exploration). EXP-013 tests the fix — `policy_temperature=3.0`
+flattens the prior to the heuristic's entropy while keeping its ranking (arena
+`policy_temperature` override, no retraining). **On EXP-013 completion:** parity/positive
+→ record the calibration result, then a c + root-Dirichlet-noise tuning study and
+adoption path; still worse → the prior CONTENT misleads search, pause policy work and
+suspect the encoding/target (the master-plan gate). If interrupted, re-launch via the
+EXP-013 reproduce command (seeds pinned).
+
+**UPDATE (2026-07-16, session 19b): WIRING DONE, EXP-012 (search integration) IN
+FLIGHT.** `move_policy_v2` is production-wired (`mcts/move_encoding.py`,
+`mcts/move_policy_mlp.py`, agent artifact dispatch, arena `policy_weights_path`; 10
+wiring tests + legacy suites green) and the teacher-only production artifact is at
+`training/artifacts/move_scorer/v2_mlp/move_policy_v2.json`. EXP-012 (D-016 ± MLP PUCT
+prior, 500 iters, 20 games, seeds 20260718/20260719) is running — decision rule
+pre-registered in `EXPERIMENT_LOG.md`. **If interrupted:** re-launch via the EXP-012
+reproduce command (no resume; seeds pinned). On completion: record result, then either
+adoption experiments + more teacher data (positive) or a prior-strength (c) single-
+variable follow-up (null).
+
+**UPDATE (2026-07-16, session 19): FIRST PHASE 6 CANDIDATE PAST THE TRAINING BARS.**
+EXP-011: shape-aware MLP (`move_encoding_v1`, 518→64→1 listwise, numpy-only) trained on
+TEACHER-ONLY decisions clears the pre-registered held-out bars decisively and
+seed-robustly (top-1 0.196–0.228 vs 0.140/0.133; pairwise 0.742–0.744 vs 0.591/0.596).
+Two supporting findings: capacity confirmed (0.93+ memorization at adequate epochs) and
+**bulk PW-50 data poisons policy distillation** (controlled pair: 0.228/0.744
+teacher-only vs 0.151/0.637 mixed) — keep `value_dataset_v2` OUT of policy training.
+**Exact next action:** production wiring `move_policy_v2` — port `move_encoding_v1` +
+numpy MLP inference into `mcts/` (versioned artifact incl. encoding version + weights;
+masking/ordering/round-trip tests; untrained fallback stays behaviour-safe), retrain
+the production artifact teacher-only with the corrected optimization budget, then the
+search-integration experiment: D-016 agent ± `policy_prior` MLP at fixed budgets
+(pinned seeds, exp007 pattern) — that result, not the training metric, decides any
+gate-C claim. Queued after: more 500-iter teacher games (data is the confirmed lever).
+
+**UPDATE (2026-07-16, session 18):** Phase 6 build started — D-017 (listwise scorer,
+teacher-visit distillation, policy_prior slot) + `training/experiments/move_scorer.py`.
+**EXP-010 NEGATIVE (gate 2)**: pairwise ordering improves (+0.04) but top-1 doesn't move
+and the feature extensions add nothing; attribution is CAPACITY (0.150 top-1 on its own
+training data). **Exact next action:** higher-capacity shape-aware scorer — sklearn MLP
+(numpy-exportable, D-006) over a shape-aware move encoding (piece×orientation one-hot,
+local board patch at the placement); gate order per D-017 with a strict overfit gate
+(must nearly memorize 200 decisions) before held-out; same baselines and bars as
+EXP-010. Nothing is wired into production.
+
 **UPDATE (2026-07-16, session 17):** Phase 6 path 1 COMPLETE and **NEGATIVE** —
 `data/value_dataset_v2` (7 208 records / 100 games, validated, hashed) was generated and
 EXP-009 run: at 6.5× state-carrying volume the `rich_blokus_v2` block adds +0.004

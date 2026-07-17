@@ -211,6 +211,47 @@ Format per governing master prompt §21. Statuses: Proposed / Accepted / Superse
 
 ---
 
+## D-017 — Phase 6 move-level candidate scorer: architecture, target, and consumption slot
+
+- **Date:** 2026-07-16
+- **Status:** Accepted (scopes the Phase 6 build; production wiring gated on EXP-010)
+- **Context:** EXP-008/EXP-009 confirmed the state-feature representation ceiling
+  (~0.68 held-out pairwise) at any tested data volume; the pre-registered EXP-009 rule
+  routes Phase 6 to the master plan §4-Phase-6 "legal-move candidate scoring"
+  architecture. Required sub-decisions (D-005/6/7 reservations): framework, target,
+  action representation — plus where the scorer plugs into search.
+- **Decision:**
+  - **Architecture/framework:** listwise log-linear softmax over engineered per-move
+    features + per-piece bias — the exact structure of the existing
+    `mcts/move_policy.py` (numpy-only, Pyodide-safe, per-node cheap), generalized to a
+    versioned, extensible feature vector. No NN until this saturates.
+  - **Target:** distillation of the TEACHER root visit distribution
+    (`teacher_record_v2.policy_target`, already normalized and aligned to `search`) —
+    per-child Q kept in the datasets as a future auxiliary target, not used in v1.
+  - **Action representation:** `move_features_v2` — the four `MOVE_FEATURE_NAMES`
+    unchanged (order-stable prefix), then append-only move-varying extensions
+    (own-frontier consumption, true opponent-frontier occupation, opponent wall
+    contact, own diagonal redundancy, phase×size interaction, edge fraction).
+    State-constant features are excluded by construction: within-decision softmax and
+    ordering are invariant to per-decision constant shifts.
+  - **Consumption slot:** the existing `policy_prior` machinery (PUCT prior +
+    rollout/ordering policy) — this REPLACES the legacy 4-feature artifact
+    (`training/state/policy_weights.json`, top-1 0.53, self-distilled from heuristic
+    play; AUDIT §7) rather than extending it. Legacy corpus `policy_targets.csv` is
+    NOT used (Suspect: era/budget-mixed).
+- **Gate order (master plan):** tiny-data overfit sanity → held-out generalization
+  (EXP-010 bars) → masking/ordering/round-trip tests with the production wiring →
+  search-integration experiment. No arena spend before the held-out bar clears.
+- **Consequences:** training data comes exclusively from the validated teacher-record
+  datasets (visits collected at real search budgets); the browser/Pyodide path stays
+  numpy-only; the feature vector is versioned from day one.
+- **Revisit conditions:** EXP-010 shows the extended features add nothing over the
+  four (→ representation work moves to piece/shape-aware encodings or an NN); or
+  listwise linear saturates below the legacy baseline.
+- **Related:** D-005/6/7 (scoped v1), EXP-008/009/010; master plan §4 Phase 6.
+
+---
+
 ## Open decisions (required before their phases)
 
 | ID (reserved) | Topic | Needed by | Notes |

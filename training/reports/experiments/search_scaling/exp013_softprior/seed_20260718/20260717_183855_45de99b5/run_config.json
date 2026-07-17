@@ -1,0 +1,106 @@
+{
+  "agents": [
+    {
+      "name": "softprior_500_a",
+      "params": {
+        "deterministic_time_budget": false,
+        "exploration_constant": 1.414,
+        "greedy_sample_size": 12,
+        "heuristic_move_ordering": true,
+        "iterations": 500,
+        "num_workers": 1,
+        "policy_prior_c": 1.5,
+        "policy_prior_enabled": true,
+        "policy_temperature": 3.0,
+        "policy_weights_path": "training/artifacts/move_scorer/v2_mlp/move_policy_v2.json",
+        "progressive_widening_enabled": true,
+        "pw_alpha": 0.5,
+        "pw_c": 2.0,
+        "rollout_cutoff_depth": 12,
+        "rollout_policy": "greedy_sample",
+        "use_transposition_table": true,
+        "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+      },
+      "thinking_time_ms": null,
+      "type": "mcts"
+    },
+    {
+      "name": "softprior_500_b",
+      "params": {
+        "deterministic_time_budget": false,
+        "exploration_constant": 1.414,
+        "greedy_sample_size": 12,
+        "heuristic_move_ordering": true,
+        "iterations": 500,
+        "num_workers": 1,
+        "policy_prior_c": 1.5,
+        "policy_prior_enabled": true,
+        "policy_temperature": 3.0,
+        "policy_weights_path": "training/artifacts/move_scorer/v2_mlp/move_policy_v2.json",
+        "progressive_widening_enabled": true,
+        "pw_alpha": 0.5,
+        "pw_c": 2.0,
+        "rollout_cutoff_depth": 12,
+        "rollout_policy": "greedy_sample",
+        "use_transposition_table": true,
+        "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+      },
+      "thinking_time_ms": null,
+      "type": "mcts"
+    },
+    {
+      "name": "base_500_a",
+      "params": {
+        "deterministic_time_budget": false,
+        "exploration_constant": 1.414,
+        "greedy_sample_size": 12,
+        "heuristic_move_ordering": true,
+        "iterations": 500,
+        "num_workers": 1,
+        "progressive_widening_enabled": true,
+        "pw_alpha": 0.5,
+        "pw_c": 2.0,
+        "rollout_cutoff_depth": 12,
+        "rollout_policy": "greedy_sample",
+        "use_transposition_table": true,
+        "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+      },
+      "thinking_time_ms": null,
+      "type": "mcts"
+    },
+    {
+      "name": "base_500_b",
+      "params": {
+        "deterministic_time_budget": false,
+        "exploration_constant": 1.414,
+        "greedy_sample_size": 12,
+        "heuristic_move_ordering": true,
+        "iterations": 500,
+        "num_workers": 1,
+        "progressive_widening_enabled": true,
+        "pw_alpha": 0.5,
+        "pw_c": 2.0,
+        "rollout_cutoff_depth": 12,
+        "rollout_policy": "greedy_sample",
+        "use_transposition_table": true,
+        "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+      },
+      "thinking_time_ms": null,
+      "type": "mcts"
+    }
+  ],
+  "created_at": "2026-07-17T18:38:55",
+  "max_turns": 2500,
+  "notes": "phase4 search-scaling :: exp013_softprior :: seed 20260718",
+  "num_games": 10,
+  "output_root": "training/reports/experiments/search_scaling/exp013_softprior/seed_20260718",
+  "run_id": "20260717_183855_45de99b5",
+  "scoring_mode": "standard",
+  "seat_policy": "round_robin",
+  "seed": 20260718,
+  "snapshots": {
+    "checkpoints": [],
+    "enabled": false,
+    "strategy": "fixed_ply"
+  }
+}

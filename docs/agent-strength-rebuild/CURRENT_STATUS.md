@@ -2,6 +2,66 @@
 
 _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 / master prompt §3)._
 
+## Session 2026-07-16 (session 19 — EXP-011: FIRST PHASE 6 CANDIDATE CLEARS THE TRAINING BARS)
+
+- **Current phase:** Phase 6. EXP-011 (shape-aware MLP move scorer, `move_encoding_v1`:
+  9×9 six-channel patch + piece one-hot + scalars, 518→64→1 listwise numpy MLP).
+- **Three results, in order:**
+  1. Capacity confirmed — the tiny-set check reaches 0.930–0.945 top-1 at adequate
+     optimization budget (EXP-010's linear model: 0.165). Gate 1 passes in substance.
+  2. **Bulk mixing refuted for policy distillation** — controlled pair: teacher-only
+     (1,003 decisions) 0.228/0.744 vs mixed (6,337) 0.151/0.637 on held-out teacher
+     decisions. PW-50 visit distributions are a different, noisier policy; they
+     poison the scorer (the policy-side twin of EXP-009's label-noise finding).
+  3. **Teacher-only clears the pre-registered gate-2 bars decisively and seed-robustly:**
+     top-1 0.196–0.228 vs baselines 0.140/0.133; pairwise 0.742–0.744 vs 0.591/0.596.
+     First Phase 6 candidate past the pre-arena training bars.
+- **Production wiring DONE (same session):** `mcts/move_encoding.py` (canonical
+  encoder, byte-identical to the EXP-011 implementation) + `mcts/move_policy_mlp.py`
+  (MovePolicy-compatible MLP policy, versioned artifact) + agent artifact dispatch +
+  arena `policy_weights_path`; 10 new wiring tests green, legacy suites 26/26,
+  checks 7/7. Production artifact trained teacher-only on all 1,288 decisions
+  (`training/artifacts/move_scorer/v2_mlp/move_policy_v2.json`); the refactored
+  pipeline reproduces EXP-011 exactly (0.228/0.744, gate 2 PASS).
+- **EXP-012 DONE — NEGATIVE (the prior hurts):** 20 games, prior agents 4 first-places
+  / avg rank 2.80 vs base 16 / 2.00; paired per-game −20.6 pts, exact permutation
+  p=0.048. Diagnostic identified the mechanism: the MLP prior is 3× sharper than the
+  heuristic (top-move mass 0.227 vs 0.071) because it was distilled from *completed*
+  500-iter visit distributions — as a prior on a fresh search it over-commits and
+  starves exploration. EXP-011's ordering win is real but doesn't compose with an
+  unexploring sharp prior at c=1.5.
+- **EXP-013 IN FLIGHT (the corrective):** same table, single variable
+  `policy_temperature=3.0` flattens the MLP prior to the heuristic's entropy (0.978 vs
+  0.984) while keeping its ranking — no retraining. Parity/positive → calibration
+  confirmed, scorer salvageable, tune c + root noise next; still worse → prior CONTENT
+  misleads search, pause policy work. ~5 h.
+- **Also queued:** more 500-iter teacher games (1,003 training decisions produced the
+  EXP-011 win; data is the confirmed lever) — bulk PW-50 data stays EXCLUDED from
+  policy training.
+
+## Session 2026-07-16 (session 18 — Phase 6 build: D-017 + EXP-010 NEGATIVE, capacity-bound)
+
+- **Current phase:** Phase 6 (move-level candidate scorer). D-017 recorded (listwise
+  scorer distilling teacher visits, versioned move features, policy_prior consumption
+  slot, gate order). Harness built (`training/experiments/move_scorer.py`).
+- **EXP-010 result — gate 1 PASS, gate 2 FAIL** (numbers under the tie-aware top-1
+  metric from PR #207 review; correction changed no conclusion): distillation lifts
+  held-out pairwise move ordering (0.632 vs 0.591 heuristic / 0.596 legacy) but top-1
+  agreement does not move (0.140 vs 0.140), and the six D-017 feature extensions add
+  ~nothing over the four base features (third strike for hand-crafted extensions after
+  EXP-008/009).
+- **Key attribution — capacity, not data:** the model scores 0.165 top-1 on its own
+  200 training decisions; train ≈ held-out everywhere. Linear-over-geometric-features
+  cannot express what the 500-iter teacher argmax depends on. Nothing wired into
+  production (§20: pairwise-only lateral gain is not progress).
+- **Next recommended task (per the pre-registered EXP-010 rule + D-017 revisit):**
+  higher-capacity shape-aware candidate scorer — sklearn MLP (numpy-exportable
+  inference, D-006) over a shape-aware encoding (piece one-hot × orientation, local
+  board patch around the placement, or interaction features), same gate order:
+  tiny-data OVERFIT first (the linear model failed even that in spirit — a capacity-
+  adequate model must fit 200 decisions nearly perfectly), then held-out vs the same
+  baselines, then production wiring.
+
 ## Session 2026-07-16 (session 17 — Phase 6 path 1: value_dataset_v2 generation launched)
 
 - **Current phase:** Phase 6 (representation), executing ranked option 1 from session 16:

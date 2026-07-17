@@ -1,0 +1,2 @@
+run_id,timestamp,num_games,completed_games,agents,seed,seat_policy,notes,audit_version
+20260717_152115_a46b03d9,2026-07-17T15:21:15,10,10,prior_500_a:mcts:None|prior_500_b:mcts:None|base_500_a:mcts:None|base_500_b:mcts:None,20260719,round_robin,phase4 search-scaling :: exp012_mlp_prior :: seed 20260719,v1_2026-03-28

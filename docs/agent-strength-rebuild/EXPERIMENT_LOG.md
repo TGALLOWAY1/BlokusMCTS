@@ -24,6 +24,191 @@ Artifacts:
 
 ---
 
+## EXP-013 — Phase 6: prior-calibration fix (flattened MLP prior) vs baseline
+
+- **Experiment ID:** EXP-013
+- **Date:** 2026-07-16 (launched)
+- **Commit:** PR #207 head (arena `policy_temperature` override)
+- **Hypothesis:** EXP-012's loss is prior over-sharpness (diagnostic: top-move mass
+  0.227 vs heuristic 0.071). Flattening the MLP prior with softmax temperature 3.0 —
+  which matches the heuristic prior's entropy (0.978 vs 0.984) while KEEPING the
+  EXP-011 ranking — recovers parity or better against the D-016 baseline.
+- **Setup:** identical to EXP-012 (2×2 same-table, D-016 at 500 iters, seeds
+  20260718/20260719, 20 games), single variable = `policy_temperature=3.0` on the
+  prior agents (no retraining; artifact untouched, override applied at agent build).
+- **Pre-registered decision rule:** flattened prior reaches parity or better (paired
+  permutation p>0.05 for "worse", or positive) → prior-calibration confirmed as the
+  EXP-012 cause; the scorer is salvageable and the next step is a proper c/temperature
+  tuning + root-noise study. Still decisively worse → the prior's move CONTENT
+  misleads search (not just its sharpness); policy work pauses per the master-plan
+  gate and the encoding/target is the suspect.
+- **Reproduce:** `python -m training.experiments.search_scaling
+  --agents-json training/experiments/exp013_agents.json --games-per-seed 10
+  --seeds 20260718,20260719 --deadline-minutes 420 --label exp013_softprior`
+- **Result:** _pending_
+
+## EXP-012 — Phase 6 search integration: MLP policy prior in the D-016 agent
+
+- **Experiment ID:** EXP-012
+- **Date:** 2026-07-16 (launched)
+- **Commit:** PR #207 head (production wiring: `mcts/move_encoding.py`,
+  `mcts/move_policy_mlp.py`, agent artifact dispatch, arena `policy_weights_path`)
+- **Hypothesis:** the EXP-011 teacher-distilled MLP move policy, used as PUCT prior +
+  move ordering (`policy_prior_enabled`, c=1.5) in the D-016 agent at the D-008 budget
+  (500 iterations), beats the identical agent without the prior at the same table.
+- **Setup:** 2×2 same-table (prior_500_a/b vs base_500_a/b), single variable = the
+  prior; both sides D-016 exactly (minimal search + PW 2.0/0.5 + v1 ridge leaves,
+  500 iterations pinned, num_workers 1). round_robin seats, seeds 20260718+20260719,
+  10 games/seed = 20 games, protocol rescue_v2 via `search_scaling --agents-json`.
+  Artifact: `training/artifacts/move_scorer/v2_mlp/move_policy_v2.json` (teacher-only,
+  1,288 decisions, held-out reference 0.228/0.744 — gate-2 PASS config).
+- **Pre-registered decision rule:** paired sign-flip permutation on per-game rank
+  (prior-pair vs base-pair) + first-place split. Decisively positive → the scorer is
+  validated in search; queue gate-C style adoption experiments + more teacher data.
+  Null → the prior's ordering quality is insufficient at c=1.5; the next single
+  variable is prior strength (c), NOT retraining. Negative → prior misleads search;
+  investigate before any further policy work. No champion change either way.
+- **Reproduce:** `python -m training.experiments.search_scaling
+  --agents-json training/experiments/exp012_agents.json --games-per-seed 10
+  --seeds 20260718,20260719 --deadline-minutes 420 --label exp012_mlp_prior`
+- **Result — NEGATIVE (the prior HURTS search):** 20 games (seed 20260718 in one run;
+  seed 20260719 re-run after a container restart — seeds pinned, so the re-run is
+  identical). Prior agents 4 first-places / avg rank 2.80; base agents 16 / avg rank
+  2.00. Paired per-game (prior-pair total − base-pair total) mean **−20.6 points**,
+  exact sign-flip permutation **p=0.048** (two-sided) — decisively worse, not null.
+- **Diagnostic (no games, 116 sampled teacher decisions) — mechanism identified:**
+  the MLP prior is far SHARPER than the heuristic prior it replaced —
+  normalized entropy 0.817 vs 0.984, top-move mass **0.227 vs 0.071** (3.2×). It was
+  distilled from *completed* 500-iteration visit distributions (naturally peaked), so
+  as a PUCT prior on a FRESH search it prematurely concentrates visits on the move a
+  finished search would pick, starving the exploration that finds the actual best move
+  (no root Dirichlet noise offsets this). The training-side win (EXP-011: 0.228/0.744
+  ordering) is real; it just does not compose with an unexploring prior at c=1.5.
+- **Decision (pre-registered "negative → investigate"):** the mechanism is a prior
+  *calibration* problem, not a content problem — the single distinguishing follow-up
+  is to FLATTEN the prior (artifact `temperature`, no retraining) toward the
+  heuristic's entropy and re-run the same table (EXP-013). If a flattened prior
+  reaches parity/positive, calibration is confirmed and the scorer is salvageable; if
+  it still loses, the prior's move *content* misleads search and policy work pauses per
+  the master-plan gate. Champion untouched; the MLP is NOT wired into any default
+  config (opt-in via `policy_prior_enabled` + `policy_weights_path` only).
+- **Artifacts:** `training/reports/experiments/search_scaling/exp012_mlp_prior/`
+  (per-seed games + report.json).
+
+## EXP-011 — Phase 6 build, step 2: shape-aware MLP move scorer (capacity remediation)
+
+- **Experiment ID:** EXP-011
+- **Date:** 2026-07-16 (launched)
+- **Commit:** PR #207 head (`training/experiments/move_scorer_mlp.py`)
+- **Hypothesis:** EXP-010's failure was capacity: a small MLP over a SHAPE-AWARE move
+  encoding (piece one-hot + local board patch around the placement + the engineered
+  scalars) can (1) nearly memorize 200 teacher decisions and (2) beat the fixed
+  heuristic and legacy policy on held-out teacher decisions on BOTH tie-aware top-1
+  and pairwise ordering.
+- **Encoding (move_encoding_v1):** 9×9 patch centered on the placement centroid,
+  6 channels (own occupied, opponent occupied, off-board, new-piece cells, own
+  frontier, opponent frontier) = 486, + 21 piece one-hot + the 10 `move_features_v2`
+  scalars + phase = 518 inputs per candidate.
+- **Model:** numpy MLP 518→64(tanh)→1 shared across candidates, listwise softmax CE
+  over each decision's children (same objective as EXP-010), Adam, fixed seed —
+  numpy-only inference (Pyodide-safe, D-006/D-017).
+- **Controls:** identical data, game-level split seed 20260716, identical held-out
+  sets and baselines as EXP-010 (tie-aware top-1 throughout).
+- **Pre-registered decision rule:** overfit gate = tie-aware top-1 ≥ 0.80 on its own
+  200 training decisions (the linear model managed 0.165) — below that, capacity is
+  still insufficient and the encoding (not the trainer) is the next suspect. Held-out
+  bars identical to EXP-010: beat BOTH baselines on top-1 (outside ~2 SE) AND
+  pairwise. Both pass → production wiring (`move_policy_v2`) + search-integration
+  experiment. Overfit passes but held-out fails → capacity is fine, data volume is
+  binding → scale teacher decisions (more 500-iter games) before revisiting.
+- **Reproduce:** `python -m training.experiments.move_scorer_mlp --split-seed 20260716`
+- **Result — gate 1 PASS (after optimization-budget correction), gate 2 PASS in the
+  teacher-only condition; bulk mixing REFUTED for policy distillation:**
+  1. **Capacity confirmed:** at the pre-registered 300 epochs the tiny-set score was
+     0.780 (bar 0.80, within 1 SE); the distinguishing check (tiny set only, no
+     held-out contact) shows 64/128/256 hidden units at 1000–2000 epochs reach
+     **0.930–0.945 top-1 / 0.966–0.981 pairwise** — the encoding+MLP memorizes; the
+     shortfall was optimization budget, not capacity.
+  2. **Pre-registered mixed-data condition FAILED gate 2** (held-out teacher: 0.151 /
+     0.637 vs heuristic 0.140 / 0.591) — and transferred WORSE than baselines on bulk
+     held-out. Attribution check (identical model/config, training data as the only
+     variable): **teacher-only (1,003 decisions) → 0.228 / 0.744; mixed (6,337) →
+     0.151 / 0.637.** The PW-50 bulk corpus actively poisons the scorer — its visit
+     distributions (50 iterations, ⌈2√50⌉≈14 children) are a different, noisier
+     policy than the 500-iteration teacher's. Consistent with EXP-009's finding on the
+     value side: volume of the wrong distribution is negative signal, now confirmed
+     on the policy side with a controlled pair.
+  3. **Teacher-only clears the pre-registered gate-2 bars decisively and robustly:**
+     top-1 0.228/0.196/0.218 across seeds 12345/777/20260717 (baselines 0.140/0.133;
+     every run > 2.3 SE clear), pairwise 0.742–0.744 (baselines 0.591/0.596).
+- **Decision:** shape-aware MLP + teacher-only distillation is the first Phase 6
+  candidate to clear the pre-arena training bars → proceed to production wiring
+  (`move_policy_v2`: encoding + numpy inference in `mcts/`, artifact format,
+  masking/round-trip tests) and the search-integration experiment (PUCT prior +
+  ordering at fixed budgets vs the D-016 baseline). Bulk data is EXCLUDED from
+  policy-distillation training sets; `value_dataset_v2` remains valid for state-value
+  work and as game records. More 500-iter teacher games are the highest-value data
+  spend (only 1,003 training decisions produced this).
+- **Artifacts:** `training/artifacts/move_scorer/v2_mlp/{report.json,mlp_weights.json}`
+  (pre-registered mixed run), attribution/seed checks logged here (scratchpad runs,
+  scripts inline in the log entry's reproduce block lineage).
+
+## EXP-010 — Phase 6 build, gate 1–2: teacher-distilled move scorer vs heuristic/legacy baselines
+
+- **Experiment ID:** EXP-010
+- **Date:** 2026-07-16 (launched)
+- **Commit:** post-#206 main (branch restarted at `6a8b9f4`); harness
+  `training/experiments/move_scorer.py` (this PR)
+- **Hypothesis:** a listwise log-linear move scorer distilled from TEACHER root visit
+  distributions, over an extended move-varying feature set (`move_features_v2`),
+  orders candidate moves on held-out strong-teacher decisions decisively better than
+  (a) the fixed 4-feature heuristic and (b) the legacy self-distilled policy artifact.
+- **Independent variables:** feature set (mf4 = the four `MOVE_FEATURE_NAMES` vs
+  mf_v2 = those + 6 move-varying extensions) trained identically; baselines evaluated
+  untrained on the same decisions.
+- **Data:** decisions from `teacher_dataset_v1` (500-iter teachers) +
+  `value_dataset_v2` (PW-50 rollout teachers), children = recorded `search` entries,
+  target = `policy_target`. Game-level split, seed 20260716: 25% of teacher_dataset_v1
+  games held out (primary eval, strong distribution); 25% of value_dataset_v2 games
+  held out (secondary).
+- **Gate order (master plan Phase 6):** (1) tiny-data overfit sanity — trained on 200
+  decisions, must clearly beat the fixed heuristic ON those decisions (pipeline/optim
+  sanity); (2) held-out generalization vs the bars below. No production wiring, no
+  arena spend before both pass.
+- **Pre-registered decision rule (primary = held-out teacher decisions):**
+  mf_v2 must beat BOTH baselines on top-1 agreement AND within-decision pairwise
+  ordering (outside binomial noise), and beat trained mf4 (feature-set control).
+  mf_v2 ≤ baselines → listwise-linear-on-these-features is refuted; move to
+  shape-aware encodings / NN. mf_v2 > baselines but ≈ mf4 → wire mf4 (simpler),
+  extensions rejected.
+- **Reproduce:** `python -m training.experiments.move_scorer --split-seed 20260716`
+- **Result (gate 1 PASS; gate 2 FAIL):** held-out teacher decisions (n=285), under the
+  tie-aware top-1 metric (review fix, PR #207: predictions of any tied-max child count
+  as correct — 174/1,288 teacher decisions have tied visit maxima; the correction
+  shifted all top-1 values ≈+0.01 and changed no conclusion):
+  | scorer | top-1 | pairwise |
+  |---|---|---|
+  | fixed_heuristic | 0.140 | 0.591 |
+  | legacy_policy | 0.133 | 0.596 |
+  | mf4_trained | 0.147 | 0.629 |
+  | mf_v2_trained | 0.140 | **0.632** |
+  Distillation lifts pairwise ordering (+0.04 over both baselines) but top-1 does not
+  move, and mf_v2 ≈ mf4 (extensions add ~nothing, third strike for hand-crafted
+  feature extensions after EXP-008/009). Bars required BOTH metrics → **FAIL**.
+- **Attribution — capacity, not data:** the tiny-overfit sanity run scores only 0.165
+  top-1 ON ITS OWN 200 TRAINING DECISIONS, and full-train held-out performance equals
+  train performance. A listwise linear model over cheap geometric move features cannot
+  even fit the teacher's choices, let alone generalize better. The 500-iteration
+  teacher argmax depends on shape/interaction structure these features cannot express.
+- **Decision (per the pre-registered rule):** listwise-linear-on-engineered-features is
+  refuted → proceed to the shape-aware / higher-capacity scorer (D-017 revisit
+  condition; D-006 permits sklearn MLP with numpy-exportable inference). The +0.04
+  pairwise gain is NOT wired into production — top-1 (what PUCT priors and ordering
+  actually consume at the argmax) did not improve, and §20 forbids shipping a lateral
+  move as progress.
+- **Artifacts:** `training/artifacts/move_scorer/v1/report.json` (all conditions,
+  trained weights, per-set feature names).
+
 ## EXP-009 — Phase 6 path 1: rich_blokus_v2 at state-carrying volume vs the 0.68 bar
 
 - **Experiment ID:** EXP-009
