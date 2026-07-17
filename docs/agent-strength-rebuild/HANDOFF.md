@@ -42,6 +42,18 @@ held-out pairwise ordering decisively above 0.68 (train/eval via
 (`exp007_agents.json` pattern) on the fixed protocol. Everything below is the historical
 Phase 7 handoff (done).
 
+**UPDATE (2026-07-16, session 19c): EXP-012 NEGATIVE, EXP-013 (calibration fix) IN
+FLIGHT.** The MLP prior at c=1.5 lost decisively in-search (4 vs 16 first-places,
+paired −20.6 pts, p=0.048) despite the EXP-011 ordering win. Diagnostic: the prior is
+3× sharper than the heuristic (distilled from completed 500-iter visit counts →
+over-commits, starves exploration). EXP-013 tests the fix — `policy_temperature=3.0`
+flattens the prior to the heuristic's entropy while keeping its ranking (arena
+`policy_temperature` override, no retraining). **On EXP-013 completion:** parity/positive
+→ record the calibration result, then a c + root-Dirichlet-noise tuning study and
+adoption path; still worse → the prior CONTENT misleads search, pause policy work and
+suspect the encoding/target (the master-plan gate). If interrupted, re-launch via the
+EXP-013 reproduce command (seeds pinned).
+
 **UPDATE (2026-07-16, session 19b): WIRING DONE, EXP-012 (search integration) IN
 FLIGHT.** `move_policy_v2` is production-wired (`mcts/move_encoding.py`,
 `mcts/move_policy_mlp.py`, agent artifact dispatch, arena `policy_weights_path`; 10

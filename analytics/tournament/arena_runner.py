@@ -427,6 +427,21 @@ def _load_policy_weights_file(path: Optional[str]) -> Optional[Dict[str, Any]]:
     return data
 
 
+def _apply_policy_temperature(
+    weights: Optional[Dict[str, Any]], temperature: Optional[float]
+) -> Optional[Dict[str, Any]]:
+    """Override a policy artifact's softmax temperature (prior-calibration sweeps).
+
+    Higher temperature flattens the PUCT prior toward uniform without retraining;
+    ``None`` leaves the artifact untouched. Returns a shallow copy so the on-disk
+    artifact is never mutated."""
+    if weights is None or temperature is None:
+        return weights
+    patched = dict(weights)
+    patched["temperature"] = float(temperature)
+    return patched
+
+
 def build_agent(config: AgentConfig, seed: int) -> _ArenaAgentAdapter:
     """Instantiate an agent adapter from configuration."""
     agent_type = config.type.lower()
@@ -502,10 +517,11 @@ def build_agent(config: AgentConfig, seed: int) -> _ArenaAgentAdapter:
             # artifacts are ~1 MB and don't belong inline in agent configs).
             policy_prior_enabled=bool(params.get("policy_prior_enabled", False)),
             policy_prior_c=float(params.get("policy_prior_c", 1.5)),
-            policy_weights=(
+            policy_weights=_apply_policy_temperature(
                 params.get("policy_weights")
                 if params.get("policy_weights") is not None
-                else _load_policy_weights_file(params.get("policy_weights_path"))
+                else _load_policy_weights_file(params.get("policy_weights_path")),
+                params.get("policy_temperature"),
             ),
             # Layer 4: Simulation Strategy
             rollout_policy=str(params.get("rollout_policy", "heuristic")),

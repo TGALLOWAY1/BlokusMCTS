@@ -1,0 +1,90 @@
+[
+  {
+    "name": "softprior_500_a",
+    "type": "mcts",
+    "thinking_time_ms": null,
+    "params": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500,
+      "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib",
+      "policy_prior_enabled": true,
+      "policy_prior_c": 1.5,
+      "policy_weights_path": "training/artifacts/move_scorer/v2_mlp/move_policy_v2.json",
+      "policy_temperature": 3.0
+    }
+  },
+  {
+    "name": "softprior_500_b",
+    "type": "mcts",
+    "thinking_time_ms": null,
+    "params": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500,
+      "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib",
+      "policy_prior_enabled": true,
+      "policy_prior_c": 1.5,
+      "policy_weights_path": "training/artifacts/move_scorer/v2_mlp/move_policy_v2.json",
+      "policy_temperature": 3.0
+    }
+  },
+  {
+    "name": "base_500_a",
+    "type": "mcts",
+    "thinking_time_ms": null,
+    "params": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500,
+      "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+    }
+  },
+  {
+    "name": "base_500_b",
+    "type": "mcts",
+    "thinking_time_ms": null,
+    "params": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500,
+      "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+    }
+  }
+]

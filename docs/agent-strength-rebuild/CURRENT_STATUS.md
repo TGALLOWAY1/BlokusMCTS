@@ -23,11 +23,18 @@ _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 
   checks 7/7. Production artifact trained teacher-only on all 1,288 decisions
   (`training/artifacts/move_scorer/v2_mlp/move_policy_v2.json`); the refactored
   pipeline reproduces EXP-011 exactly (0.228/0.744, gate 2 PASS).
-- **EXP-012 IN FLIGHT:** search integration — D-016 agent ± MLP PUCT prior (c=1.5)
-  at 500 iterations, 2×2 same-table, seeds 20260718/20260719, 20 games (~5–7 h).
-  Pre-registered rule in `EXPERIMENT_LOG.md`: positive → scorer validated in search,
-  queue adoption + more teacher data; null → tune prior strength c (single variable),
-  not retraining; negative → investigate. No champion change either way.
+- **EXP-012 DONE — NEGATIVE (the prior hurts):** 20 games, prior agents 4 first-places
+  / avg rank 2.80 vs base 16 / 2.00; paired per-game −20.6 pts, exact permutation
+  p=0.048. Diagnostic identified the mechanism: the MLP prior is 3× sharper than the
+  heuristic (top-move mass 0.227 vs 0.071) because it was distilled from *completed*
+  500-iter visit distributions — as a prior on a fresh search it over-commits and
+  starves exploration. EXP-011's ordering win is real but doesn't compose with an
+  unexploring sharp prior at c=1.5.
+- **EXP-013 IN FLIGHT (the corrective):** same table, single variable
+  `policy_temperature=3.0` flattens the MLP prior to the heuristic's entropy (0.978 vs
+  0.984) while keeping its ranking — no retraining. Parity/positive → calibration
+  confirmed, scorer salvageable, tune c + root noise next; still worse → prior CONTENT
+  misleads search, pause policy work. ~5 h.
 - **Also queued:** more 500-iter teacher games (1,003 training decisions produced the
   EXP-011 win; data is the confirmed lever) — bulk PW-50 data stays EXCLUDED from
   policy training.

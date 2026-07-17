@@ -24,6 +24,29 @@ Artifacts:
 
 ---
 
+## EXP-013 — Phase 6: prior-calibration fix (flattened MLP prior) vs baseline
+
+- **Experiment ID:** EXP-013
+- **Date:** 2026-07-16 (launched)
+- **Commit:** PR #207 head (arena `policy_temperature` override)
+- **Hypothesis:** EXP-012's loss is prior over-sharpness (diagnostic: top-move mass
+  0.227 vs heuristic 0.071). Flattening the MLP prior with softmax temperature 3.0 —
+  which matches the heuristic prior's entropy (0.978 vs 0.984) while KEEPING the
+  EXP-011 ranking — recovers parity or better against the D-016 baseline.
+- **Setup:** identical to EXP-012 (2×2 same-table, D-016 at 500 iters, seeds
+  20260718/20260719, 20 games), single variable = `policy_temperature=3.0` on the
+  prior agents (no retraining; artifact untouched, override applied at agent build).
+- **Pre-registered decision rule:** flattened prior reaches parity or better (paired
+  permutation p>0.05 for "worse", or positive) → prior-calibration confirmed as the
+  EXP-012 cause; the scorer is salvageable and the next step is a proper c/temperature
+  tuning + root-noise study. Still decisively worse → the prior's move CONTENT
+  misleads search (not just its sharpness); policy work pauses per the master-plan
+  gate and the encoding/target is the suspect.
+- **Reproduce:** `python -m training.experiments.search_scaling
+  --agents-json training/experiments/exp013_agents.json --games-per-seed 10
+  --seeds 20260718,20260719 --deadline-minutes 420 --label exp013_softprior`
+- **Result:** _pending_
+
 ## EXP-012 — Phase 6 search integration: MLP policy prior in the D-016 agent
 
 - **Experiment ID:** EXP-012
@@ -48,7 +71,29 @@ Artifacts:
 - **Reproduce:** `python -m training.experiments.search_scaling
   --agents-json training/experiments/exp012_agents.json --games-per-seed 10
   --seeds 20260718,20260719 --deadline-minutes 420 --label exp012_mlp_prior`
-- **Result:** _pending_
+- **Result — NEGATIVE (the prior HURTS search):** 20 games (seed 20260718 in one run;
+  seed 20260719 re-run after a container restart — seeds pinned, so the re-run is
+  identical). Prior agents 4 first-places / avg rank 2.80; base agents 16 / avg rank
+  2.00. Paired per-game (prior-pair total − base-pair total) mean **−20.6 points**,
+  exact sign-flip permutation **p=0.048** (two-sided) — decisively worse, not null.
+- **Diagnostic (no games, 116 sampled teacher decisions) — mechanism identified:**
+  the MLP prior is far SHARPER than the heuristic prior it replaced —
+  normalized entropy 0.817 vs 0.984, top-move mass **0.227 vs 0.071** (3.2×). It was
+  distilled from *completed* 500-iteration visit distributions (naturally peaked), so
+  as a PUCT prior on a FRESH search it prematurely concentrates visits on the move a
+  finished search would pick, starving the exploration that finds the actual best move
+  (no root Dirichlet noise offsets this). The training-side win (EXP-011: 0.228/0.744
+  ordering) is real; it just does not compose with an unexploring prior at c=1.5.
+- **Decision (pre-registered "negative → investigate"):** the mechanism is a prior
+  *calibration* problem, not a content problem — the single distinguishing follow-up
+  is to FLATTEN the prior (artifact `temperature`, no retraining) toward the
+  heuristic's entropy and re-run the same table (EXP-013). If a flattened prior
+  reaches parity/positive, calibration is confirmed and the scorer is salvageable; if
+  it still loses, the prior's move *content* misleads search and policy work pauses per
+  the master-plan gate. Champion untouched; the MLP is NOT wired into any default
+  config (opt-in via `policy_prior_enabled` + `policy_weights_path` only).
+- **Artifacts:** `training/reports/experiments/search_scaling/exp012_mlp_prior/`
+  (per-seed games + report.json).
 
 ## EXP-011 — Phase 6 build, step 2: shape-aware MLP move scorer (capacity remediation)
 
