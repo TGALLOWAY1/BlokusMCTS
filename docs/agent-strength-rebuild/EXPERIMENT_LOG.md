@@ -44,8 +44,34 @@ Artifacts:
   gate and the encoding/target is the suspect.
 - **Reproduce:** `python -m training.experiments.search_scaling
   --agents-json training/experiments/exp013_agents.json --games-per-seed 10
-  --seeds 20260718,20260719 --deadline-minutes 420 --label exp013_softprior`
-- **Result:** _pending_
+  --seeds 20260718,20260719 --deadline-minutes 300 --label exp013_softprior`
+  (run per-seed after repeated container restarts; seeds pinned so identical)
+- **Result — NEGATIVE, more decisive than EXP-012:** 20 games, softprior 4 first-places
+  / avg rank 3.00 vs base 16 / 2.00; paired per-game **−29.1 pts, p=0.0011**. Flattening
+  the prior did NOT recover parity.
+- **Why (wiring insight that reframes both experiments):** softmax `temperature` scales
+  only the PUCT prior *probabilities* (`priors_from_logits`); progressive-widening
+  **move-expansion ordering** uses the raw logit (`score_move`), which is
+  temperature-INDEPENDENT. So EXP-012 and EXP-013 ran the **identical MLP-driven PW
+  expansion order** and differed only in prior weight — and both lost decisively. The
+  invariant across both losses is therefore the MLP **ordering deciding which moves ever
+  enter the tree**, not the prior's sharpness. Under progressive widening (⌈2√N⌉ children)
+  a ranking optimized to predict the teacher's FINAL move systematically expands the
+  exploitation candidate first and never widens to the moves fresh search needs to try —
+  "predict the completed search's choice" is the wrong objective for "decide what to
+  explore now."
+- **Decision (pre-registered "still worse → content misleads; pause policy work"):**
+  the teacher-visit-distillation move policy is a good final-move PREDICTOR (EXP-011,
+  0.228/0.744) but a bad SEARCH GUIDE, as both a prior (EXP-012) and — the tighter
+  finding — as the PW expansion order (invariant across EXP-012/013). **Phase 6
+  policy-as-search-guide is paused per the master-plan gate.** The champion is
+  untouched; the MLP stays opt-in and unused by any default config. Strategic fork
+  recorded for the user (see CURRENT_STATUS): (a) one more distinguishing arena — policy
+  as PUCT-prior-only with the DEFAULT heuristic PW ordering, isolating ordering vs prior;
+  (b) retarget the policy to a search-value/regret objective rather than visit argmax;
+  (c) accept D-016 as the practical ceiling pending much more teacher data and move to
+  Phase 9 champion work.
+- **Artifacts:** `training/reports/experiments/search_scaling/exp013_softprior/`.
 
 ## EXP-012 — Phase 6 search integration: MLP policy prior in the D-016 agent
 

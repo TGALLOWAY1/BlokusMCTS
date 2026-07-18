@@ -42,6 +42,18 @@ held-out pairwise ordering decisively above 0.68 (train/eval via
 (`exp007_agents.json` pattern) on the fixed protocol. Everything below is the historical
 Phase 7 handoff (done).
 
+**UPDATE (2026-07-18, session 20): EXP-013 NEGATIVE — POLICY-AS-SEARCH-GUIDE PAUSED.**
+Flattening the prior (T=3.0) lost more decisively (−29.1 pts, p=0.0011). Wiring insight:
+PW move-expansion ordering uses the raw MLP logit (temperature-independent), so
+EXP-012/013 shared the identical expansion order and both lost — the MLP **ordering** is
+the invariant suspect, and "predict the teacher's final move" is the wrong objective for
+"decide what to explore." Per the master-plan gate, Phase 6 policy-as-search-guide is
+paused. **Exact next action: a strategic direction decision is required** (recorded in
+CURRENT_STATUS as options a–d); the leaning is either one final ordering-vs-prior
+isolation arena (a) or pivoting to Phase 9 champion work (c), depending on user intent.
+The move_policy_v2 machinery (encoding, MLP policy, arena overrides, tests) is committed
+and correct — it is simply not a strength win, and stays opt-in/unused by defaults.
+
 **UPDATE (2026-07-16, session 19c): EXP-012 NEGATIVE, EXP-013 (calibration fix) IN
 FLIGHT.** The MLP prior at c=1.5 lost decisively in-search (4 vs 16 first-places,
 paired −20.6 pts, p=0.048) despite the EXP-011 ordering win. Diagnostic: the prior is

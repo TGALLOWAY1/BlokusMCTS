@@ -1,0 +1,2 @@
+run_id,timestamp,num_games,completed_games,agents,seed,seat_policy,notes,audit_version
+20260718_102649_45de99b5,2026-07-18T10:26:49,10,10,softprior_500_a:mcts:None|softprior_500_b:mcts:None|base_500_a:mcts:None|base_500_b:mcts:None,20260718,round_robin,phase4 search-scaling :: exp013_softprior :: seed 20260718,v1_2026-03-28
