@@ -30,11 +30,22 @@ _Update at the start and end of every session (protocol in `MASTER_PLAN.md` §6 
   500-iter visit distributions — as a prior on a fresh search it over-commits and
   starves exploration. EXP-011's ordering win is real but doesn't compose with an
   unexploring sharp prior at c=1.5.
-- **EXP-013 IN FLIGHT (the corrective):** same table, single variable
-  `policy_temperature=3.0` flattens the MLP prior to the heuristic's entropy (0.978 vs
-  0.984) while keeping its ranking — no retraining. Parity/positive → calibration
-  confirmed, scorer salvageable, tune c + root noise next; still worse → prior CONTENT
-  misleads search, pause policy work. ~5 h.
+- **EXP-013 DONE — NEGATIVE (more decisive):** flattening the prior (T=3.0) did NOT
+  help — softprior 4 vs 16 first-places, −29.1 pts, p=0.0011. Wiring insight: temperature
+  scales only the PUCT prior probabilities; PW move-expansion ORDERING uses the raw logit
+  and is temperature-independent, so EXP-012/013 shared the identical MLP expansion order
+  and both lost. The invariant suspect is the MLP **ordering** — a "predict the teacher's
+  final move" objective is wrong for "decide what to explore now" under progressive
+  widening. **Phase 6 policy-as-search-guide PAUSED per the master-plan gate.**
+- **STRATEGIC FORK (needs a direction):** the learned-evaluator track has now hit a wall
+  on both axes — value features (EXP-008/009, ~0.68 ceiling) and move policy
+  (EXP-010–013, good predictor / bad search guide). Options: (a) one more distinguishing
+  arena isolating ordering-vs-prior (policy as PUCT-prior-only with default heuristic PW
+  ordering); (b) retarget the policy to search-value/regret instead of visit-argmax;
+  (c) accept D-016 (minimal search + PW + ridge leaves) as the practical ceiling at
+  current data scale and pivot to Phase 9 champion/league work; (d) invest in much more
+  500-iter teacher data first (the confirmed lever) before any further learning.
+  Champion untouched throughout; nothing wired into defaults.
 - **Also queued:** more 500-iter teacher games (1,003 training decisions produced the
   EXP-011 win; data is the confirmed lever) — bulk PW-50 data stays EXCLUDED from
   policy training.

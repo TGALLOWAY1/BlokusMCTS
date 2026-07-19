@@ -1,0 +1,661 @@
+{
+  "experiment": "phase4_search_scaling",
+  "label": "exp013_softprior",
+  "budgets": [
+    500,
+    500,
+    500,
+    500
+  ],
+  "anchors": [],
+  "minimal_search_params": {
+    "deterministic_time_budget": false,
+    "rollout_policy": "greedy_sample",
+    "greedy_sample_size": 12,
+    "rollout_cutoff_depth": 12,
+    "heuristic_move_ordering": true,
+    "exploration_constant": 1.414,
+    "use_transposition_table": true,
+    "num_workers": 1
+  },
+  "agent_params": {
+    "softprior_500_a": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500,
+      "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib",
+      "policy_prior_enabled": true,
+      "policy_prior_c": 1.5,
+      "policy_weights_path": "training/artifacts/move_scorer/v2_mlp/move_policy_v2.json",
+      "policy_temperature": 3.0
+    },
+    "softprior_500_b": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500,
+      "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib",
+      "policy_prior_enabled": true,
+      "policy_prior_c": 1.5,
+      "policy_weights_path": "training/artifacts/move_scorer/v2_mlp/move_policy_v2.json",
+      "policy_temperature": 3.0
+    },
+    "base_500_a": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500,
+      "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+    },
+    "base_500_b": {
+      "deterministic_time_budget": false,
+      "rollout_policy": "greedy_sample",
+      "greedy_sample_size": 12,
+      "rollout_cutoff_depth": 12,
+      "heuristic_move_ordering": true,
+      "exploration_constant": 1.414,
+      "use_transposition_table": true,
+      "num_workers": 1,
+      "progressive_widening_enabled": true,
+      "pw_c": 2.0,
+      "pw_alpha": 0.5,
+      "iterations": 500,
+      "value_model_path": "training/artifacts/value_models/v1/value_v1_ridge_baseline.joblib"
+    }
+  },
+  "seeds": [
+    20260718,
+    20260719
+  ],
+  "games_per_seed": 12,
+  "completed_games": 20,
+  "seat_policy": "round_robin",
+  "scoring_mode": "standard",
+  "elapsed_sec": 23774.9,
+  "run_dirs": [
+    "training/reports/experiments/search_scaling/exp013_softprior/seed_20260718/20260718_102649_45de99b5",
+    "training/reports/experiments/search_scaling/exp013_softprior/seed_20260719/20260718_102649_2e045151"
+  ],
+  "leaderboard": [
+    {
+      "name": "base_500_a",
+      "games_played": 20,
+      "win_rate": 0.6,
+      "win_rate_ci_lower": 0.3865779423152061,
+      "win_rate_ci_upper": 0.7811960325858074,
+      "outright_wins": 12,
+      "shared_wins": 0,
+      "avg_score": 93.0,
+      "trueskill_mu": 45.75566488887029,
+      "trueskill_sigma": 7.874957335071264,
+      "trueskill_conservative": 22.1307928836565,
+      "avg_rank": 1.4,
+      "rank_distribution": {
+        "1": 12,
+        "2": 8
+      }
+    },
+    {
+      "name": "base_500_b",
+      "games_played": 20,
+      "win_rate": 0.2,
+      "win_rate_ci_lower": 0.0806563532712,
+      "win_rate_ci_upper": 0.41602172202575993,
+      "outright_wins": 4,
+      "shared_wins": 0,
+      "avg_score": 79.6,
+      "trueskill_mu": 21.328621837564665,
+      "trueskill_sigma": 7.671773639378672,
+      "trueskill_conservative": -1.6866990805713513,
+      "avg_rank": 2.6,
+      "rank_distribution": {
+        "1": 4,
+        "2": 6,
+        "3": 4,
+        "4": 6
+      }
+    },
+    {
+      "name": "softprior_500_a",
+      "games_played": 20,
+      "win_rate": 0.0,
+      "win_rate_ci_lower": 0.0,
+      "win_rate_ci_upper": 0.1611301254949332,
+      "outright_wins": 0,
+      "shared_wins": 0,
+      "avg_score": 66.7,
+      "trueskill_mu": 3.8505147502635104,
+      "trueskill_sigma": 7.572010196113258,
+      "trueskill_conservative": -18.865515838076263,
+      "avg_rank": 3.7,
+      "rank_distribution": {
+        "3": 6,
+        "4": 14
+      }
+    },
+    {
+      "name": "softprior_500_b",
+      "games_played": 20,
+      "win_rate": 0.2,
+      "win_rate_ci_lower": 0.0806563532712,
+      "win_rate_ci_upper": 0.41602172202575993,
+      "outright_wins": 4,
+      "shared_wins": 0,
+      "avg_score": 76.8,
+      "trueskill_mu": 29.88640957440502,
+      "trueskill_sigma": 7.632244701163491,
+      "trueskill_conservative": 6.989675470914548,
+      "avg_rank": 2.3,
+      "rank_distribution": {
+        "1": 4,
+        "2": 6,
+        "3": 10
+      }
+    }
+  ],
+  "pairwise_permutation": {
+    "softprior_500_a vs softprior_500_b": {
+      "observed_diff": -10.1,
+      "p_value": 0.0,
+      "n_games": 20
+    },
+    "softprior_500_a vs base_500_a": {
+      "observed_diff": -26.3,
+      "p_value": 0.0,
+      "n_games": 20
+    },
+    "softprior_500_a vs base_500_b": {
+      "observed_diff": -12.9,
+      "p_value": 0.0008,
+      "n_games": 20
+    },
+    "softprior_500_b vs base_500_a": {
+      "observed_diff": -16.2,
+      "p_value": 0.002,
+      "n_games": 20
+    },
+    "softprior_500_b vs base_500_b": {
+      "observed_diff": -2.8,
+      "p_value": 0.5236,
+      "n_games": 20
+    },
+    "base_500_a vs base_500_b": {
+      "observed_diff": 13.4,
+      "p_value": 0.0005,
+      "n_games": 20
+    }
+  },
+  "pooled_summary": {
+    "run_id": "gauntlet_pooled",
+    "seed": 20260718,
+    "seat_policy": "round_robin",
+    "num_games": 20,
+    "completed_games": 20,
+    "error_games": 0,
+    "run_config": {
+      "phase": "phase4_search_scaling",
+      "label": "exp013_softprior"
+    },
+    "win_stats": {
+      "base_500_a": {
+        "games_played": 20.0,
+        "outright_wins": 12.0,
+        "shared_wins": 0.0,
+        "win_points": 12.0,
+        "win_rate": 0.6
+      },
+      "base_500_b": {
+        "games_played": 20.0,
+        "outright_wins": 4.0,
+        "shared_wins": 0.0,
+        "win_points": 4.0,
+        "win_rate": 0.2
+      },
+      "softprior_500_a": {
+        "games_played": 20.0,
+        "outright_wins": 0.0,
+        "shared_wins": 0.0,
+        "win_points": 0.0,
+        "win_rate": 0.0
+      },
+      "softprior_500_b": {
+        "games_played": 20.0,
+        "outright_wins": 4.0,
+        "shared_wins": 0.0,
+        "win_points": 4.0,
+        "win_rate": 0.2
+      }
+    },
+    "wins_by_seat": {
+      "base_500_a": {
+        "0": {
+          "games": 4,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "1": {
+          "games": 6,
+          "win_points": 6.0,
+          "win_rate": 1.0
+        },
+        "2": {
+          "games": 6,
+          "win_points": 6.0,
+          "win_rate": 1.0
+        },
+        "3": {
+          "games": 4,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        }
+      },
+      "base_500_b": {
+        "0": {
+          "games": 4,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "1": {
+          "games": 4,
+          "win_points": 4.0,
+          "win_rate": 1.0
+        },
+        "2": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "3": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        }
+      },
+      "softprior_500_a": {
+        "0": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "1": {
+          "games": 4,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "2": {
+          "games": 4,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "3": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        }
+      },
+      "softprior_500_b": {
+        "0": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "1": {
+          "games": 6,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        },
+        "2": {
+          "games": 4,
+          "win_points": 4.0,
+          "win_rate": 1.0
+        },
+        "3": {
+          "games": 4,
+          "win_points": 0.0,
+          "win_rate": 0.0
+        }
+      }
+    },
+    "score_stats": {
+      "base_500_a": {
+        "count": 20,
+        "mean": 93.0,
+        "median": 94.0,
+        "std": 10.14889156509222,
+        "p25": 85.0,
+        "p75": 103.0,
+        "min": 80.0,
+        "max": 103.0
+      },
+      "base_500_b": {
+        "count": 20,
+        "mean": 79.6,
+        "median": 73.0,
+        "std": 14.472042012100435,
+        "p25": 69.0,
+        "p75": 77.0,
+        "min": 69.0,
+        "max": 108.0
+      },
+      "softprior_500_a": {
+        "count": 20,
+        "mean": 66.7,
+        "median": 66.5,
+        "std": 4.605431575867782,
+        "p25": 63.0,
+        "p75": 72.0,
+        "min": 61.0,
+        "max": 72.0
+      },
+      "softprior_500_b": {
+        "count": 20,
+        "mean": 76.8,
+        "median": 78.0,
+        "std": 7.332121111929345,
+        "p25": 68.0,
+        "p75": 84.0,
+        "min": 68.0,
+        "max": 84.0
+      }
+    },
+    "pairwise_matchups": {
+      "base_500_a__vs__base_500_b": {
+        "agent_a": "base_500_a",
+        "agent_b": "base_500_b",
+        "a_beats_b": 16,
+        "b_beats_a": 4,
+        "tie": 0,
+        "total": 20
+      },
+      "base_500_a__vs__softprior_500_a": {
+        "agent_a": "base_500_a",
+        "agent_b": "softprior_500_a",
+        "a_beats_b": 20,
+        "b_beats_a": 0,
+        "tie": 0,
+        "total": 20
+      },
+      "base_500_a__vs__softprior_500_b": {
+        "agent_a": "base_500_a",
+        "agent_b": "softprior_500_b",
+        "a_beats_b": 16,
+        "b_beats_a": 4,
+        "tie": 0,
+        "total": 20
+      },
+      "base_500_b__vs__softprior_500_a": {
+        "agent_a": "base_500_b",
+        "agent_b": "softprior_500_a",
+        "a_beats_b": 14,
+        "b_beats_a": 6,
+        "tie": 0,
+        "total": 20
+      },
+      "base_500_b__vs__softprior_500_b": {
+        "agent_a": "base_500_b",
+        "agent_b": "softprior_500_b",
+        "a_beats_b": 10,
+        "b_beats_a": 10,
+        "tie": 0,
+        "total": 20
+      },
+      "softprior_500_a__vs__softprior_500_b": {
+        "agent_a": "softprior_500_a",
+        "agent_b": "softprior_500_b",
+        "a_beats_b": 0,
+        "b_beats_a": 20,
+        "tie": 0,
+        "total": 20
+      }
+    },
+    "pairwise_total_comparisons": 120,
+    "time_sim_efficiency": {
+      "base_500_a": {
+        "moves": 406.0,
+        "total_time_ms": 4712824.493646622,
+        "avg_time_ms_per_move": 11607.942102577887,
+        "move_time_ms_p50": 11159.876465797424,
+        "move_time_ms_p95": 23906.220316886902,
+        "move_time_ms_max": 27360.15009880066,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": 203000.0,
+        "avg_simulations_per_move": 500.0,
+        "simulations_per_second": 43.07395708744621,
+        "win_rate_per_second": 0.05168874850493545,
+        "score_per_second": 8.011756018264995
+      },
+      "base_500_b": {
+        "moves": 354.0,
+        "total_time_ms": 4693196.945905685,
+        "avg_time_ms_per_move": 13257.618491258998,
+        "move_time_ms_p50": 13395.253300666809,
+        "move_time_ms_p95": 23755.318689346313,
+        "move_time_ms_max": 30069.37050819397,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": 177000.0,
+        "avg_simulations_per_move": 500.0,
+        "simulations_per_second": 37.71416414868625,
+        "win_rate_per_second": 0.015085665659474501,
+        "score_per_second": 6.00409493247085
+      },
+      "softprior_500_a": {
+        "moves": 310.0,
+        "total_time_ms": 6893938.297748566,
+        "avg_time_ms_per_move": 22238.5106378986,
+        "move_time_ms_p50": 21909.18803215027,
+        "move_time_ms_p95": 39068.59916448593,
+        "move_time_ms_max": 46876.901388168335,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": 155000.0,
+        "avg_simulations_per_move": 500.0,
+        "simulations_per_second": 22.483520058573802,
+        "win_rate_per_second": 0.0,
+        "score_per_second": 2.999301575813745
+      },
+      "softprior_500_b": {
+        "moves": 358.0,
+        "total_time_ms": 7046071.154594421,
+        "avg_time_ms_per_move": 19681.763001660394,
+        "move_time_ms_p50": 19326.33650302887,
+        "move_time_ms_p95": 39367.48926639556,
+        "move_time_ms_max": 43834.78498458862,
+        "configured_thinking_time_ms": null,
+        "avg_budget_utilization": null,
+        "total_simulations": 179000.0,
+        "avg_simulations_per_move": 500.0,
+        "simulations_per_second": 25.404228267448346,
+        "win_rate_per_second": 0.01016169130697934,
+        "score_per_second": 3.9020894618800663
+      }
+    },
+    "game_duration_sec": {
+      "count": 20,
+      "mean": 1188.7451681999996,
+      "median": 1214.9496576069994,
+      "std": 55.16306394991009,
+      "p25": 1119.09481173375,
+      "p75": 1223.4529600142498,
+      "min": 1098.0419080359989,
+      "max": 1263.2464895999997
+    },
+    "trueskill_ratings": {
+      "leaderboard": [
+        {
+          "mu": 45.75566488887029,
+          "sigma": 7.874957335071264,
+          "conservative": 22.1307928836565,
+          "games_played": 20,
+          "agent_id": "base_500_a",
+          "rank": 1
+        },
+        {
+          "mu": 29.88640957440502,
+          "sigma": 7.632244701163491,
+          "conservative": 6.989675470914548,
+          "games_played": 20,
+          "agent_id": "softprior_500_b",
+          "rank": 2
+        },
+        {
+          "mu": 21.328621837564665,
+          "sigma": 7.671773639378672,
+          "conservative": -1.6866990805713513,
+          "games_played": 20,
+          "agent_id": "base_500_b",
+          "rank": 3
+        },
+        {
+          "mu": 3.8505147502635104,
+          "sigma": 7.572010196113258,
+          "conservative": -18.865515838076263,
+          "games_played": 20,
+          "agent_id": "softprior_500_a",
+          "rank": 4
+        }
+      ],
+      "converged": false
+    },
+    "score_margins": {
+      "mean_margin": 29.0,
+      "median_margin": 28.0,
+      "std_margin": 14.03,
+      "min_margin": 14.0,
+      "max_margin": 47.0,
+      "n_games": 20
+    },
+    "score_by_seat_position": {
+      "softprior_500_a": {
+        "P1": {
+          "mean": 72.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 6
+        },
+        "P2": {
+          "mean": 70.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 4
+        },
+        "P3": {
+          "mean": 61.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 4
+        },
+        "P4": {
+          "mean": 63.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 6
+        }
+      },
+      "softprior_500_b": {
+        "P1": {
+          "mean": 68.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 6
+        },
+        "P2": {
+          "mean": 84.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 6
+        },
+        "P3": {
+          "mean": 84.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 4
+        },
+        "P4": {
+          "mean": 72.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 4
+        }
+      },
+      "base_500_a": {
+        "P1": {
+          "mean": 103.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 4
+        },
+        "P2": {
+          "mean": 103.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 6
+        },
+        "P3": {
+          "mean": 85.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 6
+        },
+        "P4": {
+          "mean": 80.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 4
+        }
+      },
+      "base_500_b": {
+        "P1": {
+          "mean": 77.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 4
+        },
+        "P2": {
+          "mean": 108.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 4
+        },
+        "P3": {
+          "mean": 73.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 6
+        },
+        "P4": {
+          "mean": 69.0,
+          "std": 0.0,
+          "se": 0.0,
+          "n": 6
+        }
+      }
+    }
+  }
+}
